@@ -1,0 +1,4 @@
+ninja: Entering directory `/home/think/projects/t9Keyboard-V2/app/.cxx/Debug/6273t3f1/armeabi-v7a'
+[1/3] Building CXX object CMakeFiles/opent9.dir/src/dawg_engine.cpp.o
+[2/3] Building CXX object CMakeFiles/opent9.dir/src/jni_bridge.cpp.o
+[3/3] Linking CXX shared library /home/think/projects/t9Keyboard-V2/app/build/intermediates/cxx/Debug/6273t3f1/obj/armeabi-v7a/libopent9.so

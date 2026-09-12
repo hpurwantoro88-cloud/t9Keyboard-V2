@@ -1,0 +1,14 @@
+[
+    {
+        "merged": "com.opent9.keyboard.app-release-31:/drawable_ic_launcher.xml.flat",
+        "source": "com.opent9.keyboard.app-main-32:/drawable/ic_launcher.xml"
+    },
+    {
+        "merged": "/home/think/.gradle/daemon/8.6/com.opent9.keyboard.app-release-31:/xml_preferences.xml.flat",
+        "source": "/home/think/.gradle/daemon/8.6/com.opent9.keyboard.app-main-32:/xml/preferences.xml"
+    },
+    {
+        "merged": "/home/think/.gradle/daemon/8.6/com.opent9.keyboard.app-release-31:/xml_method.xml.flat",
+        "source": "/home/think/.gradle/daemon/8.6/com.opent9.keyboard.app-main-32:/xml/method.xml"
+    }
+]

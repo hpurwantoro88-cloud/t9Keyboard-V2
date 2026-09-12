@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merger version="3"><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="main$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/home/think/projects/t9Keyboard-V2/app/src/main/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="main" generated-set="main$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/home/think/projects/t9Keyboard-V2/app/src/main/res"><file path="/home/think/projects/t9Keyboard-V2/app/src/main/res/values/arrays.xml" qualifiers=""><string-array name="pref_sound_style_entries">
+        <item>Mechanical Classic</item>
+        <item>Modern Soft</item>
+        <item>Minimalist Click</item>
+    </string-array><string-array name="pref_sound_style_values">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+    </string-array><string-array name="pref_one_handed_entries">
+        <item>Disabled</item>
+        <item>Left-Handed</item>
+        <item>Right-Handed</item>
+    </string-array><string-array name="pref_one_handed_values">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+    </string-array><string-array name="pref_default_mode_entries">
+        <item>Predictive T9</item>
+        <item>Multi-Tap ABC</item>
+    </string-array><string-array name="pref_default_mode_values">
+        <item>0</item>
+        <item>1</item>
+    </string-array><string-array name="pref_language_entries">
+        <item>Indonesian (ID)</item>
+        <item>English (EN)</item>
+    </string-array><string-array name="pref_language_values">
+        <item>ID</item>
+        <item>EN</item>
+    </string-array><string-array name="pref_decay_entries">
+        <item>14 Days</item>
+        <item>30 Days</item>
+        <item>Disabled</item>
+    </string-array><string-array name="pref_decay_values">
+        <item>14</item>
+        <item>30</item>
+        <item>0</item>
+    </string-array></file><file path="/home/think/projects/t9Keyboard-V2/app/src/main/res/values/strings.xml" qualifiers=""><string name="app_name">OpenT9</string><string name="ime_name">OpenT9 Keyboard</string><string name="settings_title">OpenT9 Settings</string><string name="pref_cat_audio_haptic">Audio &amp; Haptics</string><string name="pref_cat_layout">Layout &amp; Display</string><string name="pref_cat_typing">Typing Behaviors</string><string name="pref_cat_dictionary">Dictionary &amp; Language</string><string name="pref_haptic_enabled">Haptic Feedback</string><string name="pref_vibration_intensity">Vibration Intensity (ms)</string><string name="pref_audio_enabled">Audio Click Feedback</string><string name="pref_audio_volume">Sound Volume (%)</string><string name="pref_audio_style">Sound Style</string><string name="pref_keyboard_height">Keyboard Overall Height (dp)</string><string name="pref_candidate_font_size">Candidate Font Size (sp)</string><string name="pref_one_handed">One-Handed Mode</string><string name="pref_default_input_mode">Default Input Mode</string><string name="pref_long_press_delay">Long-Press Delay (ms)</string><string name="pref_multi_tap_timeout">Multi-Tap Timeout (ms)</string><string name="pref_auto_caps">Auto-Capitalization</string><string name="pref_auto_space">Auto-Space After Commit</string><string name="pref_double_space_period">Double-Space Period</string><string name="pref_space_scrubbing">Spacebar Cursor Scrubbing</string><string name="pref_startup_language">Primary Startup Language</string><string name="pref_slang_boost">Slang / Bahasa Gaul Priority</string><string name="pref_decay_half_life">Dynamic Decay Half-Life</string><string name="pref_reset_dict">Reset User Dictionary</string><string name="pref_reset_dict_summary">Clear learned slang, vocabulary, and personal frequency overrides</string></file><file name="preferences" path="/home/think/projects/t9Keyboard-V2/app/src/main/res/xml/preferences.xml" qualifiers="" type="xml"/><file name="method" path="/home/think/projects/t9Keyboard-V2/app/src/main/res/xml/method.xml" qualifiers="" type="xml"/><file name="ic_launcher" path="/home/think/projects/t9Keyboard-V2/app/src/main/res/drawable/ic_launcher.xml" qualifiers="" type="drawable"/></source></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="release$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/home/think/projects/t9Keyboard-V2/app/src/release/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="release" generated-set="release$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/home/think/projects/t9Keyboard-V2/app/src/release/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="generated$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/home/think/projects/t9Keyboard-V2/app/build/generated/res/resValues/release"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="generated" generated-set="generated$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/home/think/projects/t9Keyboard-V2/app/build/generated/res/resValues/release"/></dataSet><mergedItems/></merger>

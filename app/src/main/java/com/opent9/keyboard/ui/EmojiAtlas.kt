@@ -1,0 +1,117 @@
+package com.opent9.keyboard.ui
+
+import android.graphics.RectF
+
+class EmojiAtlas {
+
+    val categories = arrayOf(
+        "🕒", "😀", "👍", "🐱", "🍔", "⚽", "🚗", "💡", "❤️"
+    )
+
+    // Common emojis by category
+    val categoryEmojis = arrayOf(
+        // 0: Recents (defaults initially)
+        intArrayOf(
+            0x1F600, 0x1F602, 0x1F923, 0x1F60D, 0x1F618, 0x1F60A, 0x1F601,
+            0x1F604, 0x1F605, 0x1F606, 0x1F609, 0x1F60B, 0x1F60E, 0x1F970,
+            0x1F973, 0x1F97A, 0x1F62D, 0x1F621, 0x1F44D, 0x1F44F, 0x1F525,
+            0x2764,  0x1F4AF, 0x1F389, 0x2728,  0x1F64F, 0x1F44C, 0x1F680
+        ),
+        // 1: Smileys & Emotions
+        intArrayOf(
+            0x1F600, 0x1F603, 0x1F604, 0x1F601, 0x1F606, 0x1F605, 0x1F923,
+            0x1F602, 0x1F642, 0x1F643, 0x1F609, 0x1F60A, 0x1F607, 0x1F970,
+            0x1F60D, 0x1F929, 0x1F618, 0x1F617, 0x1F61A, 0x1F619, 0x1F60B,
+            0x1F61B, 0x1F61C, 0x1F92A, 0x1F61D, 0x1F911, 0x1F917, 0x1F92D
+        ),
+        // 2: People & Gestures
+        intArrayOf(
+            0x1F44D, 0x1F44E, 0x1F44F, 0x1F64F, 0x1F44C, 0x270C,  0x1F91E,
+            0x1F44B, 0x1F448, 0x1F449, 0x261D,  0x1F446, 0x1F447, 0x270B,
+            0x1F91A, 0x1F590, 0x1F918, 0x1F919, 0x1F91B, 0x1F91C, 0x1F44A,
+            0x1F91D, 0x1F4AA, 0x1F935, 0x1F478, 0x1F482, 0x1F9D1, 0x1F9D4
+        ),
+        // 3: Animals & Nature
+        intArrayOf(
+            0x1F436, 0x1F431, 0x1F42D, 0x1F439, 0x1F430, 0x1F98A, 0x1F43B,
+            0x1F43C, 0x1F428, 0x1F42F, 0x1F981, 0x1F42E, 0x1F437, 0x1F43D,
+            0x1F438, 0x1F435, 0x1F648, 0x1F649, 0x1F64A, 0x1F412, 0x1F414,
+            0x1F427, 0x1F426, 0x1F424, 0x1F986, 0x1F985, 0x1F989, 0x1F987
+        ),
+        // 4: Food & Drink
+        intArrayOf(
+            0x1F34E, 0x1F34A, 0x1F34B, 0x1F34C, 0x1F349, 0x1F347, 0x1F353,
+            0x1F354, 0x1F35F, 0x1F355, 0x1F32D, 0x1F36A, 0x1F35A, 0x1F35C,
+            0x1F363, 0x1F370, 0x1F366, 0x1F37A, 0x1F37B, 0x1F377, 0x2615,
+            0x1F375, 0x1F964, 0x1F95B, 0x1F369, 0x1F36B, 0x1F36C, 0x1F36D
+        ),
+        // 5: Activity & Sports
+        intArrayOf(
+            0x26BD,  0x1F3C0, 0x1F3C8, 0x26BE,  0x1F94E, 0x1F3BE, 0x1F3D0,
+            0x1F3C9, 0x1F3B1, 0x1F3D3, 0x1F3F8, 0x1F94A, 0x1F94B, 0x1F947,
+            0x1F948, 0x1F949, 0x1F3C6, 0x1F3C5, 0x1F3F5, 0x26F3,  0x26F8,
+            0x1F3A3, 0x1F3BF, 0x1F3C4, 0x1F3CA, 0x1F6B4, 0x1F3CB, 0x1F93C
+        ),
+        // 6: Travel & Places
+        intArrayOf(
+            0x1F697, 0x1F695, 0x1F699, 0x1F68C, 0x1F68E, 0x1F3CE, 0x1F693,
+            0x1F691, 0x1F692, 0x1F690, 0x1F69B, 0x1F69C, 0x1F6B2, 0x1F6F5,
+            0x1F3CD, 0x1F6F4, 0x1F680, 0x2708,  0x1F6EB, 0x1F6EC, 0x26F5,
+            0x1F6A2, 0x1F5FA, 0x1F30D, 0x1F30E, 0x1F30F, 0x1F5FC, 0x1F303
+        ),
+        // 7: Objects & Tools
+        intArrayOf(
+            0x1F4A1, 0x1F526, 0x1F4BB, 0x1F5A5, 0x1F5A8, 0x2328,  0x1F4F1,
+            0x260E,  0x1F4DF, 0x1F4DD, 0x1F4CB, 0x1F4D6, 0x1F4B0, 0x1F4B3,
+            0x1F511, 0x1F512, 0x1F527, 0x1F528, 0x2699,  0x1F9F0, 0x1F9ED,
+            0x23F0,  0x23F3,  0x231A,  0x1F52C, 0x1F52D, 0x1F4E6, 0x1F4EC
+        ),
+        // 8: Symbols & Flags
+        intArrayOf(
+            0x2764,  0x1F9E1, 0x1F49B, 0x1F49A, 0x1F499, 0x1F49C, 0x1F90E,
+            0x1F5A4, 0x1F90D, 0x1F494, 0x2763,  0x1F495, 0x1F49E, 0x1F493,
+            0x1F497, 0x1F496, 0x1F498, 0x1F49D, 0x1F49F, 0x262E,  0x271D,
+            0x262A,  0x269B,  0x2705,  0x274C,  0x2753,  0x2757,  0x1F4AF
+        )
+    )
+
+    var activeCategoryIndex = 1 // default to smileys
+    private val scratchChars = CharArray(2)
+
+    val categoryTabBounds = Array(9) { RectF() }
+    val emojiGridBounds = Array(28) { RectF() }
+    val controlRowBounds = Array(4) { RectF() } // ABC, Recents, Space, Del
+
+    fun computeLayout(width: Float, @Suppress("UNUSED_PARAMETER") height: Float, density: Float) {
+        val tabHeight = 40f * density
+        val tabWidth = width / 9f
+        for (i in 0 until 9) {
+            categoryTabBounds[i].set(i * tabWidth, 0f, (i + 1) * tabWidth, tabHeight)
+        }
+
+        val gridTop = tabHeight
+        val gridRowHeight = 45f * density
+        val gridColWidth = width / 7f
+
+        for (i in 0 until 28) {
+            val r = i / 7
+            val c = i % 7
+            val left = c * gridColWidth
+            val top = gridTop + (r * gridRowHeight)
+            emojiGridBounds[i].set(left, top, left + gridColWidth, top + gridRowHeight)
+        }
+
+        val ctrlTop = gridTop + (4 * gridRowHeight)
+        val ctrlHeight = 40f * density
+        // [ ABC (25%) ] [ 🕒 Recents (25%) ] [ ␣ Space (25%) ] [ ⌫ DEL (25%) ]
+        val ctrlColWidth = width / 4f
+        for (i in 0 until 4) {
+            controlRowBounds[i].set(i * ctrlColWidth, ctrlTop, (i + 1) * ctrlColWidth, ctrlTop + ctrlHeight)
+        }
+    }
+
+    fun getEmojiString(codepoint: Int): String {
+        val count = Character.toChars(codepoint, scratchChars, 0)
+        return String(scratchChars, 0, count)
+    }
+}

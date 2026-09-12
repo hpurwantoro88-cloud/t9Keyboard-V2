@@ -1,0 +1,18 @@
+<lint-module
+    format="1"
+    dir="/home/think/projects/t9Keyboard-V2/app"
+    name=":app"
+    type="APP"
+    maven="OpenT9:app:"
+    agpVersion="8.3.2"
+    buildFolder="build"
+    bootClassPath="/home/think/Android/Sdk/platforms/android-34/android.jar:/home/think/Android/Sdk/build-tools/34.0.0/core-lambda-stubs.jar"
+    javaSourceLevel="17"
+    compileTarget="android-34">
+  <lintOptions
+      abortOnError="true"
+      absolutePaths="true"
+      checkReleaseBuilds="true"
+      explainIssues="true"/>
+  <variant name="release"/>
+</lint-module>

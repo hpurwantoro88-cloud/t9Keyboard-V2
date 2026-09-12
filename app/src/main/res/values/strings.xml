@@ -1,0 +1,39 @@
+<resources>
+    <string name="app_name">OpenT9</string>
+    <string name="ime_name">OpenT9 Keyboard</string>
+    <string name="settings_title">OpenT9 Settings</string>
+
+    <!-- Categories -->
+    <string name="pref_cat_audio_haptic">Audio &amp; Haptics</string>
+    <string name="pref_cat_layout">Layout &amp; Display</string>
+    <string name="pref_cat_typing">Typing Behaviors</string>
+    <string name="pref_cat_dictionary">Dictionary &amp; Language</string>
+
+    <!-- Audio & Haptics -->
+    <string name="pref_haptic_enabled">Haptic Feedback</string>
+    <string name="pref_vibration_intensity">Vibration Intensity (ms)</string>
+    <string name="pref_audio_enabled">Audio Click Feedback</string>
+    <string name="pref_audio_volume">Sound Volume (%)</string>
+    <string name="pref_audio_style">Sound Style</string>
+
+    <!-- Layout -->
+    <string name="pref_keyboard_height">Keyboard Overall Height (dp)</string>
+    <string name="pref_candidate_font_size">Candidate Font Size (sp)</string>
+    <string name="pref_one_handed">One-Handed Mode</string>
+
+    <!-- Typing -->
+    <string name="pref_default_input_mode">Default Input Mode</string>
+    <string name="pref_long_press_delay">Long-Press Delay (ms)</string>
+    <string name="pref_multi_tap_timeout">Multi-Tap Timeout (ms)</string>
+    <string name="pref_auto_caps">Auto-Capitalization</string>
+    <string name="pref_auto_space">Auto-Space After Commit</string>
+    <string name="pref_double_space_period">Double-Space Period</string>
+    <string name="pref_space_scrubbing">Spacebar Cursor Scrubbing</string>
+
+    <!-- Dictionary -->
+    <string name="pref_startup_language">Primary Startup Language</string>
+    <string name="pref_slang_boost">Slang / Bahasa Gaul Priority</string>
+    <string name="pref_decay_half_life">Dynamic Decay Half-Life</string>
+    <string name="pref_reset_dict">Reset User Dictionary</string>
+    <string name="pref_reset_dict_summary">Clear learned slang, vocabulary, and personal frequency overrides</string>
+</resources>
