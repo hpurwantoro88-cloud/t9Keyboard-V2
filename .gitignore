@@ -3,11 +3,14 @@
 /local.properties
 /.idea/
 .DS_Store
-/build
+build/
+**/build/
 /captures
 .externalNativeBuild
 .cxx
 *.apk
 *.aab
+native_tests/test_native_core
+tools/dawg_compiler/dawg_builder
 tools/dawg_compiler/build
 native_tests/build
