@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.opent9.keyboard.TouchGestureTrackerTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-09-12T03:03:32" hostname="think-2a" time="0.293">
-  <properties/>
-  <testcase name="testKeyAtlasGeometry" classname="com.opent9.keyboard.TouchGestureTrackerTest" time="0.149"/>
-  <testcase name="test4QuadrantFlickDisambiguation" classname="com.opent9.keyboard.TouchGestureTrackerTest" time="0.144"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

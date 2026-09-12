@@ -1,4 +1,0 @@
-/home/think/Android/Sdk/cmake/3.22.1/bin/ninja \
-  -C \
-  /home/think/projects/t9Keyboard-V2/app/.cxx/RelWithDebInfo/96h6g1x4/arm64-v8a \
-  opent9

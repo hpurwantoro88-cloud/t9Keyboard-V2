@@ -1,2 +1,0 @@
-ninja: Entering directory `/home/think/projects/t9Keyboard-V2/app/.cxx/RelWithDebInfo/96h6g1x4/x86_64'
-ninja: no work to do.

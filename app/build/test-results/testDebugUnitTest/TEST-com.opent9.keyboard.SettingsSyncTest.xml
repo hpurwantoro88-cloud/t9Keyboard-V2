@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.opent9.keyboard.SettingsSyncTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-09-12T03:03:21" hostname="think-2a" time="5.541">
-  <properties/>
-  <testcase name="testSettingsObserverDefaultsAndSync" classname="com.opent9.keyboard.SettingsSyncTest" time="5.541"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
