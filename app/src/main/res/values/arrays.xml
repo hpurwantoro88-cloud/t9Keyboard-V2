@@ -1,4 +1,15 @@
 <resources>
+    <string-array name="pref_theme_entries">
+        <item>Follow System (Default)</item>
+        <item>Light</item>
+        <item>Dark</item>
+    </string-array>
+    <string-array name="pref_theme_values">
+        <item>system</item>
+        <item>light</item>
+        <item>dark</item>
+    </string-array>
+
     <string-array name="pref_sound_style_entries">
         <item>Mechanical Classic</item>
         <item>Modern Soft</item>
@@ -19,6 +30,50 @@
         <item>0</item>
         <item>1</item>
         <item>2</item>
+    </string-array>
+
+    <string-array name="pref_col_position_entries">
+        <item>Right (Default)</item>
+        <item>Left</item>
+    </string-array>
+    <string-array name="pref_col_position_values">
+        <item>right</item>
+        <item>left</item>
+    </string-array>
+
+    <string-array name="pref_row_position_entries">
+        <item>Bottom (Default)</item>
+        <item>Top</item>
+    </string-array>
+    <string-array name="pref_row_position_values">
+        <item>bottom</item>
+        <item>top</item>
+    </string-array>
+
+    <string-array name="pref_row_order_entries">
+        <item>\?123, Language, Space, Emoji (Default)</item>
+        <item>Space Center (?123, Space, Language, Emoji)</item>
+        <item>Space Left (Space, Language, ?123, Emoji)</item>
+        <item>Flipped (Emoji, Space, Language, ?123)</item>
+    </string-array>
+    <string-array name="pref_row_order_values">
+        <item>default</item>
+        <item>space_center</item>
+        <item>space_left</item>
+        <item>reverse</item>
+    </string-array>
+
+    <string-array name="pref_col_order_entries">
+        <item>DEL, SHIFT, ENTER (Default)</item>
+        <item>SHIFT, ENTER, DEL</item>
+        <item>ENTER, DEL, SHIFT</item>
+        <item>SHIFT, DEL, ENTER</item>
+    </string-array>
+    <string-array name="pref_col_order_values">
+        <item>default</item>
+        <item>del_bottom</item>
+        <item>enter_top</item>
+        <item>shift_top</item>
     </string-array>
 
     <string-array name="pref_default_mode_entries">

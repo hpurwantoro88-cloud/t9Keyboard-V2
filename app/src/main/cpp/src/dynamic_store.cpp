@@ -38,6 +38,21 @@ bool DynamicStore::init(const char* filePath) {
     return true;
 }
 
+inline uint8_t charToT9Digit(char c) {
+    if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + ('a' - 'A'));
+    switch (c) {
+        case 'a': case 'b': case 'c': return 2;
+        case 'd': case 'e': case 'f': return 3;
+        case 'g': case 'h': case 'i': return 4;
+        case 'j': case 'k': case 'l': return 5;
+        case 'm': case 'n': case 'o': return 6;
+        case 'p': case 'q': case 'r': case 's': return 7;
+        case 't': case 'u': case 'v': return 8;
+        case 'w': case 'x': case 'y': case 'z': return 9;
+        default: return 0;
+    }
+}
+
 bool DynamicStore::save() {
     if (dbPath.empty()) return false;
 
@@ -47,19 +62,10 @@ bool DynamicStore::save() {
         return false;
     }
 
-    // Filter out deleted entries
-    std::vector<DynamicEntry> validEntries;
-    validEntries.reserve(entries.size());
-    for (const auto& entry : entries) {
-        if (!entry.is_deleted) {
-            validEntries.push_back(entry);
-        }
-    }
-
-    uint32_t count = static_cast<uint32_t>(validEntries.size());
+    uint32_t count = static_cast<uint32_t>(entries.size());
     file.write(reinterpret_cast<const char*>(&count), sizeof(count));
     if (count > 0) {
-        file.write(reinterpret_cast<const char*>(validEntries.data()), count * sizeof(DynamicEntry));
+        file.write(reinterpret_cast<const char*>(entries.data()), count * sizeof(DynamicEntry));
     }
     file.close();
 
@@ -77,18 +83,30 @@ int DynamicStore::findEntryIndex(const char* word) const {
     return -1;
 }
 
+bool DynamicStore::isDeleted(const char* word) const {
+    if (!word) return false;
+    for (size_t i = 0; i < entries.size(); ++i) {
+        if (std::strcmp(entries[i].word, word) == 0) {
+            return entries[i].is_deleted != 0;
+        }
+    }
+    return false;
+}
+
 bool DynamicStore::addWord(const char* word, uint32_t freq, uint64_t nowSec) {
     if (!word || word[0] == '\0') return false;
     size_t len = std::strlen(word);
     if (len >= MAX_STORE_WORD_LEN) return false;
 
-    int idx = findEntryIndex(word);
-    if (idx >= 0) {
-        entries[idx].hit_count++;
-        entries[idx].base_freq = std::max(entries[idx].base_freq, freq);
-        entries[idx].last_used_timestamp = nowSec;
-        entries[idx].is_deleted = 0;
-        return true;
+    for (size_t i = 0; i < entries.size(); ++i) {
+        if (std::strcmp(entries[i].word, word) == 0) {
+            entries[i].hit_count++;
+            entries[i].base_freq = std::max(entries[i].base_freq, freq);
+            entries[i].last_used_timestamp = nowSec;
+            entries[i].is_deleted = 0;
+            save();
+            return true;
+        }
     }
 
     if (entries.size() >= MAX_STORE_WORDS) {
@@ -112,31 +130,89 @@ bool DynamicStore::addWord(const char* word, uint32_t freq, uint64_t nowSec) {
     entry.last_used_timestamp = nowSec;
     entry.is_deleted = 0;
     entries.push_back(entry);
+    save();
     return true;
 }
 
 bool DynamicStore::recordUsage(const char* word, uint64_t nowSec) {
-    int idx = findEntryIndex(word);
-    if (idx >= 0) {
-        entries[idx].hit_count++;
-        entries[idx].last_used_timestamp = nowSec;
-        return true;
+    if (!word || word[0] == '\0') return false;
+    for (size_t i = 0; i < entries.size(); ++i) {
+        if (std::strcmp(entries[i].word, word) == 0) {
+            entries[i].hit_count++;
+            entries[i].last_used_timestamp = nowSec;
+            entries[i].is_deleted = 0;
+            save();
+            return true;
+        }
     }
     return addWord(word, 100, nowSec);
 }
 
 bool DynamicStore::removeWord(const char* word) {
-    int idx = findEntryIndex(word);
-    if (idx >= 0) {
-        entries[idx].is_deleted = 1;
-        return true;
+    if (!word || word[0] == '\0') return false;
+    for (size_t i = 0; i < entries.size(); ++i) {
+        if (std::strcmp(entries[i].word, word) == 0) {
+            entries[i].is_deleted = 1;
+            save();
+            return true;
+        }
     }
-    return false;
+
+    // If not in dynamic store yet (e.g. built-in static word from DAWG),
+    // record it as deleted to serve as a persistent suppression blacklist.
+    if (entries.size() >= MAX_STORE_WORDS) {
+        entries.erase(entries.begin());
+    }
+    DynamicEntry entry;
+    std::memset(&entry, 0, sizeof(entry));
+    std::strncpy(entry.word, word, MAX_STORE_WORD_LEN - 1);
+    entry.base_freq = 0;
+    entry.hit_count = 0;
+    entry.last_used_timestamp = 0;
+    entry.is_deleted = 1;
+    entries.push_back(entry);
+    save();
+    return true;
 }
 
 void DynamicStore::reset() {
     entries.clear();
     save();
+}
+
+int DynamicStore::findMatchingWords(const int* digits, int length, uint64_t nowSec, uint32_t halfLifeDays,
+                                    DynamicMatch* outMatches, int maxMatches) const {
+    if (!digits || length <= 0 || !outMatches || maxMatches <= 0) return 0;
+
+    int matchCount = 0;
+    for (const auto& entry : entries) {
+        if (entry.is_deleted) continue;
+        size_t len = std::strlen(entry.word);
+        if (static_cast<int>(len) < length) continue;
+
+        bool matched = true;
+        for (int i = 0; i < length; ++i) {
+            if (charToT9Digit(entry.word[i]) != digits[i]) {
+                matched = false;
+                break;
+            }
+        }
+        if (matched) {
+            DynamicMatch& m = outMatches[matchCount++];
+            std::memcpy(m.word, entry.word, len + 1);
+            m.length = static_cast<uint8_t>(len);
+            m.effective_freq = getEffectiveFrequency(entry.word, nowSec, halfLifeDays);
+            m.is_terminal = (static_cast<int>(len) == length);
+            if (matchCount >= maxMatches) break;
+        }
+    }
+
+    std::sort(outMatches, outMatches + matchCount, [](const DynamicMatch& a, const DynamicMatch& b) {
+        if (a.is_terminal != b.is_terminal) return a.is_terminal > b.is_terminal;
+        return a.effective_freq > b.effective_freq;
+    });
+
+    return matchCount;
 }
 
 uint32_t DynamicStore::getEffectiveFrequency(const char* word, uint64_t nowSec, uint32_t halfLifeDays) const {

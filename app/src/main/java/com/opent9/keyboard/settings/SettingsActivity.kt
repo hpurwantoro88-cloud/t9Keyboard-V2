@@ -4,13 +4,19 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.PreferenceManager
 import com.opent9.keyboard.R
 import com.opent9.keyboard.jni.NativeEngineBridge
 
 class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val themePref = prefs.getString("app_theme", "system") ?: "system"
+        applyNightMode(themePref)
+
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) {
             supportFragmentManager
@@ -19,6 +25,17 @@ class SettingsActivity : AppCompatActivity() {
                 .commit()
         }
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+    }
+
+    companion object {
+        fun applyNightMode(themeMode: String) {
+            val mode = when (themeMode.lowercase()) {
+                "light" -> AppCompatDelegate.MODE_NIGHT_NO
+                "dark" -> AppCompatDelegate.MODE_NIGHT_YES
+                else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            }
+            AppCompatDelegate.setDefaultNightMode(mode)
+        }
     }
 
     override fun onSupportNavigateUp(): Boolean {
@@ -31,13 +48,19 @@ class SettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences, rootKey)
 
+        findPreference<Preference>("app_theme")?.setOnPreferenceChangeListener { _, newValue ->
+            val modeStr = newValue as? String ?: "system"
+            SettingsActivity.applyNightMode(modeStr)
+            true
+        }
+
         findPreference<Preference>("reset_user_dictionary")?.setOnPreferenceClickListener {
             context?.let { ctx ->
                 AlertDialog.Builder(ctx)
                     .setTitle("Reset User Dictionary")
                     .setMessage("Are you sure you want to clear all learned custom words and personal frequencies?")
                     .setPositiveButton("Reset") { _, _ ->
-                        NativeEngineBridge.nativeResetUserDictionary()
+                        NativeEngineBridge.resetUserDictionary()
                         Toast.makeText(ctx, "User dictionary cleared", Toast.LENGTH_SHORT).show()
                     }
                     .setNegativeButton("Cancel", null)

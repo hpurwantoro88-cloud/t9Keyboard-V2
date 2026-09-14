@@ -84,6 +84,9 @@ void AudioEngine::stop() {
 }
 
 void AudioEngine::playClick(SoundStyle style, float volume) {
+    if (!stream || stream->getState() != oboe::StreamState::Started) {
+        start();
+    }
     currentStyle.store(style, std::memory_order_relaxed);
     currentVolume.store(std::clamp(volume, 0.0f, 1.0f), std::memory_order_relaxed);
     playbackFrameIndex.store(0, std::memory_order_release);

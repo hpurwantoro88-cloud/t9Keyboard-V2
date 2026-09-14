@@ -28,8 +28,19 @@ public:
     bool removeWord(const char* word);
     void reset();
 
+    struct DynamicMatch {
+        char word[MAX_STORE_WORD_LEN];
+        uint8_t length;
+        uint32_t effective_freq;
+        bool is_terminal;
+    };
+
     uint32_t getEffectiveFrequency(const char* word, uint64_t nowSec, uint32_t halfLifeDays) const;
     bool isCustomWord(const char* word) const;
+    bool isDeleted(const char* word) const;
+
+    int findMatchingWords(const int* digits, int length, uint64_t nowSec, uint32_t halfLifeDays,
+                          DynamicMatch* outMatches, int maxMatches) const;
 
     size_t getWordCount() const;
     int serializeAllWords(uint8_t* outBuffer, int maxBytes) const;

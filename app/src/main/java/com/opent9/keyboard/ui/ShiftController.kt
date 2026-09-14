@@ -13,8 +13,31 @@ class ShiftController {
 
     private var isCapsLockLocked: Boolean = false
     private var lastShiftTapTime: Long = 0L
+    private var isManualOverride: Boolean = false
+
+    fun isManualOverrideActive(): Boolean = isManualOverride
+
+    fun clearManualOverride() {
+        isManualOverride = false
+    }
+
+    /**
+     * Programmatically apply auto-capitalization.
+     * Returns true if currentMode was changed.
+     */
+    fun setAutoCapsMode(mode: ShiftMode): Boolean {
+        if (isCapsLockLocked || isManualOverride) {
+            return false
+        }
+        if (currentMode != mode) {
+            currentMode = mode
+            return true
+        }
+        return false
+    }
 
     fun onShiftTap(nowMs: Long): ShiftMode {
+        isManualOverride = true
         if (isCapsLockLocked) {
             // Unlocking caps lock always returns to lowercase
             isCapsLockLocked = false
@@ -43,12 +66,14 @@ class ShiftController {
     }
 
     fun onShiftFlickUp(): ShiftMode {
+        isManualOverride = true
         isCapsLockLocked = true
         currentMode = ShiftMode.UPPERCASE
         return currentMode
     }
 
     fun onShiftLongPress(): ShiftMode {
+        isManualOverride = true
         isCapsLockLocked = true
         currentMode = ShiftMode.UPPERCASE
         return currentMode
@@ -57,8 +82,10 @@ class ShiftController {
     /**
      * Called when a character or word is committed.
      * If TITLECASE was active and not locked in caps lock, auto-reset to LOWERCASE.
+     * Clears manual override on character commit.
      */
     fun onCharacterCommitted(): ShiftMode {
+        isManualOverride = false
         if (!isCapsLockLocked && currentMode == ShiftMode.TITLECASE) {
             currentMode = ShiftMode.LOWERCASE
         }
@@ -71,5 +98,6 @@ class ShiftController {
         isCapsLockLocked = false
         currentMode = ShiftMode.LOWERCASE
         lastShiftTapTime = 0L
+        isManualOverride = false
     }
 }

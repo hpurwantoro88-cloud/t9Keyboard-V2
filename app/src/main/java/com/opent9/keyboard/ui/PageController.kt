@@ -10,17 +10,53 @@ class PageController(private val keyAtlas: KeyAtlas) {
         direction: FlickDirection,
         ic: InputConnection?,
         onSwitchLanguage: () -> Unit,
-        onToggleT9Mode: () -> Unit,
         onClearField: () -> Unit,
         onDeletePrecedingWord: () -> Unit,
-        onForceSubmit: () -> Unit
+        onForceSubmit: () -> Unit,
+        onOpenSettings: () -> Unit = {}
     ) {
         if (ic == null) return
+
+        // Handle universal system key flicks across all pages (DEL, ENTER, SPACE)
+        when (key.type) {
+            KeyType.DEL -> {
+                when (direction) {
+                    FlickDirection.UP, FlickDirection.LEFT -> onDeletePrecedingWord()
+                    FlickDirection.DOWN -> onClearField()
+                    FlickDirection.RIGHT -> {}
+                }
+                return
+            }
+            KeyType.ENTER -> {
+                when (direction) {
+                    FlickDirection.UP -> onForceSubmit()
+                    FlickDirection.DOWN -> ic.commitText("\t", 1)
+                    else -> {}
+                }
+                return
+            }
+            KeyType.SPACE_0 -> {
+                when (direction) {
+                    FlickDirection.DOWN -> ic.commitText("\u00A0", 1) // Non-breaking space
+                    FlickDirection.LEFT -> {
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT))
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_LEFT))
+                    }
+                    FlickDirection.RIGHT -> {
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT))
+                    }
+                    else -> {}
+                }
+                return
+            }
+            else -> {}
+        }
 
         when (keyAtlas.currentPage) {
             KeyboardPage.PAGE_0_TEXT -> handlePage0Flick(
                 key, direction, ic,
-                onSwitchLanguage, onToggleT9Mode, onClearField, onDeletePrecedingWord, onForceSubmit
+                onSwitchLanguage, onClearField, onDeletePrecedingWord, onForceSubmit, onOpenSettings
             )
             KeyboardPage.PAGE_1_NUM_SYM -> handlePage1Flick(key, direction, ic)
             KeyboardPage.PAGE_2_EXT_SYM -> handlePage2Flick(key, direction, ic)
@@ -33,27 +69,24 @@ class PageController(private val keyAtlas: KeyAtlas) {
         direction: FlickDirection,
         ic: InputConnection?,
         onSwitchLanguage: () -> Unit,
-        onToggleT9Mode: () -> Unit,
         onClearField: () -> Unit,
         onDeletePrecedingWord: () -> Unit,
-        onForceSubmit: () -> Unit
+        onForceSubmit: () -> Unit,
+        onOpenSettings: () -> Unit = {}
     ) {
         if (ic == null) return
 
         when (key.id) {
-            0 -> { // [ 1 .,?!' ]
+            0 -> { // [ 1 .,?!'@# ]
                 when (direction) {
-                    FlickDirection.UP -> ic.commitText("1", 1)
                     FlickDirection.LEFT -> ic.commitText(",", 1)
                     FlickDirection.RIGHT -> ic.commitText(".", 1)
                     FlickDirection.DOWN -> keyAtlas.updatePageLayout(KeyboardPage.PAGE_1_NUM_SYM)
+                    else -> {}
                 }
             }
             1, 2, 4, 5, 6, 8, 9, 10 -> { // [ 2 ABC ] to [ 9 WXYZ ]
-                when (direction) {
-                    FlickDirection.UP -> key.digitValue.let { if (it >= 0) ic.commitText(it.toString(), 1) }
-                    else -> {}
-                }
+                // Flicks disabled on Page 0 digit keys (numbers accessed via long-press or Page 1)
             }
             3 -> { // [ ⌫ DEL ]
                 when (direction) {
@@ -83,17 +116,17 @@ class PageController(private val keyAtlas: KeyAtlas) {
             }
             13 -> { // [ EN / ID ]
                 when (direction) {
-                    FlickDirection.UP -> onToggleT9Mode()
+                    FlickDirection.UP -> onOpenSettings()
                     FlickDirection.DOWN -> onSwitchLanguage()
                     else -> {}
                 }
             }
             14 -> { // [ 0 ␣ SPACE ]
                 when (direction) {
-                    FlickDirection.UP -> ic.commitText("0", 1)
                     FlickDirection.DOWN -> ic.commitText("\u00A0", 1) // Non-breaking space
                     FlickDirection.LEFT -> ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT))
                     FlickDirection.RIGHT -> ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
+                    else -> {}
                 }
             }
             15 -> { // [ 😊 / . ]
@@ -140,19 +173,26 @@ class PageController(private val keyAtlas: KeyAtlas) {
                 if (key.rightGlyph.isNotEmpty()) ic.commitText(key.rightGlyph, 1)
             }
             FlickDirection.DOWN -> {
-                // Paired symbols with cursor placed inside
                 when (key.id) {
-                    0 -> ic.commitText("^", 1)
-                    1 -> ic.commitText("/", 1)
-                    2 -> commitPairWithCursorInside(ic, "{", "}")
-                    4 -> commitPairWithCursorInside(ic, "[", "]")
-                    5 -> commitPairWithCursorInside(ic, "<", ">")
-                    6 -> commitPairWithCursorInside(ic, "(", ")")
                     7 -> ic.commitText("*", 1)
-                    8 -> ic.commitText("/", 1)
-                    9 -> ic.commitText("¢", 1)
-                    10 -> ic.commitText("¥", 1)
                     15 -> commitPairWithCursorInside(ic, "\"", "\"")
+                    else -> {
+                        val slot = keyAtlas.symbol3x3KeyIndices.indexOf(key.id)
+                        if (slot in 0..8) {
+                            val layer = keyAtlas.symbolLayers[keyAtlas.activeSymbolLayerIndex.coerceIn(0, keyAtlas.symbolLayers.size - 1)]
+                            val down = layer[slot].downGlyph
+                            when (down) {
+                                "{}" -> commitPairWithCursorInside(ic, "{", "}")
+                                "[]" -> commitPairWithCursorInside(ic, "[", "]")
+                                "<>" -> commitPairWithCursorInside(ic, "<", ">")
+                                "()" -> commitPairWithCursorInside(ic, "(", ")")
+                                "\"\"" -> commitPairWithCursorInside(ic, "«", "»")
+                                else -> if (down.isNotEmpty()) {
+                                    ic.commitText(down, 1)
+                                }
+                            }
+                        }
+                    }
                 }
             }
             FlickDirection.UP -> {

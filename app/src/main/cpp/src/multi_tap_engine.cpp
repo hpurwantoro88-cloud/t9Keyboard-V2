@@ -15,7 +15,7 @@ void MultiTapEngine::reset() {
 
 const char* MultiTapEngine::getCycleSequence(int digit) {
     switch (digit) {
-        case 1: return ".,?!'-@1";
+        case 1: return ".,?!'@#1";
         case 2: return "abc2";
         case 3: return "def3";
         case 4: return "ghi4";

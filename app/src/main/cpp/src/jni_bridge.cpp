@@ -36,12 +36,22 @@ Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeSyncConfig(
     g_config.decay_half_life_days = decayDays;
 }
 
+JNIEXPORT void JNICALL
+Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeSyncAudioConfig(
+    JNIEnv* env, jobject thiz,
+    jboolean enabled, jfloat volume, jint style) {
+    g_config.audio_enabled = enabled ? 1 : 0;
+    g_config.audio_volume = volume;
+    g_config.audio_style = style;
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeInit(
     JNIEnv* env, jobject thiz, jstring dbPath) {
     const char* path = env->GetStringUTFChars(dbPath, nullptr);
     bool ok = g_dynamicStore.init(path);
     env->ReleaseStringUTFChars(dbPath, path);
+    g_dawgEngine.setDynamicStore(&g_dynamicStore);
     g_audioEngine.start();
     return ok ? JNI_TRUE : JNI_FALSE;
 }
@@ -187,6 +197,16 @@ JNIEXPORT void JNICALL
 Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeResetUserDictionary(
     JNIEnv* env, jobject thiz) {
     g_dynamicStore.reset();
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeIsWordDeleted(
+    JNIEnv* env, jobject thiz, jstring word) {
+    if (!word) return JNI_FALSE;
+    const char* str = env->GetStringUTFChars(word, nullptr);
+    bool del = g_dynamicStore.isDeleted(str);
+    env->ReleaseStringUTFChars(word, str);
+    return del ? JNI_TRUE : JNI_FALSE;
 }
 
 } // extern "C"

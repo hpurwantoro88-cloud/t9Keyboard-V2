@@ -48,9 +48,13 @@ object NativeEngineBridge {
     external fun nativeMultiTapReset()
 
     external fun nativePlayClick(style: Int, volume: Float)
+    external fun nativeSyncAudioConfig(enabled: Boolean, volume: Float, style: Int)
     external fun nativeRecordUsage(word: String, nowSec: Long)
     external fun nativeRemoveWord(word: String): Boolean
     external fun nativeResetUserDictionary()
+    external fun nativeIsWordDeleted(word: String): Boolean
+
+    private val fallbackDeletedWords = HashSet<String>()
 
     fun initEngine(dbPath: String): Boolean {
         if (!isNativeLoaded) return true
@@ -69,18 +73,26 @@ object NativeEngineBridge {
         nativeSyncConfig(sigma, longPressMs, multiTapMs, autoSpace, slangBoost, decayDays)
     }
 
+    fun syncAudioConfig(enabled: Boolean, volume: Float, style: Int) {
+        if (!isNativeLoaded) return
+        nativeSyncAudioConfig(enabled, volume, style)
+    }
+
     fun loadLexiconFd(langCode: String, fd: Int, offset: Long, length: Long): Boolean {
         if (!isNativeLoaded) return true
         return nativeLoadLexiconFd(langCode, fd, offset, length)
     }
 
+    private var fallbackLanguage = "ID"
+
     fun switchLanguage(langCode: String): Boolean {
+        fallbackLanguage = langCode
         if (!isNativeLoaded) return true
         return nativeSwitchLanguage(langCode)
     }
 
     fun getActiveLanguage(): String {
-        if (!isNativeLoaded) return "ID"
+        if (!isNativeLoaded) return fallbackLanguage
         return nativeGetActiveLanguage()
     }
 
@@ -104,13 +116,41 @@ object NativeEngineBridge {
         nativeResetT9()
     }
 
+    private val fallbackSequences = mapOf(
+        1 to ".,?!'@#1",
+        2 to "abc2",
+        3 to "def3",
+        4 to "ghi4",
+        5 to "jkl5",
+        6 to "mno6",
+        7 to "pqrs7",
+        8 to "tuv8",
+        9 to "wxyz9",
+        0 to " 0\n"
+    )
+    private var fallbackActiveDigit = -1
+    private var fallbackCycleIndex = 0
+    private var fallbackLastPressTime = 0L
+    private var fallbackCurrentChar = 0.toChar()
+
     fun multiTapReset() {
-        if (!isNativeLoaded) return
+        if (!isNativeLoaded) {
+            fallbackActiveDigit = -1
+            fallbackCycleIndex = 0
+            fallbackLastPressTime = 0L
+            fallbackCurrentChar = 0.toChar()
+            return
+        }
         nativeMultiTapReset()
     }
 
     fun multiTapCommit(): Char {
-        if (!isNativeLoaded) return 0.toChar()
+        if (!isNativeLoaded) {
+            if (fallbackActiveDigit == -1) return 0.toChar()
+            val committed = fallbackCurrentChar
+            multiTapReset()
+            return committed
+        }
         return nativeMultiTapCommit()
     }
 
@@ -125,11 +165,20 @@ object NativeEngineBridge {
     }
 
     fun removeWord(word: String): Boolean {
+        fallbackDeletedWords.add(word.lowercase())
         if (!isNativeLoaded) return true
         return nativeRemoveWord(word)
     }
 
+    fun isWordDeleted(word: String): Boolean {
+        val lower = word.lowercase()
+        if (fallbackDeletedWords.contains(lower)) return true
+        if (!isNativeLoaded) return false
+        return nativeIsWordDeleted(lower)
+    }
+
     fun resetUserDictionary() {
+        fallbackDeletedWords.clear()
         if (!isNativeLoaded) return
         nativeResetUserDictionary()
     }
@@ -160,7 +209,30 @@ object NativeEngineBridge {
 
     fun handleMultiTapPress(digit: Int, timestampMs: Long, shiftState: Int): MultiTapResult {
         if (!isNativeLoaded) {
-            return MultiTapResult(false, 0.toChar(), (digit + '0'.code).toChar())
+            val seq = fallbackSequences[digit] ?: return MultiTapResult(false, 0.toChar(), (digit + '0'.code).toChar())
+            var committedPrev = false
+            var committedChar = 0.toChar()
+
+            if (fallbackActiveDigit != -1 && fallbackActiveDigit != digit) {
+                committedPrev = true
+                committedChar = fallbackCurrentChar
+                fallbackActiveDigit = digit
+                fallbackCycleIndex = 0
+            } else if (fallbackActiveDigit == digit) {
+                fallbackCycleIndex = (fallbackCycleIndex + 1) % seq.length
+            } else {
+                fallbackActiveDigit = digit
+                fallbackCycleIndex = 0
+            }
+
+            fallbackLastPressTime = timestampMs
+            val baseChar = seq[fallbackCycleIndex]
+            fallbackCurrentChar = if ((shiftState == 1 || shiftState == 2) && baseChar.isLowerCase()) {
+                baseChar.uppercaseChar()
+            } else {
+                baseChar
+            }
+            return MultiTapResult(committedPrev, committedChar, fallbackCurrentChar)
         }
         multiTapBuffer.clear()
         nativeMultiTapKeyPress(digit, timestampMs, shiftState, multiTapBuffer)
@@ -172,7 +244,14 @@ object NativeEngineBridge {
     }
 
     fun handleMultiTapTimeout(timestampMs: Long, timeoutMs: Int): Char? {
-        if (!isNativeLoaded) return null
+        if (!isNativeLoaded) {
+            if (fallbackActiveDigit != -1 && (timestampMs - fallbackLastPressTime) >= timeoutMs) {
+                val committed = fallbackCurrentChar
+                multiTapReset()
+                return committed
+            }
+            return null
+        }
         multiTapBuffer.clear()
         val timedOut = nativeMultiTapTimeout(timestampMs, timeoutMs, multiTapBuffer)
         if (timedOut) {

@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <ctime>
 
 DawgEngine::DawgEngine() {
     reset();
@@ -125,43 +126,100 @@ bool DawgEngine::pushStroke(int digit, float touchX, float touchY, const Spatial
         }
     }
 
-    if (poolSize == 0) {
-        return false;
-    }
-
-    // Populate next beam: top paths by beam_score
-    std::sort(candidatesPool, candidatesPool + poolSize, [](const TempPath& a, const TempPath& b) {
-        if (a.beam_score != b.beam_score) return a.beam_score > b.beam_score;
-        return a.max_freq > b.max_freq;
-    });
-
-    uint8_t beamCount = static_cast<uint8_t>(std::min(poolSize, MAX_BEAM_SIZE));
-    nextState.beam_count = beamCount;
-    for (uint8_t i = 0; i < beamCount; ++i) {
-        nextState.beam[i].edge_index = candidatesPool[i].edge_index;
-        nextState.beam[i].spatial_score_sum = candidatesPool[i].spatial_sum;
-        nextState.beam[i].score = candidatesPool[i].beam_score;
-        nextState.beam[i].word_len = candidatesPool[i].word_len;
-        std::memcpy(nextState.beam[i].word, candidatesPool[i].word, candidatesPool[i].word_len + 1);
-    }
-
-    // Extract terminal candidates and sort strictly by cand_score / freq
+    // Extract terminal candidates from candidatesPool
     std::vector<TempPath> terminalCandidates;
-    terminalCandidates.reserve(poolSize);
+    terminalCandidates.reserve(poolSize + 8);
     for (size_t i = 0; i < poolSize; ++i) {
         if (candidatesPool[i].is_terminal) {
             terminalCandidates.push_back(candidatesPool[i]);
         }
     }
+
+    // Inject matching dynamic / learned words from DynamicStore
+    if (dynamicStore) {
+        int strokeDigits[MAX_STROKE_DEPTH];
+        for (int d = 0; d < currentDepth; ++d) {
+            strokeDigits[d] = history[d].digit;
+        }
+        strokeDigits[currentDepth] = digit;
+        int strokeLen = currentDepth + 1;
+
+        DynamicStore::DynamicMatch dynamicMatches[MAX_CANDIDATES];
+        uint64_t nowSec = static_cast<uint64_t>(std::time(nullptr));
+        int dynCount = dynamicStore->findMatchingWords(strokeDigits, strokeLen, nowSec, config.decay_half_life_days, dynamicMatches, MAX_CANDIDATES);
+
+        for (int d = 0; d < dynCount; ++d) {
+            const auto& dm = dynamicMatches[d];
+            bool foundInTerminal = false;
+            for (auto& tc : terminalCandidates) {
+                if (std::strcmp(tc.word, dm.word) == 0) {
+                    foundInTerminal = true;
+                    tc.freq = std::max(tc.freq, dm.effective_freq);
+                    float boost = config.slang_boost_enabled ? 3.0f : 1.5f;
+                    tc.cand_score += boost;
+                    break;
+                }
+            }
+            if (!foundInTerminal) {
+                TempPath p;
+                std::memset(&p, 0, sizeof(p));
+                std::memcpy(p.word, dm.word, dm.length + 1);
+                p.word_len = dm.length;
+                p.is_terminal = dm.is_terminal ? 1 : 0;
+                p.freq = dm.effective_freq;
+                p.max_freq = dm.effective_freq;
+                float prevSpatial = (currentDepth > 0 && history[currentDepth - 1].beam_count > 0)
+                                    ? history[currentDepth - 1].beam[0].spatial_score_sum : 0.0f;
+                p.spatial_sum = prevSpatial + spatialScore;
+                float boost = config.slang_boost_enabled ? 3.0f : 1.5f;
+                p.cand_score = p.spatial_sum + std::log10(1.0f + static_cast<float>(dm.effective_freq)) + (dm.is_terminal ? boost : 0.0f);
+                p.beam_score = p.cand_score;
+                terminalCandidates.push_back(p);
+            }
+        }
+    }
+
+    // Populate next beam: top paths by beam_score
+    if (poolSize > 0) {
+        std::sort(candidatesPool, candidatesPool + poolSize, [](const TempPath& a, const TempPath& b) {
+            if (a.beam_score != b.beam_score) return a.beam_score > b.beam_score;
+            return a.max_freq > b.max_freq;
+        });
+
+        uint8_t beamCount = static_cast<uint8_t>(std::min(poolSize, MAX_BEAM_SIZE));
+        nextState.beam_count = beamCount;
+        for (uint8_t i = 0; i < beamCount; ++i) {
+            nextState.beam[i].edge_index = candidatesPool[i].edge_index;
+            nextState.beam[i].spatial_score_sum = candidatesPool[i].spatial_sum;
+            nextState.beam[i].score = candidatesPool[i].beam_score;
+            nextState.beam[i].word_len = candidatesPool[i].word_len;
+            std::memcpy(nextState.beam[i].word, candidatesPool[i].word, candidatesPool[i].word_len + 1);
+        }
+    } else if (!terminalCandidates.empty()) {
+        uint8_t beamCount = static_cast<uint8_t>(std::min(terminalCandidates.size(), MAX_BEAM_SIZE));
+        nextState.beam_count = beamCount;
+        for (uint8_t i = 0; i < beamCount; ++i) {
+            nextState.beam[i].edge_index = UINT32_MAX;
+            nextState.beam[i].spatial_score_sum = terminalCandidates[i].spatial_sum;
+            nextState.beam[i].score = terminalCandidates[i].beam_score;
+            nextState.beam[i].word_len = terminalCandidates[i].word_len;
+            std::memcpy(nextState.beam[i].word, terminalCandidates[i].word, terminalCandidates[i].word_len + 1);
+        }
+    } else {
+        nextState.beam_count = 0;
+    }
+
     std::sort(terminalCandidates.begin(), terminalCandidates.end(), [](const TempPath& a, const TempPath& b) {
         if (a.cand_score != b.cand_score) return a.cand_score > b.cand_score;
         return a.freq > b.freq;
     });
 
-    // Populate candidate list
+    // Populate candidate list (suppressing any deleted / blacklisted words)
     uint8_t candCount = 0;
     for (const auto& tc : terminalCandidates) {
         if (candCount >= MAX_CANDIDATES) break;
+        if (dynamicStore && dynamicStore->isDeleted(tc.word)) continue;
+
         CandidateWord& cw = nextState.candidates[candCount++];
         cw.length = tc.word_len;
         cw.score = tc.cand_score;
@@ -169,9 +227,10 @@ bool DawgEngine::pushStroke(int digit, float touchX, float touchY, const Spatial
         std::memcpy(cw.word, tc.word, tc.word_len + 1);
     }
 
-    // If still have slots, add non-terminal prefixes
+    // If still have slots, add non-terminal prefixes (unless deleted/blacklisted)
     for (size_t i = 0; i < poolSize && candCount < MAX_CANDIDATES; ++i) {
         if (!candidatesPool[i].is_terminal) {
+            if (dynamicStore && dynamicStore->isDeleted(candidatesPool[i].word)) continue;
             bool exists = false;
             for (uint8_t c = 0; c < candCount; ++c) {
                 if (std::strcmp(nextState.candidates[c].word, candidatesPool[i].word) == 0) {
@@ -189,9 +248,8 @@ bool DawgEngine::pushStroke(int digit, float touchX, float touchY, const Spatial
         }
     }
     nextState.candidate_count = candCount;
-
     currentDepth++;
-    return true;
+    return (candCount > 0 || poolSize > 0);
 }
 
 bool DawgEngine::popStroke() {

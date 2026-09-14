@@ -213,8 +213,76 @@ int main() {
     assert(rem && !store.isCustomWord("kuy"));
     std::cout << "[PASS] Test 7: DynamicStore with exponential half-life decay verified" << std::endl;
 
+    // ------------------------------------------------------------------------
+    // Test 8: Dynamic Word Candidate Injection (purwantoro)
+    // ------------------------------------------------------------------------
+    engine.setLexiconData(idBuffer.data(), idBuffer.size());
+    engine.setDynamicStore(&store);
+
+    store.addWord("purwantoro", 500, t0);
+    assert(store.isCustomWord("purwantoro"));
+
+    engine.reset();
+    int purwantoroDigits[] = {7, 8, 7, 9, 2, 6, 8, 6, 7, 6};
+    for (int d : purwantoroDigits) {
+        bool pushed = engine.pushStroke(d, 0.0f, 0.0f, scorer, g_config);
+        assert(pushed);
+    }
+    assert(engine.getCandidateCount() > 0);
+    assert(std::strcmp(engine.getCandidates()[0].word, "purwantoro") == 0);
+    std::cout << "[PASS] Test 8: Learned word 'purwantoro' dynamically injected into T9 candidates: "
+              << engine.getCandidates()[0].word << " (score=" << engine.getCandidates()[0].score << ")" << std::endl;
+
+    // ------------------------------------------------------------------------
+    // Test 9: Blacklisting / Suggestion Removal
+    // ------------------------------------------------------------------------
+    // Without removal, 78792686 yields purwanto
+    engine.reset();
+    int purwantoDigits[] = {7, 8, 7, 9, 2, 6, 8, 6};
+    for (int d : purwantoDigits) {
+        engine.pushStroke(d, 0.0f, 0.0f, scorer, g_config);
+    }
+    bool foundPurwanto = false;
+    for (uint8_t c = 0; c < engine.getCandidateCount(); ++c) {
+        if (std::strcmp(engine.getCandidates()[c].word, "purwanto") == 0) {
+            foundPurwanto = true;
+            break;
+        }
+    }
+    assert(foundPurwanto);
+
+    // Now remove purwanto (blacklist it)
+    store.removeWord("purwanto");
+    assert(store.isDeleted("purwanto"));
+
+    engine.reset();
+    for (int d : purwantoDigits) {
+        engine.pushStroke(d, 0.0f, 0.0f, scorer, g_config);
+    }
+    for (uint8_t c = 0; c < engine.getCandidateCount(); ++c) {
+        assert(std::strcmp(engine.getCandidates()[c].word, "purwanto") != 0);
+    }
+    std::cout << "[PASS] Test 9: Static candidate 'purwanto' successfully suppressed via blacklist" << std::endl;
+
+    // Re-learning un-blacklists the word
+    store.recordUsage("purwanto", t0);
+    assert(!store.isDeleted("purwanto"));
+    engine.reset();
+    for (int d : purwantoDigits) {
+        engine.pushStroke(d, 0.0f, 0.0f, scorer, g_config);
+    }
+    bool restoredPurwanto = false;
+    for (uint8_t c = 0; c < engine.getCandidateCount(); ++c) {
+        if (std::strcmp(engine.getCandidates()[c].word, "purwanto") == 0) {
+            restoredPurwanto = true;
+            break;
+        }
+    }
+    assert(restoredPurwanto);
+    std::cout << "[PASS] Test 9: 'purwanto' successfully restored upon deliberate re-learning" << std::endl;
+
     std::cout << "\n========================================" << std::endl;
-    std::cout << "ALL PHASE 1 C++ UNIT TESTS PASSED!" << std::endl;
+    std::cout << "ALL OPENT9 CORE C++ TESTS PASSED!" << std::endl;
     std::cout << "========================================" << std::endl;
     return 0;
 }

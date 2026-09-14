@@ -1,6 +1,16 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <PreferenceCategory app:title="@string/pref_cat_appearance">
+        <ListPreference
+            app:key="app_theme"
+            app:title="@string/pref_theme"
+            app:entries="@array/pref_theme_entries"
+            app:entryValues="@array/pref_theme_values"
+            app:defaultValue="system"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/pref_cat_audio_haptic">
         <SwitchPreferenceCompat
             app:key="haptic_enabled"
@@ -47,9 +57,9 @@
         <SeekBarPreference
             app:key="candidate_font_size"
             app:title="@string/pref_candidate_font_size"
-            app:defaultValue="14"
-            app:min="12"
-            android:max="18"
+            app:defaultValue="16"
+            app:min="14"
+            android:max="22"
             app:showSeekBarValue="true" />
         <ListPreference
             app:key="one_handed_mode"
@@ -57,6 +67,34 @@
             app:entries="@array/pref_one_handed_entries"
             app:entryValues="@array/pref_one_handed_values"
             app:defaultValue="0"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="col_4th_position"
+            app:title="@string/pref_col_4th_position"
+            app:entries="@array/pref_col_position_entries"
+            app:entryValues="@array/pref_col_position_values"
+            app:defaultValue="right"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="row_4th_position"
+            app:title="@string/pref_row_4th_position"
+            app:entries="@array/pref_row_position_entries"
+            app:entryValues="@array/pref_row_position_values"
+            app:defaultValue="bottom"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="row_4th_order"
+            app:title="@string/pref_row_4th_order"
+            app:entries="@array/pref_row_order_entries"
+            app:entryValues="@array/pref_row_order_values"
+            app:defaultValue="default"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="col_4th_order"
+            app:title="@string/pref_col_4th_order"
+            app:entries="@array/pref_col_order_entries"
+            app:entryValues="@array/pref_col_order_values"
+            app:defaultValue="default"
             app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
 

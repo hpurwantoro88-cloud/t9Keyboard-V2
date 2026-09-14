@@ -82,36 +82,80 @@ class EmojiAtlas {
     val emojiGridBounds = Array(28) { RectF() }
     val controlRowBounds = Array(4) { RectF() } // ABC, Recents, Space, Del
 
-    fun computeLayout(width: Float, @Suppress("UNUSED_PARAMETER") height: Float, density: Float) {
-        val tabHeight = 40f * density
+    fun computeLayout(width: Float, height: Float, density: Float, offsetX: Float = 0f) {
+        val tabHeight = (height * (40f / 260f)).coerceIn(30f * density, 48f * density)
         val tabWidth = width / 9f
         for (i in 0 until 9) {
-            categoryTabBounds[i].set(i * tabWidth, 0f, (i + 1) * tabWidth, tabHeight)
+            categoryTabBounds[i].set(offsetX + (i * tabWidth), 0f, offsetX + ((i + 1) * tabWidth), tabHeight)
         }
 
+        val ctrlHeight = (height * (40f / 260f)).coerceIn(30f * density, 48f * density)
         val gridTop = tabHeight
-        val gridRowHeight = 45f * density
+        val gridRowHeight = (height - tabHeight - ctrlHeight) / 4f
         val gridColWidth = width / 7f
 
         for (i in 0 until 28) {
             val r = i / 7
             val c = i % 7
-            val left = c * gridColWidth
+            val left = offsetX + (c * gridColWidth)
             val top = gridTop + (r * gridRowHeight)
             emojiGridBounds[i].set(left, top, left + gridColWidth, top + gridRowHeight)
         }
 
         val ctrlTop = gridTop + (4 * gridRowHeight)
-        val ctrlHeight = 40f * density
         // [ ABC (25%) ] [ 🕒 Recents (25%) ] [ ␣ Space (25%) ] [ ⌫ DEL (25%) ]
         val ctrlColWidth = width / 4f
         for (i in 0 until 4) {
-            controlRowBounds[i].set(i * ctrlColWidth, ctrlTop, (i + 1) * ctrlColWidth, ctrlTop + ctrlHeight)
+            controlRowBounds[i].set(offsetX + (i * ctrlColWidth), ctrlTop, offsetX + ((i + 1) * ctrlColWidth), ctrlTop + ctrlHeight)
         }
     }
 
     fun getEmojiString(codepoint: Int): String {
         val count = Character.toChars(codepoint, scratchChars, 0)
         return String(scratchChars, 0, count)
+    }
+
+    fun recordRecentEmoji(codepoint: Int) {
+        val recents = categoryEmojis[0]
+        val list = recents.toMutableList()
+        list.remove(codepoint)
+        list.add(0, codepoint)
+        for (i in 0 until recents.size) {
+            recents[i] = list[i]
+        }
+    }
+
+    fun findCategoryTabAt(x: Float, y: Float): Int? {
+        if (categoryTabBounds[0].isEmpty) return null
+        if (y < 0f || y >= categoryTabBounds[0].bottom) return null
+        val tabWidth = categoryTabBounds[0].width()
+        if (tabWidth <= 0f) return null
+        val idx = (x / tabWidth).toInt()
+        return if (idx in 0..8) idx else null
+    }
+
+    fun findEmojiIndexAt(x: Float, y: Float): Int? {
+        if (emojiGridBounds[0].isEmpty) return null
+        val gridTop = categoryTabBounds[0].bottom
+        val gridBottom = controlRowBounds[0].top
+        if (y < gridTop || y >= gridBottom) return null
+        val gridRowHeight = emojiGridBounds[0].height()
+        val gridColWidth = emojiGridBounds[0].width()
+        if (gridRowHeight <= 0f || gridColWidth <= 0f) return null
+        val r = ((y - gridTop) / gridRowHeight).toInt().coerceIn(0, 3)
+        val c = (x / gridColWidth).toInt().coerceIn(0, 6)
+        val idx = r * 7 + c
+        val activeEmojis = categoryEmojis[activeCategoryIndex]
+        return if (idx in activeEmojis.indices) idx else null
+    }
+
+    fun findControlIndexAt(x: Float, y: Float): Int? {
+        if (controlRowBounds[0].isEmpty) return null
+        val ctrlTop = controlRowBounds[0].top
+        if (y < ctrlTop) return null
+        val ctrlWidth = controlRowBounds[0].width()
+        if (ctrlWidth <= 0f) return null
+        val idx = (x / ctrlWidth).toInt()
+        return if (idx in 0..3) idx else null
     }
 }

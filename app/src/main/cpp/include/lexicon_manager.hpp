@@ -5,7 +5,9 @@
 
 struct MmapLexicon {
     void* mmap_addr = nullptr;
-    size_t length = 0;
+    size_t map_length = 0;
+    const uint8_t* data = nullptr;
+    size_t data_length = 0;
     bool is_loaded = false;
 };
 

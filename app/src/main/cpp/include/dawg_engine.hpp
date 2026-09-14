@@ -6,6 +6,7 @@
 #include <string>
 #include "spatial_scoring.hpp"
 #include "native_config.hpp"
+#include "dynamic_store.hpp"
 
 #pragma pack(push, 1)
 struct DawgHeader {
@@ -87,12 +88,16 @@ public:
     // Format: [uint8_t count][for each: uint8_t len, chars...]
     int serializeCandidates(uint8_t* outBuffer, int maxBytes) const;
 
+    // Set dynamic user vocabulary store
+    void setDynamicStore(const DynamicStore* store) { dynamicStore = store; }
+
     int getDepth() const { return currentDepth; }
 
 private:
     const DawgHeader* header = nullptr;
     const DawgEdge* edges = nullptr;
     size_t totalEdges = 0;
+    const DynamicStore* dynamicStore = nullptr;
 
     int currentDepth = 0;
     StrokeState history[MAX_STROKE_DEPTH];

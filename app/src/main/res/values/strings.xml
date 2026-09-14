@@ -4,10 +4,14 @@
     <string name="settings_title">OpenT9 Settings</string>
 
     <!-- Categories -->
+    <string name="pref_cat_appearance">Appearance &amp; Theme</string>
     <string name="pref_cat_audio_haptic">Audio &amp; Haptics</string>
     <string name="pref_cat_layout">Layout &amp; Display</string>
     <string name="pref_cat_typing">Typing Behaviors</string>
     <string name="pref_cat_dictionary">Dictionary &amp; Language</string>
+
+    <!-- Appearance & Theme -->
+    <string name="pref_theme">Keyboard Theme</string>
 
     <!-- Audio & Haptics -->
     <string name="pref_haptic_enabled">Haptic Feedback</string>
@@ -20,6 +24,10 @@
     <string name="pref_keyboard_height">Keyboard Overall Height (dp)</string>
     <string name="pref_candidate_font_size">Candidate Font Size (sp)</string>
     <string name="pref_one_handed">One-Handed Mode</string>
+    <string name="pref_col_4th_position">4th Column Position</string>
+    <string name="pref_row_4th_position">4th Row Position</string>
+    <string name="pref_row_4th_order">4th Row Key Order</string>
+    <string name="pref_col_4th_order">4th Column Key Order</string>
 
     <!-- Typing -->
     <string name="pref_default_input_mode">Default Input Mode</string>

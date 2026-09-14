@@ -13,8 +13,8 @@ float SpatialScorer::calculateLogLikelihood(int digit, float touchX, float touch
     if (digit < 0 || digit > 9 || sigma <= 0.001f) {
         return 0.0f;
     }
-    // If coordinates were not initialized, fallback to neutral
-    if (keyCoords[digit].cx == 0.0f && keyCoords[digit].cy == 0.0f) {
+    // If coordinates were not initialized or neutral (0, 0) touch was supplied, fallback to neutral
+    if ((touchX == 0.0f && touchY == 0.0f) || (keyCoords[digit].cx == 0.0f && keyCoords[digit].cy == 0.0f)) {
         return 0.0f;
     }
 

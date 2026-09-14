@@ -5,61 +5,44 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Background -->
+    <!-- Keyboard Chassis Outline -->
     <path
-        android:fillColor="#10121A"
-        android:pathData="M0,0h108v108h-108z" />
-    <path
-        android:fillColor="#00E5FF"
-        android:fillAlpha="0.06"
-        android:pathData="M54,14 A40,40 0 1,0 54,94 A40,40 0 1,0 54,14 Z" />
-    <path
-        android:fillColor="#00E5FF"
-        android:fillAlpha="0.10"
-        android:pathData="M54,26 A28,28 0 1,0 54,82 A28,28 0 1,0 54,26 Z" />
-    <path
-        android:fillColor="#00E5FF"
-        android:fillAlpha="0.16"
-        android:pathData="M54,38 A16,16 0 1,0 54,70 A16,16 0 1,0 54,38 Z" />
-
-    <!-- Keyboard Chassis -->
-    <path
-        android:fillColor="#161824"
-        android:strokeColor="#00E5FF"
-        android:strokeWidth="1.5"
-        android:strokeAlpha="0.75"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.0"
         android:pathData="M34,24 h40 a10,10 0 0,1 10,10 v40 a10,10 0 0,1 -10,10 h-40 a10,10 0 0,1 -10,-10 v-40 a10,10 0 0,1 10,-10 z" />
 
-    <!-- Suggestion Strip Background -->
+    <!-- Suggestion Strip -->
     <path
-        android:fillColor="#212536"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.35"
         android:pathData="M33,31 h42 a2.5,2.5 0 0,1 2.5,2.5 v0 a2.5,2.5 0 0,1 -2.5,2.5 h-42 a2.5,2.5 0 0,1 -2.5,-2.5 v0 a2.5,2.5 0 0,1 2.5,-2.5 z" />
 
     <!-- Active Candidate Accent Pill -->
     <path
-        android:fillColor="#00E5FF"
+        android:fillColor="#FFFFFF"
         android:pathData="M35,32.5 h14 a1,1 0 0,1 1,1 v0 a1,1 0 0,1 -1,1 h-14 a1,1 0 0,1 -1,-1 v0 a1,1 0 0,1 1,-1 z" />
 
-    <!-- Stylized "T" Glyph (White) -->
+    <!-- Stylized "T" Glyph -->
     <path
         android:fillColor="#FFFFFF"
         android:pathData="M33,41 L49,41 A1.5,1.5 0 0,1 50.5,42.5 L50.5,44.5 A1.5,1.5 0 0,1 49,46 L43.5,46 L43.5,63 A1.5,1.5 0 0,1 42,64.5 L40,64.5 A1.5,1.5 0 0,1 38.5,63 L38.5,46 L33,46 A1.5,1.5 0 0,1 31.5,44.5 L31.5,42.5 A1.5,1.5 0 0,1 33,41 Z" />
 
-    <!-- Stylized "9" Glyph (Electric Cyan) -->
+    <!-- Stylized "9" Glyph -->
     <path
-        android:fillColor="#00E5FF"
+        android:fillColor="#FFFFFF"
         android:fillType="evenOdd"
         android:pathData="M58,41 L66,41 A5.5,5.5 0 0,1 71.5,46.5 L71.5,60 A4.5,4.5 0 0,1 67,64.5 L56,64.5 A2.25,2.25 0 0,1 56,60 L66,60 A1,1 0 0,0 67,59 L67,53.5 A6,6 0 0,1 58,54 A6.5,6.5 0 0,1 52.5,47.5 A6.5,6.5 0 0,1 58,41 Z M58.5,45.5 L65.5,45.5 A2.5,2.5 0 0,1 68,48 A2.5,2.5 0 0,1 65.5,50.5 L58.5,50.5 A2.5,2.5 0 0,1 56,48 A2.5,2.5 0 0,1 58.5,45.5 Z" />
 
     <!-- Bottom Row: Left dot, Spacebar Pill, Right dot -->
     <path
-        android:fillColor="#6C7289"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.6"
         android:pathData="M36,69.5 A2,2 0 1,0 36,73.5 A2,2 0 1,0 36,69.5 Z" />
     <path
-        android:fillColor="#00E5FF"
-        android:fillAlpha="0.85"
+        android:fillColor="#FFFFFF"
         android:pathData="M43.5,70 h21 a1.5,1.5 0 0,1 1.5,1.5 v0 a1.5,1.5 0 0,1 -1.5,1.5 h-21 a1.5,1.5 0 0,1 -1.5,-1.5 v0 a1.5,1.5 0 0,1 1.5,-1.5 z" />
     <path
-        android:fillColor="#6C7289"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.6"
         android:pathData="M72,69.5 A2,2 0 1,0 72,73.5 A2,2 0 1,0 72,69.5 Z" />
 </vector>

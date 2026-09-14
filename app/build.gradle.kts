@@ -56,6 +56,10 @@ android {
         prefab = true
     }
 
+    androidResources {
+        noCompress += listOf("dawg")
+    }
+
     testOptions {
         unitTests.isReturnDefaultValues = true
         unitTests.isIncludeAndroidResources = true
