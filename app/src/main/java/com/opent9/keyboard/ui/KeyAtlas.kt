@@ -243,6 +243,82 @@ class KeyAtlas {
         grid[r][c] = key
     }
 
+    private fun setKeyMultiColPosition(key: KeyInfo, r: Int, startCol: Int, spanCols: Int, offsetX: Float) {
+        key.row = r
+        key.col = startCol
+        val left = offsetX + (startCol * colWidth)
+        val top = stripHeight + (r * rowHeight)
+        val right = left + (spanCols * colWidth)
+        val bottom = top + rowHeight
+        key.bounds.set(left, top, right, bottom)
+        key.centerX = left + ((spanCols * colWidth) / 2f)
+        key.centerY = top + (rowHeight / 2f)
+        for (c in startCol until (startCol + spanCols).coerceAtMost(4)) {
+            grid[r][c] = key
+        }
+    }
+
+    fun applyPage0UtilityRowLayout(offsetX: Float = lastOffsetX) {
+        if (colWidth <= 0f || rowHeight <= 0f) return
+        val utilityRow = if (row4thPosition == "top") 0 else 3
+
+        if (col4thPosition == "left") {
+            when (row4thOrder) {
+                "space_center" -> {
+                    // Col 0: ?123, Col 1..2: SPACE, Col 3: LANG
+                    setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
+                    setKeyMultiColPosition(keys[14], utilityRow, 1, 2, offsetX)
+                    setKeyGridPosition(keys[13], utilityRow, 3, offsetX)
+                }
+                "space_right" -> {
+                    // Col 0: ?123, Col 1: LANG, Col 2..3: SPACE
+                    setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
+                    setKeyGridPosition(keys[13], utilityRow, 1, offsetX)
+                    setKeyMultiColPosition(keys[14], utilityRow, 2, 2, offsetX)
+                }
+                else -> {
+                    // Default for left action col: [ SPACE (2 blocks) ] [ ?123 ] [ LANG ]
+                    setKeyMultiColPosition(keys[14], utilityRow, 0, 2, offsetX)
+                    setKeyGridPosition(keys[12], utilityRow, 2, offsetX)
+                    setKeyGridPosition(keys[13], utilityRow, 3, offsetX)
+                }
+            }
+        } else {
+            when (row4thOrder) {
+                "space_center" -> {
+                    // [ ?123 ] [ SPACE (2 blocks) ] [ EN / ID ]
+                    setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
+                    setKeyMultiColPosition(keys[14], utilityRow, 1, 2, offsetX)
+                    setKeyGridPosition(keys[13], utilityRow, 3, offsetX)
+                }
+                "space_left", "reverse" -> {
+                    // [ SPACE (2 blocks) ] [ EN / ID ] [ ?123 ]
+                    setKeyMultiColPosition(keys[14], utilityRow, 0, 2, offsetX)
+                    setKeyGridPosition(keys[13], utilityRow, 2, offsetX)
+                    setKeyGridPosition(keys[12], utilityRow, 3, offsetX)
+                }
+                else -> {
+                    // Default: [ ?123 ] [ EN / ID ] [ SPACE (2 blocks) ]
+                    setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
+                    setKeyGridPosition(keys[13], utilityRow, 1, offsetX)
+                    setKeyMultiColPosition(keys[14], utilityRow, 2, 2, offsetX)
+                }
+            }
+        }
+        keys[15].bounds.set(0f, 0f, 0f, 0f)
+        keys[15].centerX = 0f
+        keys[15].centerY = 0f
+    }
+
+    fun applyPage2UtilityRowLayout(offsetX: Float = lastOffsetX) {
+        if (colWidth <= 0f || rowHeight <= 0f) return
+        val utilityRow = if (row4thPosition == "top") 0 else 3
+        setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
+        setKeyGridPosition(keys[13], utilityRow, 1, offsetX)
+        setKeyGridPosition(keys[14], utilityRow, 2, offsetX)
+        setKeyGridPosition(keys[15], utilityRow, 3, offsetX)
+    }
+
     fun computeGeometry(
         width: Float,
         height: Float,
@@ -267,7 +343,6 @@ class KeyAtlas {
         val dialRows = if (row4thPosition == "top") intArrayOf(1, 2, 3) else intArrayOf(0, 1, 2)
         val dialCols = if (col4thPosition == "left") intArrayOf(1, 2, 3) else intArrayOf(0, 1, 2)
         val actionCol = if (col4thPosition == "left") 0 else 3
-        val utilityRow = if (row4thPosition == "top") 0 else 3
 
         // 1. 3x3 dial keys
         val dialKeyIds = arrayOf(
@@ -294,26 +369,8 @@ class KeyAtlas {
             setKeyGridPosition(key, dialRows[i], actionCol, offsetX)
         }
 
-        // 3. Utility row keys and corner key
-        if (row4thOrder == "reverse") {
-            // Flipped: Emoji, Space, Language, ?123
-            setKeyGridPosition(keys[15], utilityRow, 0, offsetX)
-            setKeyGridPosition(keys[14], utilityRow, 1, offsetX)
-            setKeyGridPosition(keys[13], utilityRow, 2, offsetX)
-            setKeyGridPosition(keys[12], utilityRow, 3, offsetX)
-        } else {
-            val utilityKeyIds = when (row4thOrder) {
-                "space_center" -> intArrayOf(12, 14, 13) // ?123, SPACE, LANG
-                "space_left" -> intArrayOf(14, 13, 12)   // SPACE, LANG, ?123
-                else -> intArrayOf(12, 13, 14)           // ?123, LANG, SPACE (default)
-            }
-            for (j in 0..2) {
-                val key = keys[utilityKeyIds[j]]
-                setKeyGridPosition(key, utilityRow, dialCols[j], offsetX)
-            }
-            val cornerKey = keys[15]
-            setKeyGridPosition(cornerKey, utilityRow, actionCol, offsetX)
-        }
+        // 3. Utility row keys
+        applyPage0UtilityRowLayout(offsetX)
 
         val grid3x3Left = offsetX + (dialCols[0] * colWidth)
         val grid3x3Top = stripHeight + (dialRows[0] * rowHeight)
@@ -452,11 +509,12 @@ class KeyAtlas {
         setupKey(10, KeyType.DIGIT_T9, "WXYZ", "9", digit = 9)
         setupKey(11, KeyType.ENTER, "↵", "")
 
-        // Row 4: [ ?123 ] [ EN / ID ] [ ␣ 0 SPACE ] [ 😊 / . ]
+        // Row 4: [ ?123 ] [ EN / ID ] [ ␣ 0 SPACE (2 blocks) ]
         setupKey(12, KeyType.PAGE_SWITCH, "?123", "")
-        setupKey(13, KeyType.LANG_SWITCH, "EN", "") // Updated dynamically by language state
+        setupKey(13, KeyType.LANG_SWITCH, keys[13].primaryLabel.ifEmpty { "EN" }, "😊")
         setupKey(14, KeyType.SPACE_0, "␣", "0", digit = 0)
-        setupKey(15, KeyType.EMOJI_DOT, "😊", ".")
+        setupKey(15, KeyType.EMOJI_DOT, "", "")
+        applyPage0UtilityRowLayout(lastOffsetX)
     }
 
     private fun configurePage1() {
@@ -503,6 +561,7 @@ class KeyAtlas {
         setupKey(13, KeyType.PAGE_SWITCH, "123", "")
         setupKey(14, KeyType.SPACE_0, "0", "␣", digit = 0)
         setupKey(15, KeyType.DUAL_SYM, "\" '", "", left = "\"", right = "'")
+        applyPage2UtilityRowLayout(lastOffsetX)
     }
 
     private fun setupKey(

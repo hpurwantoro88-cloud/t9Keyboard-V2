@@ -140,4 +140,29 @@ class SuggestionGuardTest {
         assertFalse("Purwantoso must be filtered out when deleted", candidatesEn.contains("Purwantoso"))
         assertEquals("Purwantoro", candidatesEn[0])
     }
+
+    @Test
+    fun testNonMatchingPrefixDoesNotExtendHeldWord() {
+        val validDigits = listOf(4, 6, 6, 3) // "good"
+        guard.recordValidCandidates(listOf("good", "home"), validDigits)
+        assertTrue(guard.isGuarded())
+
+        // Completely different 5-digit sequence
+        val nonMatchingDigits = listOf(7, 7, 7, 7, 7)
+        val candidates = guard.getGuardedCandidates(nonMatchingDigits)
+
+        assertFalse("Candidates must not be empty", candidates.isEmpty())
+        assertFalse("Must not hold 'good' when prefix doesn't match", candidates.contains("good"))
+        assertFalse("Must not produce 'goods' when prefix doesn't match", candidates.contains("goods"))
+        assertTrue("All candidates must start with digit 7 letters", candidates.all { c ->
+            c.isNotEmpty() && (c[0] == 'p' || c[0] == 'q' || c[0] == 'r' || c[0] == 's')
+        })
+    }
+
+    @Test
+    fun testBlankCandidatesAreNeverProduced() {
+        val candidates = guard.getGuardedCandidates(listOf(2, 3))
+        assertTrue("Candidates must not be empty", candidates.isNotEmpty())
+        assertTrue("No candidate should be blank", candidates.none { it.isBlank() })
+    }
 }

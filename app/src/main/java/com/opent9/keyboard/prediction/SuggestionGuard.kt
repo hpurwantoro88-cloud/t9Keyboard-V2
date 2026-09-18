@@ -32,8 +32,17 @@ class SuggestionGuard {
         get() = state.lastValidTopWord
 
     private fun isCandidateAllowed(word: String): Boolean {
+        if (word.isBlank()) return false
         val canonical = EnglishOrthography.toCanonical(word).lowercase()
         return !NativeEngineBridge.isWordDeleted(canonical)
+    }
+
+    private fun isPrefix(prefix: List<Int>, full: List<Int>): Boolean {
+        if (prefix.isEmpty() || prefix.size > full.size) return false
+        for (i in prefix.indices) {
+            if (prefix[i] != full[i]) return false
+        }
+        return true
     }
 
     /**
@@ -47,15 +56,16 @@ class SuggestionGuard {
         val seen = HashSet<String>()
 
         fun addCandidateIfAllowed(cand: String) {
-            if (isCandidateAllowed(cand) && seen.add(cand)) {
+            if (cand.isNotBlank() && isCandidateAllowed(cand) && seen.add(cand)) {
                 results.add(cand)
             }
         }
 
         val heldWord = state.lastValidTopWord
         val heldDigits = state.lastValidDigits
+        val matchesPrefix = heldDigits.isNotEmpty() && isPrefix(heldDigits, currentDigits)
 
-        if (heldWord.isNotEmpty() && currentDigits.size > heldDigits.size) {
+        if (heldWord.isNotEmpty() && matchesPrefix && currentDigits.size > heldDigits.size) {
             val trailingDigits = currentDigits.subList(heldDigits.size, currentDigits.size)
             val extPrimary = extendWordPhonotactically(heldWord, trailingDigits, alt = false, lang = lang)
             val extAlt = extendWordPhonotactically(heldWord, trailingDigits, alt = true, lang = lang)
@@ -84,7 +94,7 @@ class SuggestionGuard {
                     if (results.size >= 5) break
                 }
             }
-        } else if (heldWord.isNotEmpty() && currentDigits.size == heldDigits.size) {
+        } else if (heldWord.isNotEmpty() && matchesPrefix && currentDigits.size == heldDigits.size) {
             // Same length: hold the valid candidates
             addCandidateIfAllowed(heldWord)
             for (c in state.lastValidCandidates) {
@@ -92,7 +102,7 @@ class SuggestionGuard {
                 if (results.size >= 5) break
             }
         } else {
-            // No valid prefix was ever held (e.g. unknown word from the very start):
+            // No valid prefix was ever held (e.g. unknown word from the very start or different key sequence):
             val projected = projectWordFromDigits(currentDigits, alt = false, lang = lang)
             addCandidateIfAllowed(projected)
 

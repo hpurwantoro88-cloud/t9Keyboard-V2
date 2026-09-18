@@ -101,4 +101,14 @@ private:
 
     int currentDepth = 0;
     StrokeState history[MAX_STROKE_DEPTH];
+
+    // Collect forward prefix completions from subtree to ensure real dictionary words are suggested
+    void collectCompletions(uint32_t edgeIdx, const char* prefix, uint8_t prefixLen,
+                            float baseSpatialScore, CandidateWord* outCands, uint8_t& candCount,
+                            uint8_t maxCands, int maxDepthRemaining, int& visitBudget) const;
+
+    // Find closest valid words via adjacent key typo substitution or overtype
+    void findClosestWords(int digit, float touchX, float touchY, const SpatialScorer& scorer,
+                          const NativeConfig& config, CandidateWord* outCands, uint8_t& candCount,
+                          uint8_t maxCands);
 };

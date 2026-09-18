@@ -585,8 +585,8 @@ class TouchGestureTracker(
                     0 -> direction == FlickDirection.LEFT || direction == FlickDirection.RIGHT || direction == FlickDirection.DOWN
                     1, 2, 4, 5, 6, 8, 9, 10 -> false // Digits 2..9: no flicks on Page 0 (numbers via long-press or Page 1)
                     7 -> direction == FlickDirection.UP // SHIFT
-                    12 -> direction == FlickDirection.DOWN // ?123
-                    13 -> direction == FlickDirection.UP || direction == FlickDirection.DOWN // LANG
+                    12 -> direction == FlickDirection.DOWN || direction == FlickDirection.UP // ?123
+                    13 -> direction == FlickDirection.UP || direction == FlickDirection.DOWN // LANG (UP = Emoji, DOWN = Lang)
                     15 -> true // 😊 / .
                     else -> false
                 }

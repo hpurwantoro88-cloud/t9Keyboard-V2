@@ -13,7 +13,8 @@ class PageController(private val keyAtlas: KeyAtlas) {
         onClearField: () -> Unit,
         onDeletePrecedingWord: () -> Unit,
         onForceSubmit: () -> Unit,
-        onOpenSettings: () -> Unit = {}
+        onOpenSettings: () -> Unit = {},
+        onSwitchPage: (KeyboardPage) -> Unit = { keyAtlas.updatePageLayout(it) }
     ) {
         if (ic == null) return
 
@@ -56,7 +57,7 @@ class PageController(private val keyAtlas: KeyAtlas) {
         when (keyAtlas.currentPage) {
             KeyboardPage.PAGE_0_TEXT -> handlePage0Flick(
                 key, direction, ic,
-                onSwitchLanguage, onClearField, onDeletePrecedingWord, onForceSubmit, onOpenSettings
+                onSwitchLanguage, onClearField, onDeletePrecedingWord, onForceSubmit, onOpenSettings, onSwitchPage
             )
             KeyboardPage.PAGE_1_NUM_SYM -> handlePage1Flick(key, direction, ic)
             KeyboardPage.PAGE_2_EXT_SYM -> handlePage2Flick(key, direction, ic)
@@ -72,7 +73,8 @@ class PageController(private val keyAtlas: KeyAtlas) {
         onClearField: () -> Unit,
         onDeletePrecedingWord: () -> Unit,
         onForceSubmit: () -> Unit,
-        onOpenSettings: () -> Unit = {}
+        onOpenSettings: () -> Unit = {},
+        onSwitchPage: (KeyboardPage) -> Unit = { keyAtlas.updatePageLayout(it) }
     ) {
         if (ic == null) return
 
@@ -81,7 +83,7 @@ class PageController(private val keyAtlas: KeyAtlas) {
                 when (direction) {
                     FlickDirection.LEFT -> ic.commitText(",", 1)
                     FlickDirection.RIGHT -> ic.commitText(".", 1)
-                    FlickDirection.DOWN -> keyAtlas.updatePageLayout(KeyboardPage.PAGE_1_NUM_SYM)
+                    FlickDirection.DOWN -> onSwitchPage(KeyboardPage.PAGE_1_NUM_SYM)
                     else -> {}
                 }
             }
@@ -110,13 +112,14 @@ class PageController(private val keyAtlas: KeyAtlas) {
             }
             12 -> { // [ ?123 ]
                 when (direction) {
-                    FlickDirection.DOWN -> keyAtlas.updatePageLayout(KeyboardPage.PAGE_2_EXT_SYM)
+                    FlickDirection.UP -> onOpenSettings()
+                    FlickDirection.DOWN -> onSwitchPage(KeyboardPage.PAGE_2_EXT_SYM)
                     else -> {}
                 }
             }
-            13 -> { // [ EN / ID ]
+            13 -> { // [ EN / ID ] (merged with emoticon)
                 when (direction) {
-                    FlickDirection.UP -> onOpenSettings()
+                    FlickDirection.UP -> onSwitchPage(KeyboardPage.PAGE_3_EMOJI)
                     FlickDirection.DOWN -> onSwitchLanguage()
                     else -> {}
                 }

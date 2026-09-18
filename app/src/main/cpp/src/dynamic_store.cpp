@@ -138,9 +138,9 @@ bool DynamicStore::recordUsage(const char* word, uint64_t nowSec) {
     if (!word || word[0] == '\0') return false;
     for (size_t i = 0; i < entries.size(); ++i) {
         if (std::strcmp(entries[i].word, word) == 0) {
+            entries[i].is_deleted = 0;
             entries[i].hit_count++;
             entries[i].last_used_timestamp = nowSec;
-            entries[i].is_deleted = 0;
             save();
             return true;
         }

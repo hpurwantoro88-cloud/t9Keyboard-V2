@@ -227,26 +227,26 @@ bool DawgEngine::pushStroke(int digit, float touchX, float touchY, const Spatial
         std::memcpy(cw.word, tc.word, tc.word_len + 1);
     }
 
-    // If still have slots, add non-terminal prefixes (unless deleted/blacklisted)
-    for (size_t i = 0; i < poolSize && candCount < MAX_CANDIDATES; ++i) {
-        if (!candidatesPool[i].is_terminal) {
-            if (dynamicStore && dynamicStore->isDeleted(candidatesPool[i].word)) continue;
-            bool exists = false;
-            for (uint8_t c = 0; c < candCount; ++c) {
-                if (std::strcmp(nextState.candidates[c].word, candidatesPool[i].word) == 0) {
-                    exists = true;
-                    break;
+    // Forward prefix completion: extend current beam paths to complete real terminal words
+    if (candCount < MAX_CANDIDATES && nextState.beam_count > 0) {
+        int visitBudget = 64;
+        for (uint8_t b = 0; b < nextState.beam_count && candCount < MAX_CANDIDATES && visitBudget > 0; ++b) {
+            const BeamPath& bp = nextState.beam[b];
+            if (bp.edge_index < totalEdges) {
+                uint32_t targetFirst = edges[bp.edge_index].target_first_edge;
+                if (targetFirst != 0 && targetFirst < totalEdges) {
+                    collectCompletions(targetFirst, bp.word, bp.word_len, bp.spatial_score_sum,
+                                       nextState.candidates, candCount, MAX_CANDIDATES, 8, visitBudget);
                 }
-            }
-            if (!exists) {
-                CandidateWord& cw = nextState.candidates[candCount++];
-                cw.length = candidatesPool[i].word_len;
-                cw.score = candidatesPool[i].beam_score;
-                cw.frequency = candidatesPool[i].freq;
-                std::memcpy(cw.word, candidatesPool[i].word, candidatesPool[i].word_len + 1);
             }
         }
     }
+
+    // If 0 candidates found (typo, overtype, or out-of-lexicon), search closest valid words
+    if (candCount == 0) {
+        findClosestWords(digit, touchX, touchY, scorer, config, nextState.candidates, candCount, MAX_CANDIDATES);
+    }
+
     nextState.candidate_count = candCount;
     currentDepth++;
     return (candCount > 0 || poolSize > 0);
@@ -290,4 +290,290 @@ int DawgEngine::serializeCandidates(uint8_t* outBuffer, int maxBytes) const {
         offset += cw.length;
     }
     return offset;
+}
+
+void DawgEngine::collectCompletions(
+    uint32_t edgeIdx, const char* prefix, uint8_t prefixLen,
+    float baseSpatialScore, CandidateWord* outCands, uint8_t& candCount,
+    uint8_t maxCands, int maxDepthRemaining, int& visitBudget
+) const {
+    if (edgeIdx == 0 || edgeIdx >= totalEdges || candCount >= maxCands || maxDepthRemaining <= 0 || visitBudget <= 0) {
+        return;
+    }
+
+    uint32_t eIdx = edgeIdx;
+    struct SiblingEdge {
+        uint32_t index;
+        uint32_t max_freq;
+    };
+    SiblingEdge siblings[16];
+    size_t sibCount = 0;
+
+    while (eIdx < totalEdges && sibCount < 16) {
+        siblings[sibCount++] = { eIdx, edges[eIdx].max_frequency };
+        if (!edges[eIdx].has_next_sibling) break;
+        eIdx++;
+    }
+
+    std::sort(siblings, siblings + sibCount, [](const SiblingEdge& a, const SiblingEdge& b) {
+        return a.max_freq > b.max_freq;
+    });
+
+    for (size_t s = 0; s < sibCount && candCount < maxCands && visitBudget > 0; ++s) {
+        visitBudget--;
+        const DawgEdge& e = edges[siblings[s].index];
+        if (prefixLen + 1 >= MAX_WORD_CHARS) continue;
+
+        char newWord[MAX_WORD_CHARS];
+        std::memcpy(newWord, prefix, prefixLen);
+        newWord[prefixLen] = e.letter;
+        newWord[prefixLen + 1] = '\0';
+        uint8_t newLen = prefixLen + 1;
+
+        if (e.is_terminal) {
+            if (!dynamicStore || !dynamicStore->isDeleted(newWord)) {
+                bool exists = false;
+                for (uint8_t c = 0; c < candCount; ++c) {
+                    if (std::strcmp(outCands[c].word, newWord) == 0) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists && candCount < maxCands) {
+                    CandidateWord& cw = outCands[candCount++];
+                    cw.length = newLen;
+                    float lenDelta = static_cast<float>(newLen > currentDepth ? (newLen - currentDepth) : 0);
+                    cw.score = baseSpatialScore + std::log10(1.0f + static_cast<float>(e.frequency)) - (0.25f * lenDelta);
+                    cw.frequency = e.frequency;
+                    std::memcpy(cw.word, newWord, newLen + 1);
+                }
+            }
+        }
+
+        if (e.target_first_edge != 0 && candCount < maxCands && maxDepthRemaining > 1 && visitBudget > 0) {
+            collectCompletions(e.target_first_edge, newWord, newLen, baseSpatialScore,
+                               outCands, candCount, maxCands, maxDepthRemaining - 1, visitBudget);
+        }
+    }
+}
+
+static const int ADJACENT_T9_KEYS[10][6] = {
+    {-1},                      // 0
+    {-1},                      // 1
+    {1, 3, 4, 5, -1},          // 2
+    {2, 5, 6, -1},             // 3
+    {1, 2, 5, 7, -1},          // 4
+    {2, 4, 6, 8, -1},          // 5
+    {3, 5, 9, 8, -1},          // 6
+    {4, 5, 8, -1},             // 7
+    {5, 7, 9, 0, -1},          // 8
+    {6, 8, 5, -1}              // 9
+};
+
+void DawgEngine::findClosestWords(
+    int digit, float touchX, float touchY, const SpatialScorer& scorer,
+    const NativeConfig& config, CandidateWord* outCands, uint8_t& candCount,
+    uint8_t maxCands
+) {
+    if (candCount >= maxCands) return;
+
+    // 1. Accidental Overtype: current stroke has 0 matches, find most recent valid word
+    if (currentDepth > 0) {
+        int searchDepth = currentDepth - 1;
+        while (searchDepth >= 0 && history[searchDepth].candidate_count == 0) {
+            searchDepth--;
+        }
+        if (searchDepth >= 0 && history[searchDepth].candidate_count > 0) {
+            const StrokeState& prevState = history[searchDepth];
+            for (uint8_t c = 0; c < prevState.candidate_count && candCount < maxCands; ++c) {
+                const CandidateWord& prevCw = prevState.candidates[c];
+                if (dynamicStore && dynamicStore->isDeleted(prevCw.word)) continue;
+                bool exists = false;
+                for (uint8_t i = 0; i < candCount; ++i) {
+                    if (std::strcmp(outCands[i].word, prevCw.word) == 0) { exists = true; break; }
+                }
+                if (!exists) {
+                    CandidateWord& cw = outCands[candCount++];
+                    cw.length = prevCw.length;
+                    cw.frequency = prevCw.frequency;
+                    int overtypeLen = currentDepth - searchDepth;
+                    cw.score = prevCw.score - (0.5f * overtypeLen);
+                    std::memcpy(cw.word, prevCw.word, prevCw.length + 1);
+                }
+            }
+        }
+    }
+
+    // 2. Adjacent-key typo substitution on the current digit
+    if (digit >= 2 && digit <= 9 && candCount < maxCands) {
+        const int* adjList = ADJACENT_T9_KEYS[digit];
+
+        if (currentDepth == 0) {
+            for (int a = 0; adjList[a] != -1 && candCount < maxCands; ++a) {
+                int adj = adjList[a];
+                if (adj < 2 || adj > 9) continue;
+                uint32_t eIdx = header->root_first_edge;
+                while (eIdx < totalEdges && candCount < maxCands) {
+                    const DawgEdge& e = edges[eIdx];
+                    if (e.digit == adj) {
+                        char candWord[2] = { e.letter, '\0' };
+                        if (e.is_terminal && (!dynamicStore || !dynamicStore->isDeleted(candWord))) {
+                            bool exists = false;
+                            for (uint8_t i = 0; i < candCount; ++i) {
+                                if (std::strcmp(outCands[i].word, candWord) == 0) { exists = true; break; }
+                            }
+                            if (!exists) {
+                                CandidateWord& cw = outCands[candCount++];
+                                cw.length = 1;
+                                cw.frequency = e.frequency;
+                                cw.score = std::log10(1.0f + static_cast<float>(e.frequency)) - 1.5f;
+                                std::memcpy(cw.word, candWord, 2);
+                            }
+                        }
+                        if (e.target_first_edge != 0 && candCount < maxCands) {
+                            int budget = 32;
+                            collectCompletions(e.target_first_edge, candWord, 1, -1.5f,
+                                               outCands, candCount, maxCands, 5, budget);
+                        }
+                    }
+                    if (!edges[eIdx].has_next_sibling) break;
+                    eIdx++;
+                }
+            }
+        } else {
+            const StrokeState& prevState = history[currentDepth - 1];
+            for (int a = 0; adjList[a] != -1 && candCount < maxCands; ++a) {
+                int adj = adjList[a];
+                if (adj < 2 || adj > 9) continue;
+
+                for (uint8_t b = 0; b < prevState.beam_count && candCount < maxCands; ++b) {
+                    const BeamPath& bp = prevState.beam[b];
+                    uint32_t prevEdgeIdx = bp.edge_index;
+                    if (prevEdgeIdx >= totalEdges) continue;
+
+                    uint32_t targetFirst = edges[prevEdgeIdx].target_first_edge;
+                    if (targetFirst == 0 || targetFirst >= totalEdges) continue;
+
+                    uint32_t eIdx = targetFirst;
+                    while (eIdx < totalEdges && candCount < maxCands) {
+                        const DawgEdge& e = edges[eIdx];
+                        if (e.digit == adj) {
+                            if (bp.word_len + 1 < MAX_WORD_CHARS) {
+                                char candWord[MAX_WORD_CHARS];
+                                std::memcpy(candWord, bp.word, bp.word_len);
+                                candWord[bp.word_len] = e.letter;
+                                candWord[bp.word_len + 1] = '\0';
+                                uint8_t candLen = bp.word_len + 1;
+
+                                if (e.is_terminal && (!dynamicStore || !dynamicStore->isDeleted(candWord))) {
+                                    bool exists = false;
+                                    for (uint8_t i = 0; i < candCount; ++i) {
+                                        if (std::strcmp(outCands[i].word, candWord) == 0) { exists = true; break; }
+                                    }
+                                    if (!exists) {
+                                        CandidateWord& cw = outCands[candCount++];
+                                        cw.length = candLen;
+                                        cw.frequency = e.frequency;
+                                        float spatialAdj = scorer.calculateLogLikelihood(adj, touchX, touchY, config.touch_variance_sigma);
+                                        cw.score = bp.spatial_score_sum + spatialAdj + std::log10(1.0f + static_cast<float>(e.frequency)) - 1.5f;
+                                        std::memcpy(cw.word, candWord, candLen + 1);
+                                    }
+                                }
+
+                                if (e.target_first_edge != 0 && candCount < maxCands) {
+                                    int budget = 24;
+                                    collectCompletions(e.target_first_edge, candWord, candLen,
+                                                       bp.spatial_score_sum - 1.5f, outCands, candCount, maxCands, 4, budget);
+                                }
+                            }
+                        }
+                        if (!edges[eIdx].has_next_sibling) break;
+                        eIdx++;
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Typo substitution on previous stroke (stroke depth >= 2)
+    if (candCount < maxCands && currentDepth >= 2) {
+        int prevDigit = history[currentDepth - 1].digit;
+        if (prevDigit >= 2 && prevDigit <= 9) {
+            const int* prevAdjList = ADJACENT_T9_KEYS[prevDigit];
+            const StrokeState& stateBeforePrev = (currentDepth >= 3) ? history[currentDepth - 2] : history[0];
+
+            for (int pa = 0; prevAdjList[pa] != -1 && candCount < maxCands; ++pa) {
+                int adjPrev = prevAdjList[pa];
+                if (adjPrev < 2 || adjPrev > 9) continue;
+
+                uint8_t beamLimit = (currentDepth >= 3) ? stateBeforePrev.beam_count : 1;
+                for (uint8_t b = 0; b < beamLimit && candCount < maxCands; ++b) {
+                    uint32_t firstE = 0;
+                    if (currentDepth >= 3) {
+                        if (b >= stateBeforePrev.beam_count) continue;
+                        uint32_t prevE = stateBeforePrev.beam[b].edge_index;
+                        if (prevE >= totalEdges) continue;
+                        firstE = edges[prevE].target_first_edge;
+                    } else {
+                        if (!header) continue;
+                        firstE = header->root_first_edge;
+                    }
+                    if (firstE == 0 || firstE >= totalEdges) continue;
+
+                    uint32_t eIdx1 = firstE;
+                    while (eIdx1 < totalEdges && candCount < maxCands) {
+                        const DawgEdge& e1 = edges[eIdx1];
+                        if (e1.digit == adjPrev && e1.target_first_edge != 0 && e1.target_first_edge < totalEdges) {
+                            uint32_t eIdx2 = e1.target_first_edge;
+                            while (eIdx2 < totalEdges && candCount < maxCands) {
+                                const DawgEdge& e2 = edges[eIdx2];
+                                if (e2.digit == digit) {
+                                    char candWord[MAX_WORD_CHARS];
+                                    size_t baseLen = 0;
+                                    if (currentDepth >= 3) {
+                                        baseLen = stateBeforePrev.beam[b].word_len;
+                                        std::memcpy(candWord, stateBeforePrev.beam[b].word, baseLen);
+                                    }
+                                    candWord[baseLen] = e1.letter;
+                                    candWord[baseLen + 1] = e2.letter;
+                                    candWord[baseLen + 2] = '\0';
+                                    uint8_t cLen = static_cast<uint8_t>(baseLen + 2);
+
+                                    if (e2.is_terminal && (!dynamicStore || !dynamicStore->isDeleted(candWord))) {
+                                        bool exists = false;
+                                        for (uint8_t i = 0; i < candCount; ++i) {
+                                            if (std::strcmp(outCands[i].word, candWord) == 0) { exists = true; break; }
+                                        }
+                                        if (!exists) {
+                                            CandidateWord& cw = outCands[candCount++];
+                                            cw.length = cLen;
+                                            cw.frequency = e2.frequency;
+                                            cw.score = std::log10(1.0f + static_cast<float>(e2.frequency)) - 2.5f;
+                                            std::memcpy(cw.word, candWord, cLen + 1);
+                                        }
+                                    }
+                                    if (e2.target_first_edge != 0 && candCount < maxCands) {
+                                        int budget = 20;
+                                        collectCompletions(e2.target_first_edge, candWord, cLen, -2.5f,
+                                                           outCands, candCount, maxCands, 4, budget);
+                                    }
+                                }
+                                if (!edges[eIdx2].has_next_sibling) break;
+                                eIdx2++;
+                            }
+                        }
+                        if (!edges[eIdx1].has_next_sibling) break;
+                        eIdx1++;
+                    }
+                }
+            }
+        }
+    }
+
+    if (candCount > 0) {
+        std::sort(outCands, outCands + candCount, [](const CandidateWord& a, const CandidateWord& b) {
+            if (a.score != b.score) return a.score > b.score;
+            return a.frequency > b.frequency;
+        });
+    }
 }

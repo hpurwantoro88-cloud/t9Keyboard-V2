@@ -4,6 +4,8 @@ import android.text.InputType
 import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import com.opent9.keyboard.ui.KeyInfo
+import com.opent9.keyboard.ui.KeyType
 import com.opent9.keyboard.ui.KeyboardPage
 import com.opent9.keyboard.ui.T9KeyboardView
 import io.mockk.*
@@ -738,6 +740,48 @@ class TypingEngineIntegrationTest {
     }
 
     @Test
+    fun testForwardCompletionProvidesRealWordsAndEliminatesFragments() {
+        val inputView = service.onCreateInputView() as T9KeyboardView
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val info = EditorInfo()
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+
+        service.onStartInputView(info, false)
+        inputView.setT9Mode(true)
+
+        val candidatesField = OpenT9InputMethodService::class.java.getDeclaredField("activeCandidates").apply {
+            isAccessible = true
+        }
+        // Candidates delivered from C++ engine containing forward completions ("hello", "help")
+        val completedWords = listOf("hell", "hello", "help", "helping")
+        candidatesField.set(service, completedWords)
+        inputView.updateCandidates(completedWords)
+
+        @Suppress("UNCHECKED_CAST")
+        val activeCandidates = candidatesField.get(service) as List<String>
+        assertFalse("Candidates must not be empty", activeCandidates.isEmpty())
+
+        // Verify that forward completion suggested "hello"
+        assertTrue("Candidates must include completed word 'hello'",
+            activeCandidates.any { it.equals("hello", ignoreCase = true) })
+
+        // Verify that candidates contain valid letters and no digits
+        assertTrue("No candidates should contain digits",
+            activeCandidates.none { candidate -> candidate.any { it.isDigit() } })
+
+        // Commit candidate 1 ("hello")
+        inputView.onCandidateTapAction?.invoke(1)
+        assertEquals("Hello ", editText.text.toString())
+    }
+
+    @Test
     fun testHoldBackspaceWhileComposingProgressivelyPopsStrokesAndDoesNotFreeze() {
         val inputView = service.onCreateInputView() as T9KeyboardView
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
@@ -844,5 +888,217 @@ class TypingEngineIntegrationTest {
         // Backspace tap should now delete the space from "previous "
         inputView.onKeyTapAction?.invoke(keyDel, keyDel.centerX, keyDel.centerY)
         assertEquals("previous", editText.text.toString())
+    }
+
+    @Test
+    fun testTypeWordThenPage1SymbolCommitsWordAndDoesNotReappearOnBackspace() {
+        val inputView = service.onCreateInputView() as T9KeyboardView
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val info = EditorInfo()
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+
+        service.onStartInputView(info, false)
+        inputView.setT9Mode(true)
+
+        val hasActiveField = OpenT9InputMethodService::class.java.getDeclaredField("hasActiveComposing").apply {
+            isAccessible = true
+        }
+        val currentDigitsField = OpenT9InputMethodService::class.java.getDeclaredField("currentComposingDigits").apply {
+            isAccessible = true
+        }
+
+        // 1. Type word "good" (digits 4, 6, 6, 3)
+        val key4 = inputView.keyAtlas.keys.first { it.digitValue == 4 }
+        val key6 = inputView.keyAtlas.keys.first { it.digitValue == 6 }
+        val key3 = inputView.keyAtlas.keys.first { it.digitValue == 3 }
+
+        inputView.onKeyTapAction?.invoke(key4, key4.centerX, key4.centerY)
+        inputView.onKeyTapAction?.invoke(key6, key6.centerX, key6.centerY)
+        inputView.onKeyTapAction?.invoke(key6, key6.centerX, key6.centerY)
+        inputView.onKeyTapAction?.invoke(key3, key3.centerX, key3.centerY)
+
+        assertTrue("Composing must be active while typing word", hasActiveField.getBoolean(service))
+        val typedWord = editText.text.toString()
+        assertTrue("A word must be composed", typedWord.isNotEmpty())
+
+        // 2. Switch to Page 1 via "?123"
+        val keyNum = inputView.keyAtlas.keys[12]
+        inputView.onKeyTapAction?.invoke(keyNum, keyNum.centerX, keyNum.centerY)
+        assertEquals(KeyboardPage.PAGE_1_NUM_SYM, inputView.keyAtlas.currentPage)
+
+        // Switching to Page 1 must immediately commit the typed word!
+        assertFalse("Composing must be committed and inactive after switching page", hasActiveField.getBoolean(service))
+        @Suppress("UNCHECKED_CAST")
+        val digits = currentDigitsField.get(service) as List<Int>
+        assertTrue("Composing digits must be cleared after switching page", digits.isEmpty())
+        assertEquals(typedWord, editText.text.toString())
+
+        // 3. Tap symbol "-" from Page 1 operator keys
+        val minusKey = inputView.keyAtlas.page1OperatorKeys.first { it.primaryLabel == "-" }
+        inputView.onKeyTapAction?.invoke(minusKey, minusKey.centerX, minusKey.centerY)
+
+        // Text must be "$typedWord-", NOT replacing typed word with "-"
+        assertEquals("$typedWord-", editText.text.toString())
+        assertFalse(hasActiveField.getBoolean(service))
+
+        // 4. Tap DEL on Page 1
+        val keyDel = inputView.keyAtlas.page1Keys.first { it.type == com.opent9.keyboard.ui.KeyType.DEL }
+        inputView.onKeyTapAction?.invoke(keyDel, keyDel.centerX, keyDel.centerY)
+
+        // Backspace must delete "-" leaving typedWord, NOT resurrecting/re-popping the typed word
+        assertEquals(typedWord, editText.text.toString())
+        assertFalse("Composing must remain inactive after backspace", hasActiveField.getBoolean(service))
+    }
+
+    @Test
+    fun testDirectSymbolTapWhileComposingCommitsWordFirst() {
+        val inputView = service.onCreateInputView() as T9KeyboardView
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val info = EditorInfo()
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+
+        service.onStartInputView(info, false)
+        inputView.setT9Mode(true)
+
+        // Type "good"
+        val key4 = inputView.keyAtlas.keys.first { it.digitValue == 4 }
+        val key6 = inputView.keyAtlas.keys.first { it.digitValue == 6 }
+        val key3 = inputView.keyAtlas.keys.first { it.digitValue == 3 }
+        inputView.onKeyTapAction?.invoke(key4, key4.centerX, key4.centerY)
+        inputView.onKeyTapAction?.invoke(key6, key6.centerX, key6.centerY)
+        inputView.onKeyTapAction?.invoke(key6, key6.centerX, key6.centerY)
+        inputView.onKeyTapAction?.invoke(key3, key3.centerX, key3.centerY)
+
+        val typedWord = editText.text.toString()
+        assertTrue(typedWord.isNotEmpty())
+
+        // Tap a direct symbol key directly (e.g. key with KeyType.DIRECT_SYM)
+        val directSymKey = KeyInfo(id = 999, row = 0, col = 0, type = KeyType.DIRECT_SYM, primaryLabel = "*")
+        inputView.onKeyTapAction?.invoke(directSymKey, 0f, 0f)
+
+        assertEquals("$typedWord*", editText.text.toString())
+    }
+
+    @Test
+    fun testCursorMoveWhileComposingCommitsWordInsteadOfDeleting() {
+        val inputView = service.onCreateInputView() as T9KeyboardView
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val info = EditorInfo()
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+
+        service.onStartInputView(info, false)
+        inputView.setT9Mode(true)
+
+        // Type "good"
+        val key4 = inputView.keyAtlas.keys.first { it.digitValue == 4 }
+        val key6 = inputView.keyAtlas.keys.first { it.digitValue == 6 }
+        val key3 = inputView.keyAtlas.keys.first { it.digitValue == 3 }
+        inputView.onKeyTapAction?.invoke(key4, key4.centerX, key4.centerY)
+        inputView.onKeyTapAction?.invoke(key6, key6.centerX, key6.centerY)
+        inputView.onKeyTapAction?.invoke(key6, key6.centerX, key6.centerY)
+        inputView.onKeyTapAction?.invoke(key3, key3.centerX, key3.centerY)
+
+        val typedWord = editText.text.toString()
+        assertTrue(typedWord.isNotEmpty())
+
+        // User taps elsewhere (cursor moves to position 0 outside composing span 0..4)
+        service.onUpdateSelection(4, 4, 0, 0, 0, 4)
+
+        // Typed word must be committed and preserved, NOT deleted!
+        assertEquals(typedWord, editText.text.toString())
+        val hasActiveField = OpenT9InputMethodService::class.java.getDeclaredField("hasActiveComposing").apply {
+            isAccessible = true
+        }
+        assertFalse("Composing state must be false after cursor moved", hasActiveField.getBoolean(service))
+    }
+
+    @Test
+    fun testCursorMoveToPreviousWordWithNegativeCandidatesStartFinalizesComposing() {
+        val inputView = service.onCreateInputView() as T9KeyboardView
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+            setText("hello ")
+            setSelection(6)
+        }
+        val info = EditorInfo().apply {
+            initialSelStart = 6
+            initialSelEnd = 6
+        }
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+        service.onStartInputView(info, false)
+        inputView.setT9Mode(true)
+
+        // Type "good" at offset 6
+        val key4 = inputView.keyAtlas.keys.first { it.digitValue == 4 }
+        val key6 = inputView.keyAtlas.keys.first { it.digitValue == 6 }
+        val key3 = inputView.keyAtlas.keys.first { it.digitValue == 3 }
+        inputView.onKeyTapAction?.invoke(key4, key4.centerX, key4.centerY)
+        inputView.onKeyTapAction?.invoke(key6, key6.centerX, key6.centerY)
+        inputView.onKeyTapAction?.invoke(key6, key6.centerX, key6.centerY)
+        inputView.onKeyTapAction?.invoke(key3, key3.centerX, key3.centerY)
+
+        val textBeforeMove = editText.text.toString()
+        assertTrue(textBeforeMove.startsWith("hello "))
+
+        // User taps inside "hello" at offset 2 (editors reporting candidatesStart = -1)
+        editText.setSelection(2)
+        service.onUpdateSelection(10, 10, 2, 2, -1, -1)
+
+        // Composing must be finalized, not stuck!
+        val hasActiveField = OpenT9InputMethodService::class.java.getDeclaredField("hasActiveComposing").apply {
+            isAccessible = true
+        }
+        assertFalse("Composing must NOT be stuck after moving cursor to previous word", hasActiveField.getBoolean(service))
+        assertEquals(textBeforeMove, editText.text.toString())
+        assertTrue("Word correction should activate for previous word", inputView.isWordCorrectionActive)
+    }
+
+    @Test
+    fun testWordCorrectionPreservesOriginalCasingInCandidateStrip() {
+        val inputView = service.onCreateInputView() as T9KeyboardView
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+            setText("London")
+        }
+        val info = EditorInfo()
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+        service.onStartInputView(info, false)
+
+        // Tap on "London"
+        editText.setSelection(3)
+        service.onUpdateSelection(0, 0, 3, 3, -1, -1)
+
+        assertTrue(inputView.isWordCorrectionActive)
     }
 }

@@ -147,6 +147,21 @@ int main() {
     assert(foundSelamatOrSelalu && "Expected 'sela...' words for prefix 7352");
     std::cout << "[PASS] Test 5: Indonesian lexicon search verified" << std::endl;
 
+    // Test typing "kemandiriannya"
+    engine.reset();
+    int kemandiriannyaDigits[] = {5, 3, 6, 2, 6, 3, 4, 7, 4, 2, 6, 6, 9, 2};
+    std::cout << "Testing typing kemandiriannya step-by-step:" << std::endl;
+    for (size_t s = 0; s < sizeof(kemandiriannyaDigits)/sizeof(kemandiriannyaDigits[0]); ++s) {
+        int d = kemandiriannyaDigits[s];
+        std::cout << "  Pushing stroke " << (s + 1) << " (digit " << d << ")..." << std::flush;
+        bool ok = engine.pushStroke(d, 0, 0, scorer, g_config);
+        std::cout << " ok=" << ok << ", cands=" << static_cast<int>(engine.getCandidateCount());
+        if (engine.getCandidateCount() > 0) {
+            std::cout << " top=" << engine.getCandidates()[0].word;
+        }
+        std::cout << std::endl;
+    }
+
     // ------------------------------------------------------------------------
     // Test 6: MultiTapEngine (Lowercase cycling + Shift decoupling)
     // ------------------------------------------------------------------------
@@ -280,6 +295,84 @@ int main() {
     }
     assert(restoredPurwanto);
     std::cout << "[PASS] Test 9: 'purwanto' successfully restored upon deliberate re-learning" << std::endl;
+
+    // ------------------------------------------------------------------------
+    // Test 10: Forward Prefix Completion (e.g. 4355 -> hello, help)
+    // ------------------------------------------------------------------------
+    engine.setLexiconData(enBuffer.data(), enBuffer.size());
+    engine.setDynamicStore(nullptr);
+    engine.reset();
+    // 4(h) 3(e) 5(l) 5(l)
+    engine.pushStroke(4, 0, 0, scorer, g_config);
+    engine.pushStroke(3, 0, 0, scorer, g_config);
+    engine.pushStroke(5, 0, 0, scorer, g_config);
+    engine.pushStroke(5, 0, 0, scorer, g_config);
+
+    candCount = engine.getCandidateCount();
+    cands = engine.getCandidates();
+    std::cout << "  Candidates for prefix 4355 (forward completions): " << static_cast<int>(candCount) << std::endl;
+    bool foundHello = false;
+    for (uint8_t i = 0; i < candCount; ++i) {
+        std::cout << "    [" << (i + 1) << "] " << cands[i].word << " (score=" << cands[i].score << ")" << std::endl;
+        if (std::strcmp(cands[i].word, "hello") == 0) {
+            foundHello = true;
+        }
+    }
+    assert(candCount > 0 && "Must return candidates for 4355");
+    assert(foundHello && "Forward completion must include 'hello' for prefix 4355");
+    std::cout << "[PASS] Test 10: Forward prefix completion verified ('hello' suggested for 4355)" << std::endl;
+
+    // ------------------------------------------------------------------------
+    // Test 11: Closest Word Typo Correction & Overtype
+    // ------------------------------------------------------------------------
+    // Case 11A: Overtype 4663 + 7 -> retains 'good' / 'goods'
+    engine.reset();
+    engine.pushStroke(4, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(3, 0, 0, scorer, g_config);
+    // Extra digit 7
+    engine.pushStroke(7, 0, 0, scorer, g_config);
+    candCount = engine.getCandidateCount();
+    cands = engine.getCandidates();
+    std::cout << "  Overtyped 46637 candidates: " << static_cast<int>(candCount) << std::endl;
+    for (uint8_t i = 0; i < candCount && i < 4; ++i) {
+        std::cout << "    [" << (i + 1) << "] " << cands[i].word << " (score=" << cands[i].score << ")" << std::endl;
+    }
+    assert(candCount > 0 && "Overtyped stroke must suggest closest words");
+    bool foundGoodOrGoods = false;
+    for (uint8_t i = 0; i < candCount; ++i) {
+        if (std::strcmp(cands[i].word, "good") == 0 || std::strcmp(cands[i].word, "goods") == 0) {
+            foundGoodOrGoods = true;
+            break;
+        }
+    }
+    assert(foundGoodOrGoods && "Overtyped 46637 must suggest 'good' or 'goods'");
+
+    // Case 11B: Overtype 4663 + 7 + 7 (466377) -> yields real English words 'goners', 'homers'
+    engine.reset();
+    engine.pushStroke(4, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(3, 0, 0, scorer, g_config);
+    engine.pushStroke(7, 0, 0, scorer, g_config);
+    engine.pushStroke(7, 0, 0, scorer, g_config); // 466377 spells 'goners', 'homers'
+    candCount = engine.getCandidateCount();
+    cands = engine.getCandidates();
+    std::cout << "  Overtyped 466377 candidates: " << static_cast<int>(candCount) << std::endl;
+    for (uint8_t i = 0; i < candCount && i < 4; ++i) {
+        std::cout << "    [" << (i + 1) << "] " << cands[i].word << " (score=" << cands[i].score << ")" << std::endl;
+    }
+    assert(candCount > 0 && "466377 must suggest valid dictionary words");
+    bool foundGonersOrHomers = false;
+    for (uint8_t i = 0; i < candCount; ++i) {
+        if (std::strcmp(cands[i].word, "goners") == 0 || std::strcmp(cands[i].word, "homers") == 0) {
+            foundGonersOrHomers = true;
+            break;
+        }
+    }
+    assert(foundGonersOrHomers && "466377 must suggest real words 'goners' or 'homers' instead of gibberish 'goodss'");
+    std::cout << "[PASS] Test 11: Closest word typo correction and overtype verified" << std::endl;
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "ALL OPENT9 CORE C++ TESTS PASSED!" << std::endl;

@@ -44,12 +44,20 @@ class DynamicKeyboardSizingTest {
         assertEquals(270f, key1.bounds.right, 0.01f)
         assertEquals(285f, key1.bounds.bottom, 0.01f)
 
-        // Verify key 15 bounds (Row 3, Col 3: [ 😊 / . ])
-        val keyEmoji = atlas.keys[15]
-        assertEquals(810f, keyEmoji.bounds.left, 0.01f)
-        assertEquals(615f, keyEmoji.bounds.top, 0.01f)
-        assertEquals(1080f, keyEmoji.bounds.right, 0.01f)
-        assertEquals(780f, keyEmoji.bounds.bottom, 0.01f)
+        // Verify key 14 bounds on Page 0 (Row 3, Col 2 & 3: [ ␣ 0 SPACE (2 blocks) ])
+        val keySpace = atlas.keys[14]
+        assertEquals(540f, keySpace.bounds.left, 0.01f)
+        assertEquals(615f, keySpace.bounds.top, 0.01f)
+        assertEquals(1080f, keySpace.bounds.right, 0.01f)
+        assertEquals(780f, keySpace.bounds.bottom, 0.01f)
+
+        // Verify key 15 bounds on Page 2 (Row 3, Col 3: [ " ' ])
+        atlas.updatePageLayout(KeyboardPage.PAGE_2_EXT_SYM)
+        val keyQuote = atlas.keys[15]
+        assertEquals(810f, keyQuote.bounds.left, 0.01f)
+        assertEquals(615f, keyQuote.bounds.top, 0.01f)
+        assertEquals(1080f, keyQuote.bounds.right, 0.01f)
+        assertEquals(780f, keyQuote.bounds.bottom, 0.01f)
     }
 
     @Test

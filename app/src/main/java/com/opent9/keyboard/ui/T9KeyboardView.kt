@@ -436,7 +436,12 @@ open class T9KeyboardView @JvmOverloads constructor(
         invalidate()
     }
 
+    var isWordCorrectionActive: Boolean = false
+
     private fun formatCandidateWord(raw: String): String {
+        if (isWordCorrectionActive) {
+            return raw
+        }
         return when (shiftState) {
             1 -> raw.replaceFirstChar { it.uppercase() }
             2 -> raw.uppercase()
@@ -597,6 +602,9 @@ open class T9KeyboardView @JvmOverloads constructor(
 
         for (i in 0 until 16) {
             val key = keyAtlas.keys[i]
+            if (keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT && key.id == 15) continue
+            if (key.bounds.isEmpty) continue
+
             scratchRect.set(
                 key.bounds.left + keyMargin,
                 key.bounds.top + keyMargin,
@@ -635,6 +643,13 @@ open class T9KeyboardView @JvmOverloads constructor(
                     // Language code text (EN or ID)
                     val langY = key.centerY - (2f * density * rowScale)
                     canvas.drawText(activeLanguage, key.centerX, langY, primaryTextPaint)
+
+                    // Emoticon indicator / subLabel in upper right corner
+                    if (key.subLabel.isNotEmpty()) {
+                        val subX = scratchRect.right - (7f * density)
+                        val subY = scratchRect.top + (11f * density * rowScale)
+                        canvas.drawText(key.subLabel, subX, subY, keyCornerSubTextPaint)
+                    }
 
                     // Active T9 Glow Bar directly beneath the language text
                     if (isT9Mode) {

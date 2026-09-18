@@ -487,4 +487,67 @@ class SystemKeysAndMultiTapTest {
         assertEquals("DEF", keyboardView.getDisplayLabel(key2))
         assertEquals("WXYZ", keyboardView.getDisplayLabel(key9))
     }
+
+    @Test
+    fun testPage0Space2BlocksAndLangEmojiMergeFlick() {
+        val atlas = KeyAtlas()
+        atlas.computeGeometry(1080f, 780f, 3f)
+        atlas.updatePageLayout(KeyboardPage.PAGE_0_TEXT)
+
+        // 1. Verify key 13 (LANG) has primaryLabel EN and subLabel 😊
+        val langKey = atlas.keys[13]
+        assertEquals("EN", langKey.primaryLabel)
+        assertEquals("😊", langKey.subLabel)
+        assertEquals(KeyType.LANG_SWITCH, langKey.type)
+
+        // 2. Verify key 14 (SPACE_0) spans 2 blocks (cols 2 and 3)
+        val spaceKey = atlas.keys[14]
+        assertEquals(KeyType.SPACE_0, spaceKey.type)
+        assertEquals(2 * atlas.colWidth, spaceKey.bounds.width(), 0.01f)
+        assertEquals(2 * atlas.colWidth, spaceKey.bounds.left, 0.01f)
+        assertEquals(4 * atlas.colWidth, spaceKey.bounds.right, 0.01f)
+        assertEquals(14, atlas.grid[3][2].id)
+        assertEquals(14, atlas.grid[3][3].id)
+
+        // 3. Verify key 15 is not active on Page 0 (bounds empty)
+        val key15 = atlas.keys[15]
+        assertTrue(key15.bounds.isEmpty)
+
+        // 4. Test flick UP on key 13 switches to PAGE_3_EMOJI
+        val controller = PageController(atlas)
+        val ic = mockk<InputConnection>(relaxed = true)
+        var switchedToPage: KeyboardPage? = null
+        var switchedLanguage = false
+
+        controller.handleKeyFlick(
+            key = langKey,
+            direction = FlickDirection.UP,
+            ic = ic,
+            onSwitchLanguage = { switchedLanguage = true },
+            onClearField = {},
+            onDeletePrecedingWord = {},
+            onForceSubmit = {},
+            onOpenSettings = {},
+            onSwitchPage = { page -> switchedToPage = page }
+        )
+        assertEquals(KeyboardPage.PAGE_3_EMOJI, switchedToPage)
+        assertFalse(switchedLanguage)
+
+        // 5. Test flick DOWN on key 13 switches language
+        switchedToPage = null
+        switchedLanguage = false
+        controller.handleKeyFlick(
+            key = langKey,
+            direction = FlickDirection.DOWN,
+            ic = ic,
+            onSwitchLanguage = { switchedLanguage = true },
+            onClearField = {},
+            onDeletePrecedingWord = {},
+            onForceSubmit = {},
+            onOpenSettings = {},
+            onSwitchPage = { page -> switchedToPage = page }
+        )
+        assertTrue(switchedLanguage)
+        assertNull(switchedToPage)
+    }
 }

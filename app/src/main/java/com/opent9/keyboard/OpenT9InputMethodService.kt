@@ -63,6 +63,8 @@ class OpenT9InputMethodService : InputMethodService() {
     private var activeWordCorrectionContext: WordCorrectionContext? = null
     private var isBackspaceAction = false
     private var lastSpaceTapTime = 0L
+    private var lastSelectionStart = 0
+    private var composingAnchorPosition = -1
 
     // Multi-tap timer runnable
     private val multiTapTimeoutRunnable = Runnable {
@@ -252,12 +254,7 @@ class OpenT9InputMethodService : InputMethodService() {
             val ic = currentInputConnection
             when (controlIndex) {
                 0 -> {
-                    if (hasActiveComposing && ic != null) {
-                        commitActiveCandidate(addSpace = false)
-                    }
-                    keyboardView.setT9Mode(settingsObserver.isDefaultT9())
-                    keyboardView.keyAtlas.updatePageLayout(KeyboardPage.PAGE_0_TEXT)
-                    keyboardView.invalidate()
+                    switchToPage(KeyboardPage.PAGE_0_TEXT)
                 }
                 1 -> {
                     keyboardView.emojiAtlas.activeCategoryIndex = 0
@@ -314,6 +311,7 @@ class OpenT9InputMethodService : InputMethodService() {
         currentEditorInfo = info
         ignoreSelectionUpdateCount = 0
         lastSpaceTapTime = 0L
+        lastSelectionStart = info.initialSelStart.coerceAtLeast(0)
         resetComposingState()
 
         val inputType = info.inputType
@@ -356,6 +354,28 @@ class OpenT9InputMethodService : InputMethodService() {
         keyboardView.setShiftState(shiftController.currentMode.stateValue)
     }
 
+    override fun onFinishInputView(finishingInput: Boolean) {
+        super.onFinishInputView(finishingInput)
+        if (hasActiveComposing) {
+            commitActiveCandidate(addSpace = false)
+        }
+        resetComposingState()
+        if (::keyboardView.isInitialized) {
+            keyboardView.updateCandidates(emptyList())
+        }
+    }
+
+    override fun onFinishInput() {
+        super.onFinishInput()
+        if (hasActiveComposing) {
+            commitActiveCandidate(addSpace = false)
+        }
+        resetComposingState()
+        if (::keyboardView.isInitialized) {
+            keyboardView.updateCandidates(emptyList())
+        }
+    }
+
     override fun onUpdateSelection(
         oldSelStart: Int,
         oldSelEnd: Int,
@@ -368,6 +388,7 @@ class OpenT9InputMethodService : InputMethodService() {
 
         if (ignoreSelectionUpdateCount > 0) {
             ignoreSelectionUpdateCount--
+            lastSelectionStart = newSelStart
             return
         }
 
@@ -376,27 +397,40 @@ class OpenT9InputMethodService : InputMethodService() {
             lastSpaceTapTime = 0L
         }
 
+        if (candidatesStart >= 0) {
+            composingAnchorPosition = candidatesStart
+        }
+
         if (isBackspaceAction) {
             isBackspaceAction = false
             clearWordCorrection()
             if (!hasActiveComposing && currentComposingDigits.isEmpty()) {
                 updateAutoCaps(clearManualOverride = cursorMoved)
             }
+            lastSelectionStart = newSelStart
             return
         }
 
         if (hasActiveComposing || currentComposingDigits.isNotEmpty()) {
             val isUserCursorMove = if (candidatesStart >= 0 && candidatesEnd >= 0) {
-                // If editor supports and reports composing span, check if cursor is strictly outside composing range
-                newSelStart < candidatesStart || newSelEnd > candidatesEnd || newSelStart != newSelEnd
+                // If editor supports and reports composing span, any cursor position other than the active
+                // composing insertion point (candidatesEnd) indicates the user moved the cursor (including index 0 or intra-word taps)
+                newSelStart != candidatesEnd || newSelEnd != candidatesEnd
             } else {
-                // If editor does not maintain composing spans (candidatesStart == -1),
-                // do not reset composing unless a non-collapsed selection was made
-                newSelStart != newSelEnd
+                // If editor does not maintain composing spans (candidatesStart == -1):
+                val expectedPos = if (composingAnchorPosition >= 0 && activeCandidates.isNotEmpty()) {
+                    composingAnchorPosition + activeCandidates[0].length
+                } else -1
+                newSelStart != newSelEnd || (expectedPos >= 0 && newSelStart != expectedPos) || (newSelStart < oldSelStart)
             }
 
             if (isUserCursorMove) {
-                abortComposing(currentInputConnection)
+                finalizeComposingOnCursorMove(currentInputConnection)
+            }
+        } else if (::keyboardView.isInitialized && !keyboardView.isT9Mode && multiTapWordBuffer.isNotEmpty()) {
+            if (newSelStart < oldSelStart || kotlin.math.abs(newSelStart - oldSelStart) > 1 || newSelStart != newSelEnd) {
+                commitMultiTapActive()
+                flushMultiTapWord()
             }
         }
 
@@ -409,6 +443,38 @@ class OpenT9InputMethodService : InputMethodService() {
                 clearWordCorrection()
             }
         }
+
+        lastSelectionStart = newSelStart
+    }
+
+    private fun switchToPage(targetPage: KeyboardPage) {
+        val ic = currentInputConnection
+        if (hasActiveComposing && ic != null) {
+            commitActiveCandidate(addSpace = false)
+        }
+        commitMultiTapActive()
+        flushMultiTapWord()
+        when (targetPage) {
+            KeyboardPage.PAGE_1_NUM_SYM -> {
+                keyboardView.setT9Mode(false)
+                keyboardView.gestureTracker.resetPage1Scroll()
+                keyboardView.updateCandidates(emptyList())
+            }
+            KeyboardPage.PAGE_2_EXT_SYM -> {
+                keyboardView.setT9Mode(false)
+                keyboardView.updateCandidates(emptyList())
+            }
+            KeyboardPage.PAGE_3_EMOJI -> {
+                keyboardView.setT9Mode(false)
+                keyboardView.updateCandidates(emptyList())
+            }
+            KeyboardPage.PAGE_0_TEXT -> {
+                keyboardView.setT9Mode(settingsObserver.isDefaultT9())
+                keyboardView.updateCandidates(emptyList())
+            }
+        }
+        keyboardView.keyAtlas.updatePageLayout(targetPage)
+        keyboardView.invalidate()
     }
 
     private fun handleKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {
@@ -428,6 +494,9 @@ class OpenT9InputMethodService : InputMethodService() {
                 if (keyboardView.isT9Mode && !isPasswordMode) {
                     commitMultiTapActive()
                     flushMultiTapWord()
+                    if (currentComposingDigits.isEmpty() && composingAnchorPosition < 0) {
+                        composingAnchorPosition = lastSelectionStart
+                    }
                     // Push stroke to C++ DAWG beam search
                     currentComposingDigits.add(key.digitValue)
                     currentComposingStrokes.add(ComposingStroke(key.digitValue, touchX, touchY))
@@ -547,8 +616,6 @@ class OpenT9InputMethodService : InputMethodService() {
 
             KeyType.PAGE_SWITCH -> {
                 lastSpaceTapTime = 0L
-                commitMultiTapActive()
-                flushMultiTapWord()
                 val targetPage = when (key.primaryLabel) {
                     "?123" -> KeyboardPage.PAGE_1_NUM_SYM
                     "=\\<" -> KeyboardPage.PAGE_2_EXT_SYM
@@ -557,15 +624,7 @@ class OpenT9InputMethodService : InputMethodService() {
                     "ABC" -> KeyboardPage.PAGE_0_TEXT
                     else -> KeyboardPage.PAGE_0_TEXT
                 }
-                if (targetPage == KeyboardPage.PAGE_1_NUM_SYM) {
-                    keyboardView.setT9Mode(false)
-                    keyboardView.gestureTracker.resetPage1Scroll()
-                    keyboardView.updateCandidates(emptyList())
-                } else if (targetPage == KeyboardPage.PAGE_0_TEXT) {
-                    keyboardView.setT9Mode(settingsObserver.isDefaultT9())
-                }
-                keyboardView.keyAtlas.updatePageLayout(targetPage)
-                keyboardView.invalidate()
+                switchToPage(targetPage)
             }
 
             KeyType.LANG_SWITCH -> {
@@ -577,30 +636,30 @@ class OpenT9InputMethodService : InputMethodService() {
 
             KeyType.EMOJI_DOT -> {
                 lastSpaceTapTime = 0L
-                commitMultiTapActive()
-                flushMultiTapWord()
-                if (hasActiveComposing && ic != null) {
-                    commitActiveCandidate(addSpace = false)
-                }
-                keyboardView.keyAtlas.updatePageLayout(KeyboardPage.PAGE_3_EMOJI)
-                keyboardView.invalidate()
+                switchToPage(KeyboardPage.PAGE_3_EMOJI)
             }
 
             KeyType.DIRECT_SYM -> {
+                if (hasActiveComposing && ic != null) {
+                    commitActiveCandidate(addSpace = false)
+                }
                 commitMultiTapActive()
                 flushMultiTapWord()
                 lastSpaceTapTime = 0L
-                ic.commitText(key.primaryLabel, 1)
+                ic?.commitText(key.primaryLabel, 1)
                 updateAutoCaps()
             }
 
             KeyType.DUAL_SYM -> {
+                if (hasActiveComposing && ic != null) {
+                    commitActiveCandidate(addSpace = false)
+                }
                 commitMultiTapActive()
                 flushMultiTapWord()
                 lastSpaceTapTime = 0L
                 // Tap on dual symbol defaults to left glyph
                 if (key.leftGlyph.isNotEmpty()) {
-                    ic.commitText(key.leftGlyph, 1)
+                    ic?.commitText(key.leftGlyph, 1)
                     updateAutoCaps()
                 }
             }
@@ -642,6 +701,12 @@ class OpenT9InputMethodService : InputMethodService() {
             return
         }
 
+        if (key.type != KeyType.DEL && key.type != KeyType.SHIFT) {
+            if (hasActiveComposing) {
+                commitActiveCandidate(addSpace = false)
+            }
+        }
+
         val previousPage = keyboardView.keyAtlas.currentPage
         pageController.handleKeyFlick(
             key = key,
@@ -672,6 +737,9 @@ class OpenT9InputMethodService : InputMethodService() {
             },
             onOpenSettings = {
                 launchSettings()
+            },
+            onSwitchPage = { targetPage ->
+                switchToPage(targetPage)
             }
         )
 
@@ -769,7 +837,9 @@ class OpenT9InputMethodService : InputMethodService() {
             multiTapWordBuffer.clear()
             if (word.length >= 2 && !isIncognito) {
                 val canonicalWord = EnglishOrthography.toCanonical(word)
-                NativeEngineBridge.recordUsage(canonicalWord.lowercase(), System.currentTimeMillis() / 1000L)
+                if (!NativeEngineBridge.isWordDeleted(canonicalWord.lowercase())) {
+                    NativeEngineBridge.recordUsage(canonicalWord.lowercase(), System.currentTimeMillis() / 1000L)
+                }
             }
         }
     }
@@ -872,7 +942,9 @@ class OpenT9InputMethodService : InputMethodService() {
         // Record usage for dynamic dictionary learning if not incognito and not pure numeric
         if (!isIncognito && word.isNotEmpty() && !word.all { it.isDigit() }) {
             val canonicalWord = EnglishOrthography.toCanonical(word)
-            NativeEngineBridge.recordUsage(canonicalWord.lowercase(), System.currentTimeMillis() / 1000L)
+            if (!NativeEngineBridge.isWordDeleted(canonicalWord.lowercase())) {
+                NativeEngineBridge.recordUsage(canonicalWord.lowercase(), System.currentTimeMillis() / 1000L)
+            }
         }
 
         // Auto-reset Shift if Titlecase
@@ -881,6 +953,43 @@ class OpenT9InputMethodService : InputMethodService() {
 
         resetComposingState()
         keyboardView.updateCandidates(emptyList())
+
+        updateAutoCaps()
+    }
+
+    private fun finalizeComposingOnCursorMove(ic: InputConnection?) {
+        val word = if (activeCandidates.isNotEmpty()) {
+            applyShiftFormatting(activeCandidates[0])
+        } else if (currentComposingDigits.isNotEmpty()) {
+            val lang = NativeEngineBridge.getActiveLanguage()
+            val fallback = suggestionGuard.projectWordFromDigits(currentComposingDigits, alt = false, lang = lang)
+            applyShiftFormatting(fallback)
+        } else {
+            ""
+        }
+
+        // Leave composing text in place as committed text without moving cursor away from new position
+        ic?.finishComposingText()
+        deleteController.clearCommitHistory()
+
+        // Record usage for dynamic dictionary learning if not incognito and not pure numeric
+        if (!isIncognito && word.isNotEmpty() && !word.all { it.isDigit() }) {
+            val canonicalWord = EnglishOrthography.toCanonical(word)
+            if (!NativeEngineBridge.isWordDeleted(canonicalWord.lowercase())) {
+                NativeEngineBridge.recordUsage(canonicalWord.lowercase(), System.currentTimeMillis() / 1000L)
+            }
+        }
+
+        // Auto-reset Shift if Titlecase
+        shiftController.onCharacterCommitted()
+        if (::keyboardView.isInitialized) {
+            keyboardView.setShiftState(shiftController.currentMode.stateValue)
+        }
+
+        resetComposingState()
+        if (::keyboardView.isInitialized) {
+            keyboardView.updateCandidates(emptyList())
+        }
 
         updateAutoCaps()
     }
@@ -1025,6 +1134,7 @@ class OpenT9InputMethodService : InputMethodService() {
             NativeEngineBridge.pushStroke(d, 0f, 0f)
         }
         hasActiveComposing = currentComposingDigits.isNotEmpty()
+        composingAnchorPosition = lastSelectionStart
         updateCandidatesFromNative(ic, preferredWord = restoredWord)
     }
 
@@ -1049,6 +1159,10 @@ class OpenT9InputMethodService : InputMethodService() {
         suggestionGuard.reset()
         activeCandidates = emptyList()
         activeWordCorrectionContext = null
+        composingAnchorPosition = -1
+        if (::keyboardView.isInitialized) {
+            keyboardView.isWordCorrectionActive = false
+        }
     }
 
     private fun promptRemoveCandidate(word: String) {
@@ -1129,6 +1243,7 @@ class OpenT9InputMethodService : InputMethodService() {
                     )
                     activeCandidates = suggestions
                     if (::keyboardView.isInitialized) {
+                        keyboardView.isWordCorrectionActive = true
                         keyboardView.updateCandidates(activeCandidates)
                     }
                     return
@@ -1156,6 +1271,7 @@ class OpenT9InputMethodService : InputMethodService() {
                 )
                 activeCandidates = suggestions
                 if (::keyboardView.isInitialized) {
+                    keyboardView.isWordCorrectionActive = true
                     keyboardView.updateCandidates(activeCandidates)
                 }
                 return
@@ -1257,12 +1373,16 @@ class OpenT9InputMethodService : InputMethodService() {
 
         activeCandidates = emptyList()
         if (::keyboardView.isInitialized) {
+            keyboardView.isWordCorrectionActive = false
             keyboardView.updateCandidates(emptyList())
         }
         updateAutoCaps()
     }
 
     private fun clearWordCorrection() {
+        if (::keyboardView.isInitialized) {
+            keyboardView.isWordCorrectionActive = false
+        }
         if (activeWordCorrectionContext != null || (activeCandidates.isNotEmpty() && !hasActiveComposing)) {
             activeWordCorrectionContext = null
             if (!hasActiveComposing) {
