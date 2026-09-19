@@ -226,12 +226,22 @@ open class T9KeyboardView @JvmOverloads constructor(
     var settingsObserver: SettingsObserver? = null
         set(value) {
             field = value
+            value?.let { applyScrubSettings(it) }
             updateThemeFromConfiguration(resources.configuration)
         }
 
     init {
         isHapticFeedbackEnabled = true
         updateThemeFromConfiguration(resources.configuration)
+    }
+
+    fun applyScrubSettings(observer: SettingsObserver) {
+        gestureTracker.spaceScrubRequireHold = observer.isSpaceScrubbingHoldRequired()
+        gestureTracker.scrubActivationDistanceDp = when (observer.getSpaceScrubbingSensitivity()) {
+            "low" -> 30f
+            "high" -> 14f
+            else -> 22f
+        }
     }
 
     fun applyTheme(colors: KeyboardColors) {
@@ -343,6 +353,7 @@ open class T9KeyboardView @JvmOverloads constructor(
                 rowOrder = observer.get4thRowOrder(),
                 colOrder = observer.get4thColumnOrder()
             )
+            applyScrubSettings(observer)
         }
 
         keyAtlas.computeGeometry(w.toFloat(), h.toFloat(), density, offsetX, contentWidth)
@@ -784,30 +795,56 @@ open class T9KeyboardView @JvmOverloads constructor(
 
     private fun drawEmojiPage(canvas: Canvas) {
         val density = resources.displayMetrics.density
-        // Draw category tabs (40dp)
-        for (i in 0 until 9) {
+        // Draw category tabs (2 tabs: Smileys, Memoji)
+        val tabCount = emojiAtlas.categories.size
+        for (i in 0 until tabCount) {
             val bounds = emojiAtlas.categoryTabBounds[i]
             if (i == emojiAtlas.activeCategoryIndex) {
-                canvas.drawRect(bounds, pillPaint)
+                canvas.drawRoundRect(bounds, 8f * density, 8f * density, pillPaint)
             } else if (i == activeEmojiTabIndex) {
-                canvas.drawRect(bounds, keyPressedPaint)
+                canvas.drawRoundRect(bounds, 8f * density, 8f * density, keyPressedPaint)
             }
             val textY = bounds.centerY() - ((subTextPaint.descent() + subTextPaint.ascent()) / 2f)
             canvas.drawText(emojiAtlas.categories[i], bounds.centerX(), textY, subTextPaint)
         }
 
-        // Draw active category emoji grid (4 rows x 7 cols)
-        val activeEmojis = emojiAtlas.categoryEmojis[emojiAtlas.activeCategoryIndex]
-        for (i in 0 until 28.coerceAtMost(activeEmojis.size)) {
-            val bounds = emojiAtlas.emojiGridBounds[i]
-            if (i == activeEmojiGridIndex) {
-                scratchRect.set(bounds.left + 2f * density, bounds.top + 2f * density, bounds.right - 2f * density, bounds.bottom - 2f * density)
-                canvas.drawRoundRect(scratchRect, 8f * density, 8f * density, keyPressedPaint)
+        // Draw active category scrollable emoji grid
+        val scrollY = gestureTracker.emojiScrollOffset
+        val gridTop = emojiAtlas.gridTop
+        val gridBottom = emojiAtlas.gridBottom
+        val rowHeight = emojiAtlas.gridRowHeight
+        val colWidth = emojiAtlas.gridColWidth
+        val cols = emojiAtlas.gridCols
+        val offsetX = emojiAtlas.currentOffsetX
+        val activeEmojis = emojiAtlas.getActiveEmojiList()
+
+        canvas.save()
+        canvas.clipRect(offsetX, gridTop, offsetX + (cols * colWidth), gridBottom)
+
+        val totalRows = (activeEmojis.size + cols - 1) / cols
+        if (rowHeight > 0f) {
+            val startRow = maxOf(0, ((-scrollY) / rowHeight).toInt())
+            val endRow = minOf(totalRows - 1, ((-scrollY + emojiAtlas.visibleGridHeight) / rowHeight).toInt() + 1)
+            for (r in startRow..endRow) {
+                for (c in 0 until cols) {
+                    val idx = r * cols + c
+                    if (idx !in activeEmojis.indices) continue
+                    val left = offsetX + (c * colWidth)
+                    val top = gridTop + (r * rowHeight) + scrollY
+                    val right = left + colWidth
+                    val bottom = top + rowHeight
+
+                    if (idx == activeEmojiGridIndex) {
+                        scratchRect.set(left + 2f * density, top + 2f * density, right - 2f * density, bottom - 2f * density)
+                        canvas.drawRoundRect(scratchRect, 8f * density, 8f * density, keyPressedPaint)
+                    }
+                    val emojiStr = activeEmojis[idx]
+                    val textY = top + (rowHeight / 2f) - ((primaryTextPaint.descent() + primaryTextPaint.ascent()) / 2f)
+                    canvas.drawText(emojiStr, left + (colWidth / 2f), textY, primaryTextPaint)
+                }
             }
-            val emojiStr = emojiAtlas.getEmojiString(activeEmojis[i])
-            val textY = bounds.centerY() - ((primaryTextPaint.descent() + primaryTextPaint.ascent()) / 2f)
-            canvas.drawText(emojiStr, bounds.centerX(), textY, primaryTextPaint)
         }
+        canvas.restore()
 
         // Draw control row (ABC, Recents, Space, Del)
         val ctrlRow = emojiAtlas.controlRowBounds
@@ -1025,7 +1062,12 @@ open class T9KeyboardView @JvmOverloads constructor(
 
     override fun onEmojiCategoryTap(categoryIndex: Int) {
         playClickFeedback()
-        emojiAtlas.activeCategoryIndex = categoryIndex.coerceIn(0, 8)
+        val maxTab = emojiAtlas.categories.size - 1
+        val safeIndex = categoryIndex.coerceIn(0, maxTab)
+        if (safeIndex != emojiAtlas.activeCategoryIndex) {
+            emojiAtlas.activeCategoryIndex = safeIndex
+            gestureTracker.resetEmojiScroll()
+        }
         invalidate()
     }
 
@@ -1045,8 +1087,9 @@ open class T9KeyboardView @JvmOverloads constructor(
                 onEmojiControlAction?.invoke(0)
             }
             1 -> {
-                // 🕒 Recents
+                // 🕒 Recents: Switch to first tab and scroll to top
                 emojiAtlas.activeCategoryIndex = 0
+                gestureTracker.resetEmojiScroll()
                 invalidate()
                 onEmojiControlAction?.invoke(1)
             }
@@ -1063,11 +1106,13 @@ open class T9KeyboardView @JvmOverloads constructor(
 
     override fun onEmojiPageSwipe(direction: FlickDirection) {
         playClickFeedback()
+        val maxTab = emojiAtlas.categories.size - 1
         when (direction) {
             FlickDirection.LEFT -> {
-                val next = (emojiAtlas.activeCategoryIndex + 1).coerceAtMost(8)
+                val next = (emojiAtlas.activeCategoryIndex + 1).coerceAtMost(maxTab)
                 if (next != emojiAtlas.activeCategoryIndex) {
                     emojiAtlas.activeCategoryIndex = next
+                    gestureTracker.resetEmojiScroll()
                     invalidate()
                 }
             }
@@ -1075,6 +1120,7 @@ open class T9KeyboardView @JvmOverloads constructor(
                 val prev = (emojiAtlas.activeCategoryIndex - 1).coerceAtLeast(0)
                 if (prev != emojiAtlas.activeCategoryIndex) {
                     emojiAtlas.activeCategoryIndex = prev
+                    gestureTracker.resetEmojiScroll()
                     invalidate()
                 }
             }

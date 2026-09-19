@@ -18,6 +18,7 @@ import android.widget.Toast
 import android.app.AlertDialog
 import com.opent9.keyboard.jni.NativeEngineBridge
 import com.opent9.keyboard.prediction.EnglishOrthography
+import com.opent9.keyboard.prediction.IndonesianOrthography
 import com.opent9.keyboard.prediction.SuggestionGuard
 import com.opent9.keyboard.settings.SettingsActivity
 import com.opent9.keyboard.settings.SettingsObserver
@@ -258,6 +259,7 @@ class OpenT9InputMethodService : InputMethodService() {
                 }
                 1 -> {
                     keyboardView.emojiAtlas.activeCategoryIndex = 0
+                    keyboardView.gestureTracker.resetEmojiScroll()
                     keyboardView.invalidate()
                 }
                 2 -> {
@@ -466,6 +468,7 @@ class OpenT9InputMethodService : InputMethodService() {
             }
             KeyboardPage.PAGE_3_EMOJI -> {
                 keyboardView.setT9Mode(false)
+                keyboardView.gestureTracker.resetEmojiScroll()
                 keyboardView.updateCandidates(emptyList())
             }
             KeyboardPage.PAGE_0_TEXT -> {
@@ -847,7 +850,10 @@ class OpenT9InputMethodService : InputMethodService() {
     private fun getProcessedCandidates(): List<String> {
         val raw = NativeEngineBridge.getCandidates()
         val lang = NativeEngineBridge.getActiveLanguage()
-        return EnglishOrthography.processCandidates(raw, lang)
+        return when (lang) {
+            "ID" -> IndonesianOrthography.processCandidates(raw, currentComposingDigits)
+            else -> EnglishOrthography.processCandidates(raw, lang)
+        }
     }
 
     private fun updateCandidatesFromNative(ic: InputConnection) {

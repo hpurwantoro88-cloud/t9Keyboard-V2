@@ -11,6 +11,8 @@ build/
 *.apk
 *.aab
 native_tests/test_native_core
+native_tests/simulated_speed_typing
+native_tests/test_suggestion_quality
 tools/dawg_compiler/dawg_builder
 tools/dawg_compiler/build
 native_tests/build

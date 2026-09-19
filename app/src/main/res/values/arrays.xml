@@ -104,4 +104,15 @@
         <item>30</item>
         <item>0</item>
     </string-array>
+
+    <string-array name="pref_space_scrub_sensitivity_entries">
+        <item>Normal (22 dp - Recommended)</item>
+        <item>Low (30 dp - Requires longer drag)</item>
+        <item>High (14 dp - Very responsive)</item>
+    </string-array>
+    <string-array name="pref_space_scrub_sensitivity_values">
+        <item>normal</item>
+        <item>low</item>
+        <item>high</item>
+    </string-array>
 </resources>

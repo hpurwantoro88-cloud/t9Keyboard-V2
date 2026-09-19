@@ -4,6 +4,8 @@ import android.view.MotionEvent
 import com.opent9.keyboard.ui.*
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -464,6 +466,10 @@ class TouchGestureTrackerTest {
         org.junit.Assert.assertFalse("Initial repeat delete must be character delete, not word delete", deleteRepeatEvents[0])
 
         // Execute repeatDeleteRunnable before 1200ms
+        val touchDownTimeField = TouchGestureTracker::class.java.getDeclaredField("touchDownTime").apply {
+            isAccessible = true
+        }
+        touchDownTimeField.setLong(tracker, System.currentTimeMillis())
         val repeatField = TouchGestureTracker::class.java.getDeclaredField("repeatDeleteRunnable").apply {
             isAccessible = true
         }
@@ -474,13 +480,214 @@ class TouchGestureTrackerTest {
         org.junit.Assert.assertFalse("Repeat delete before 1200ms must be character delete", deleteRepeatEvents[1])
 
         // Simulate elapsed > 1200ms
-        val touchDownTimeField = TouchGestureTracker::class.java.getDeclaredField("touchDownTime").apply {
-            isAccessible = true
-        }
         touchDownTimeField.setLong(tracker, System.currentTimeMillis() - 1300L)
         repeatRunnable.run()
 
         assertEquals(3, deleteRepeatEvents.size)
         org.junit.Assert.assertTrue("Repeat delete at >1200ms must accelerate to word delete", deleteRepeatEvents[2])
+    }
+
+    @Test
+    fun testSpaceScrubActivationWithHigherSlopAndDeadband() {
+        val atlas = KeyAtlas()
+        atlas.computeGeometry(1080f, 780f, 3.0f)
+        var tapKey: KeyInfo? = null
+        val scrubSteps = mutableListOf<Int>()
+
+        val listener = object : TouchGestureListener {
+            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {
+                tapKey = key
+            }
+            override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) {}
+            override fun onKeyLongPress(key: KeyInfo) {}
+            override fun onSpaceScrub(steps: Int) {
+                scrubSteps.add(steps)
+            }
+            override fun onPillTap() {}
+            override fun onCandidateTap(index: Int) {}
+            override fun onStripScroll(newScrollOffset: Float) {}
+            override fun onTouchStateChanged(activeKeyId: Int?) {}
+        }
+        val tracker = TouchGestureTracker(atlas, listener)
+        val spaceKey = atlas.keys.first { it.type == KeyType.SPACE_0 }
+        val cx = spaceKey.centerX
+        val cy = spaceKey.centerY
+
+        // Normal threshold is 22dp * 3 = 66px
+        assertEquals(66f, tracker.spaceScrubActivationPx, 0.01f)
+
+        val t0 = 1000L
+        // Touch down on spacebar
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, cx, cy, 0)) { null }
+        // Move 40px (13.33dp: exceeds old 10dp slop, but safely below new 22dp threshold)
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 30, MotionEvent.ACTION_MOVE, cx + 40f, cy, 0)) { null }
+
+        // Scrubbing must NOT activate
+        assertTrue("Scrubbing should not trigger below 22dp threshold", scrubSteps.isEmpty())
+
+        // Lift finger: must commit as normal tap (space is NOT swallowed)
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 60, MotionEvent.ACTION_UP, cx + 40f, cy, 0)) { null }
+        assertEquals(KeyType.SPACE_0, tapKey?.type)
+    }
+
+    @Test
+    fun testSpaceScrubActivationSuccessAndMultipleSteps() {
+        val atlas = KeyAtlas()
+        atlas.computeGeometry(1080f, 780f, 3.0f)
+        var tapKey: KeyInfo? = null
+        val scrubSteps = mutableListOf<Int>()
+
+        val listener = object : TouchGestureListener {
+            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {
+                tapKey = key
+            }
+            override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) {}
+            override fun onKeyLongPress(key: KeyInfo) {}
+            override fun onSpaceScrub(steps: Int) {
+                scrubSteps.add(steps)
+            }
+            override fun onPillTap() {}
+            override fun onCandidateTap(index: Int) {}
+            override fun onStripScroll(newScrollOffset: Float) {}
+            override fun onTouchStateChanged(activeKeyId: Int?) {}
+        }
+        val tracker = TouchGestureTracker(atlas, listener)
+        val spaceKey = atlas.keys.first { it.type == KeyType.SPACE_0 }
+        val cx = spaceKey.centerX
+        val cy = spaceKey.centerY
+
+        val t0 = 1000L
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, cx, cy, 0)) { null }
+
+        // Move 70px (exceeds 66px activation threshold)
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 30, MotionEvent.ACTION_MOVE, cx + 70f, cy, 0)) { null }
+        assertEquals(1, scrubSteps.size)
+        assertEquals(1, scrubSteps[0])
+
+        // Move an additional 35px right (step size is 32px) -> total dx = 105px
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 60, MotionEvent.ACTION_MOVE, cx + 105f, cy, 0)) { null }
+        assertEquals(2, scrubSteps.size)
+        assertEquals(1, scrubSteps[1])
+
+        // Release: must NOT commit tap
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 90, MotionEvent.ACTION_UP, cx + 105f, cy, 0)) { null }
+        org.junit.Assert.assertNull("Tap must be suppressed after deliberate scrub", tapKey)
+    }
+
+    @Test
+    fun testSpaceScrubDirectionalFilter() {
+        val atlas = KeyAtlas()
+        atlas.computeGeometry(1080f, 780f, 3.0f)
+        var tapKey: KeyInfo? = null
+        val scrubSteps = mutableListOf<Int>()
+
+        val listener = object : TouchGestureListener {
+            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {
+                tapKey = key
+            }
+            override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) {}
+            override fun onKeyLongPress(key: KeyInfo) {}
+            override fun onSpaceScrub(steps: Int) {
+                scrubSteps.add(steps)
+            }
+            override fun onPillTap() {}
+            override fun onCandidateTap(index: Int) {}
+            override fun onStripScroll(newScrollOffset: Float) {}
+            override fun onTouchStateChanged(activeKeyId: Int?) {}
+        }
+        val tracker = TouchGestureTracker(atlas, listener)
+        val spaceKey = atlas.keys.first { it.type == KeyType.SPACE_0 }
+        val cx = spaceKey.centerX
+        val cy = spaceKey.centerY
+
+        val t0 = 1000L
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, cx, cy, 0)) { null }
+
+        // Move diagonally: dx = 75px, dy = 70px (|dx| >= 66px, but |dx| <= |dy| * 1.3)
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 40, MotionEvent.ACTION_MOVE, cx + 75f, cy + 70f, 0)) { null }
+        assertTrue("Diagonal movement should not trigger horizontal space scrubbing", scrubSteps.isEmpty())
+
+        // Release: tap fallback committed
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 80, MotionEvent.ACTION_UP, cx + 75f, cy + 70f, 0)) { null }
+        assertEquals(KeyType.SPACE_0, tapKey?.type)
+    }
+
+    @Test
+    fun testSpaceScrubRequireHold() {
+        val atlas = KeyAtlas()
+        atlas.computeGeometry(1080f, 780f, 3.0f)
+        val scrubSteps = mutableListOf<Int>()
+        var tapKey: KeyInfo? = null
+
+        val listener = object : TouchGestureListener {
+            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {
+                tapKey = key
+            }
+            override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) {}
+            override fun onKeyLongPress(key: KeyInfo) {}
+            override fun onSpaceScrub(steps: Int) {
+                scrubSteps.add(steps)
+            }
+            override fun onPillTap() {}
+            override fun onCandidateTap(index: Int) {}
+            override fun onStripScroll(newScrollOffset: Float) {}
+            override fun onTouchStateChanged(activeKeyId: Int?) {}
+        }
+        val tracker = TouchGestureTracker(atlas, listener)
+        tracker.spaceScrubRequireHold = true
+        val spaceKey = atlas.keys.first { it.type == KeyType.SPACE_0 }
+        val cx = spaceKey.centerX
+        val cy = spaceKey.centerY
+
+        // Case 1: Drag immediately (< 150ms)
+        val t0 = 1000L
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, cx, cy, 0)) { null }
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 50, MotionEvent.ACTION_MOVE, cx + 80f, cy, 0)) { null }
+        assertTrue("Immediate drag without holding should not trigger scrub when hold is required", scrubSteps.isEmpty())
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 60, MotionEvent.ACTION_UP, cx + 80f, cy, 0)) { null }
+        assertEquals(KeyType.SPACE_0, tapKey?.type)
+
+        // Case 2: Hold for 200ms before dragging (> 150ms)
+        tapKey = null
+        val t1 = 2000L
+        tracker.onTouchEvent(MotionEvent.obtain(t1, t1, MotionEvent.ACTION_DOWN, cx, cy, 0)) { null }
+        tracker.onTouchEvent(MotionEvent.obtain(t1, t1 + 200, MotionEvent.ACTION_MOVE, cx + 80f, cy, 0)) { null }
+        assertEquals(1, scrubSteps.size)
+        tracker.onTouchEvent(MotionEvent.obtain(t1, t1 + 250, MotionEvent.ACTION_UP, cx + 80f, cy, 0)) { null }
+        org.junit.Assert.assertNull("Tap must not trigger after hold-scrub", tapKey)
+    }
+
+    @Test
+    fun testSpaceFlickDownPreserved() {
+        val atlas = KeyAtlas()
+        atlas.computeGeometry(1080f, 780f, 3.0f)
+        var flickedKey: KeyInfo? = null
+        var flickedDirection: FlickDirection? = null
+
+        val listener = object : TouchGestureListener {
+            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {}
+            override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) {
+                flickedKey = key
+                flickedDirection = direction
+            }
+            override fun onKeyLongPress(key: KeyInfo) {}
+            override fun onSpaceScrub(steps: Int) {}
+            override fun onPillTap() {}
+            override fun onCandidateTap(index: Int) {}
+            override fun onStripScroll(newScrollOffset: Float) {}
+            override fun onTouchStateChanged(activeKeyId: Int?) {}
+        }
+        val tracker = TouchGestureTracker(atlas, listener)
+        val spaceKey = atlas.keys.first { it.type == KeyType.SPACE_0 }
+        val cx = spaceKey.centerX
+        val cy = spaceKey.centerY
+
+        val t0 = 1000L
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, cx, cy, 0)) { null }
+        // Flick downwards (dy = 60px > 36px flick min distance)
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 40, MotionEvent.ACTION_UP, cx, cy + 60f, 0)) { null }
+
+        assertEquals(KeyType.SPACE_0, flickedKey?.type)
+        assertEquals(FlickDirection.DOWN, flickedDirection)
     }
 }

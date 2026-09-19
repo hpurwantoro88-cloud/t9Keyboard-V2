@@ -165,15 +165,32 @@ object EnglishOrthography {
         promoteCandidate(result, "don't", "foot")
         promoteCandidate(result, "aren't", "brent")
         promoteCandidate(result, "you're", "youse")
+        promoteCandidateToTop2(result, "I'm", "go")
+        promoteCandidateToTop2(result, "he's", "ifs")
+        promoteCandidate(result, "she's", "pier")
+        promoteCandidate(result, "she's", "pies")
+        promoteCandidate(result, "nope", "more")
+        promoteCandidate(result, "nope", "nose")
 
         return if (result.size > 16) result.subList(0, 16) else result
     }
 
     private fun promoteCandidate(list: ArrayList<String>, target: String, demoted: String) {
         val targetIdx = list.indexOf(target)
-        if (targetIdx > 0 && list[0] == demoted) {
+        if (targetIdx > 0 && (list[0] == demoted || targetIdx <= 3)) {
             list.removeAt(targetIdx)
             list.add(0, target)
+        }
+    }
+
+    private fun promoteCandidateToTop2(list: ArrayList<String>, target: String, demoted: String) {
+        val targetIdx = list.indexOf(target)
+        if (targetIdx > 1) {
+            val demotedIdx = list.indexOf(demoted)
+            if (demotedIdx in 0..1) {
+                list.removeAt(targetIdx)
+                list.add(1, target)
+            }
         }
     }
 }

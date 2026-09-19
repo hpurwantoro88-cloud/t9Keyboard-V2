@@ -52,6 +52,8 @@ class SettingsSyncTest {
         assertTrue(observer.isDoubleSpacePeriodEnabled())
         assertEquals(600L, observer.getMultiTapTimeout())
         assertTrue(observer.isSpaceScrubbingEnabled())
+        assertEquals("normal", observer.getSpaceScrubbingSensitivity())
+        assertEquals(false, observer.isSpaceScrubbingHoldRequired())
         assertEquals("right", observer.get4thColumnPosition())
         assertEquals("bottom", observer.get4thRowPosition())
         assertEquals("default", observer.get4thRowOrder())
@@ -132,6 +134,16 @@ class SettingsSyncTest {
         layoutConfigChangedTriggered = false
         prefs.edit().putInt("long_press_delay", 250).apply()
         assertTrue(layoutConfigChangedTriggered)
+
+        // Test space scrubbing settings trigger layoutConfigChanged
+        layoutConfigChangedTriggered = false
+        prefs.edit()
+            .putString("space_scrubbing_sensitivity", "low")
+            .putBoolean("space_scrubbing_hold", true)
+            .apply()
+        assertTrue(layoutConfigChangedTriggered)
+        assertEquals("low", observer.getSpaceScrubbingSensitivity())
+        assertEquals(true, observer.isSpaceScrubbingHoldRequired())
 
         observer.stop()
     }

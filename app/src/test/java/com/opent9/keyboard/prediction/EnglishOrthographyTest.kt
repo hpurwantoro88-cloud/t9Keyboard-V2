@@ -102,12 +102,28 @@ class EnglishOrthographyTest {
         val processed2268 = EnglishOrthography.processCandidates(cands2268, "EN")
         assertEquals("can't", processed2268[0])
 
-        // 46: im restored to I'm
+        // 46: im restored to I'm and promoted to position 1 ahead of 'go'
         val cands46 = listOf("in", "go", "im")
         val processed46 = EnglishOrthography.processCandidates(cands46, "EN")
         assertEquals("in", processed46[0])
-        assertEquals("go", processed46[1])
-        assertEquals("I'm", processed46[2])
+        assertEquals("I'm", processed46[1])
+        assertEquals("go", processed46[2])
+
+        // 437: hes promoted to he's ahead of ifs
+        val cands437 = listOf("her", "ifs", "hes")
+        val processed437 = EnglishOrthography.processCandidates(cands437, "EN")
+        assertEquals("her", processed437[0])
+        assertEquals("he's", processed437[1])
+
+        // 7437: shes promoted to she's ahead of pier
+        val cands7437 = listOf("pier", "pies", "shes")
+        val processed7437 = EnglishOrthography.processCandidates(cands7437, "EN")
+        assertEquals("she's", processed7437[0])
+
+        // 6673: nope promoted over more
+        val cands6673 = listOf("more", "nose", "nope")
+        val processed6673 = EnglishOrthography.processCandidates(cands6673, "EN")
+        assertEquals("nope", processed6673[0])
 
         // 4: i restored to I
         val cands4 = listOf("i")

@@ -45,7 +45,8 @@ class SettingsObserver(
         if (key == "keyboard_height" || key == "candidate_font_size" || key == "one_handed_mode" ||
             key == "col_4th_position" || key == "row_4th_position" ||
             key == "row_4th_order" || key == "col_4th_order" ||
-            key == "long_press_delay"
+            key == "long_press_delay" ||
+            key == "space_scrubbing" || key == "space_scrubbing_sensitivity" || key == "space_scrubbing_hold"
         ) {
             onLayoutConfigChanged?.invoke()
         }
@@ -74,6 +75,8 @@ class SettingsObserver(
     fun isDoubleSpacePeriodEnabled(): Boolean = prefs.getBoolean("double_space_period", true)
     fun getMultiTapTimeout(): Long = prefs.getInt("multi_tap_timeout", 600).toLong()
     fun isSpaceScrubbingEnabled(): Boolean = prefs.getBoolean("space_scrubbing", true)
+    fun getSpaceScrubbingSensitivity(): String = prefs.getString("space_scrubbing_sensitivity", "normal") ?: "normal"
+    fun isSpaceScrubbingHoldRequired(): Boolean = prefs.getBoolean("space_scrubbing_hold", false)
     fun isAutoCapsEnabled(): Boolean = prefs.getBoolean("auto_caps", true)
     fun getKeyboardHeightDp(): Int = prefs.getInt("keyboard_height", 260)
     fun getCandidateFontSizeSp(): Int = prefs.getInt("candidate_font_size", 16)

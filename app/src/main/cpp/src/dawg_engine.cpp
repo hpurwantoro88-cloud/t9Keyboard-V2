@@ -214,7 +214,7 @@ bool DawgEngine::pushStroke(int digit, float touchX, float touchY, const Spatial
         return a.freq > b.freq;
     });
 
-    // Populate candidate list (suppressing any deleted / blacklisted words)
+    // Populate exact terminal candidates (matching current stroke depth)
     uint8_t candCount = 0;
     for (const auto& tc : terminalCandidates) {
         if (candCount >= MAX_CANDIDATES) break;
@@ -227,9 +227,10 @@ bool DawgEngine::pushStroke(int digit, float touchX, float touchY, const Spatial
         std::memcpy(cw.word, tc.word, tc.word_len + 1);
     }
 
-    // Forward prefix completion: extend current beam paths to complete real terminal words
+    // Forward prefix completion: extend current beam paths to complete longer words
     if (candCount < MAX_CANDIDATES && nextState.beam_count > 0) {
-        int visitBudget = 64;
+        uint8_t completionStart = candCount;
+        int visitBudget = 96;
         for (uint8_t b = 0; b < nextState.beam_count && candCount < MAX_CANDIDATES && visitBudget > 0; ++b) {
             const BeamPath& bp = nextState.beam[b];
             if (bp.edge_index < totalEdges) {
@@ -239,6 +240,14 @@ bool DawgEngine::pushStroke(int digit, float touchX, float touchY, const Spatial
                                        nextState.candidates, candCount, MAX_CANDIDATES, 8, visitBudget);
                 }
             }
+        }
+        // Sort forward completions among themselves
+        if (candCount > completionStart) {
+            std::sort(nextState.candidates + completionStart, nextState.candidates + candCount,
+                      [](const CandidateWord& a, const CandidateWord& b) {
+                if (a.score != b.score) return a.score > b.score;
+                return a.frequency > b.frequency;
+            });
         }
     }
 

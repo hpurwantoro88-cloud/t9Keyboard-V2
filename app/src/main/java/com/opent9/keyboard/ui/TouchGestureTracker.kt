@@ -52,6 +52,14 @@ class TouchGestureTracker(
 
     var longPressTimeoutMs: Long = LONG_PRESS_TIMEOUT_MS
 
+    var scrubActivationDistanceDp: Float = 22f
+    var spaceScrubRequireHold: Boolean = false
+    var spaceScrubHoldDelayMs: Long = 150L
+    var spaceScrubAspectRatio: Float = 1.3f
+
+    var scrubStepsDispatched: Int = 0
+        private set
+
     val touchSlopPx: Float
         get() = if (keyAtlas.density > 0f) 10f * keyAtlas.density else TOUCH_SLOP_PX
 
@@ -60,6 +68,9 @@ class TouchGestureTracker(
 
     val scrubStepPx: Float
         get() = if (keyAtlas.density > 0f) (32f / 3f) * keyAtlas.density else SCRUB_STEP_PX
+
+    val spaceScrubActivationPx: Float
+        get() = if (keyAtlas.density > 0f) scrubActivationDistanceDp * keyAtlas.density else scrubActivationDistanceDp * 3f
 
     private val actualHandler: Handler by lazy {
         handler ?: Handler(Looper.getMainLooper())
@@ -94,12 +105,21 @@ class TouchGestureTracker(
 
     // Page 3 Emoji state
     private var isEmojiPageTouch = false
+    var emojiScrollOffset = 0f
+        private set
+    private var emojiStartScrollY = 0f
+    private var isEmojiScrolling = false
     var activeEmojiTabIndex: Int? = null
         private set
     var activeEmojiGridIndex: Int? = null
         private set
     var activeEmojiControlIndex: Int? = null
         private set
+
+    fun resetEmojiScroll() {
+        emojiScrollOffset = 0f
+        isEmojiScrolling = false
+    }
 
     private val emojiRepeatDeleteRunnable = object : Runnable {
         override fun run() {
@@ -166,14 +186,17 @@ class TouchGestureTracker(
                 flickTriggered = false
                 isScrubbing = false
                 scrubAccumulator = 0f
+                scrubStepsDispatched = 0
 
                 if (keyAtlas.currentPage == KeyboardPage.PAGE_3_EMOJI) {
                     isEmojiPageTouch = true
                     isPage1ColumnTouch = false
                     isCandidateStripTouch = false
                     activeKey = null
+                    isEmojiScrolling = false
+                    emojiStartScrollY = emojiScrollOffset
                     val tabIdx = keyAtlas.emojiAtlas.findCategoryTabAt(x, y)
-                    val gridIdx = keyAtlas.emojiAtlas.findEmojiIndexAt(x, y)
+                    val gridIdx = keyAtlas.emojiAtlas.findEmojiIndexAt(x, y, emojiScrollOffset)
                     val ctrlIdx = keyAtlas.emojiAtlas.findControlIndexAt(x, y)
                     activeEmojiTabIndex = tabIdx
                     activeEmojiGridIndex = gridIdx
@@ -264,6 +287,7 @@ class TouchGestureTracker(
                 flickTriggered = false
                 isScrubbing = false
                 scrubAccumulator = 0f
+                scrubStepsDispatched = 0
 
                 if (py < keyAtlas.stripHeight && keyAtlas.currentPage != KeyboardPage.PAGE_1_NUM_SYM) {
                     isCandidateStripTouch = true
@@ -327,8 +351,12 @@ class TouchGestureTracker(
                 val dx = curX - touchDownX
                 val dy = curY - touchDownY
                 val distSq = dx * dx + dy * dy
+                val elapsed = maxOf(now - touchDownTime, if (event.downTime > 0) event.eventTime - event.downTime else 0L)
 
                 if (isEmojiPageTouch) {
+                    val absDx = Math.abs(dx)
+                    val absDy = Math.abs(dy)
+
                     if (distSq >= touchSlopPx * touchSlopPx) {
                         actualHandler.removeCallbacks(emojiRepeatDeleteRunnable)
                         activeEmojiTabIndex = null
@@ -336,7 +364,14 @@ class TouchGestureTracker(
                         activeEmojiControlIndex = null
                         listener.onEmojiTouchStateChanged(null, null, null)
 
-                        if (!flickTriggered && Math.abs(dx) >= flickDistanceMinPx) {
+                        val inGridArea = touchDownY >= keyAtlas.emojiAtlas.gridTop && touchDownY < keyAtlas.emojiAtlas.gridBottom
+                        if (inGridArea && (isEmojiScrolling || absDy > absDx * 0.8f)) {
+                            isEmojiScrolling = true
+                            val maxScroll = keyAtlas.emojiAtlas.computeMaxScroll(keyAtlas.emojiAtlas.activeCategoryIndex)
+                            val newOffset = (emojiStartScrollY + dy).coerceIn(maxScroll, 0f)
+                            emojiScrollOffset = newOffset
+                            listener.onStripScroll(newOffset)
+                        } else if (!isEmojiScrolling && !flickTriggered && absDx >= flickDistanceMinPx && absDx > absDy * 1.2f) {
                             flickTriggered = true
                             val direction = if (dx < 0) FlickDirection.LEFT else FlickDirection.RIGHT
                             listener.onEmojiPageSwipe(direction)
@@ -369,15 +404,26 @@ class TouchGestureTracker(
                     val key = activeKey
                     if (key != null && key.type == KeyType.SPACE_0) {
                         // Spacebar Cursor Scrubbing (Trackpad Mode)
-                        if (Math.abs(dx) >= touchSlopPx) {
-                            if (!isScrubbing) {
+                        if (!isScrubbing) {
+                            val absDx = Math.abs(dx)
+                            val absDy = Math.abs(dy)
+                            val isHorizontal = absDx > absDy * spaceScrubAspectRatio
+                            val holdSatisfied = !spaceScrubRequireHold || (elapsed >= spaceScrubHoldDelayMs)
+
+                            if (isHorizontal && holdSatisfied && absDx >= spaceScrubActivationPx) {
                                 isScrubbing = true
                                 actualHandler.removeCallbacks(longPressRunnable)
+                                scrubAccumulator = if (dx > 0) spaceScrubActivationPx else -spaceScrubActivationPx
+                                val initialStep = if (dx > 0) 1 else -1
+                                scrubStepsDispatched += 1
+                                listener.onSpaceScrub(initialStep)
                             }
+                        } else {
                             val scrubDelta = dx - scrubAccumulator
                             if (Math.abs(scrubDelta) >= scrubStepPx) {
                                 val steps = (scrubDelta / scrubStepPx).toInt()
                                 scrubAccumulator += steps * scrubStepPx
+                                scrubStepsDispatched += Math.abs(steps)
                                 listener.onSpaceScrub(steps)
                             }
                         }
@@ -420,7 +466,7 @@ class TouchGestureTracker(
                 } else -1
                 val curX = if (pointerIdx >= 0) event.getX(pointerIdx) else x
                 val curY = if (pointerIdx >= 0) event.getY(pointerIdx) else y
-                val elapsed = now - touchDownTime
+                val elapsed = maxOf(now - touchDownTime, if (event.downTime > 0) event.eventTime - event.downTime else 0L)
                 val dx = curX - touchDownX
                 val dy = curY - touchDownY
                 val distSq = dx * dx + dy * dy
@@ -430,28 +476,29 @@ class TouchGestureTracker(
                     val tabIdx = activeEmojiTabIndex
                     val gridIdx = activeEmojiGridIndex
                     val ctrlIdx = activeEmojiControlIndex
+                    val wasScrolling = isEmojiScrolling
                     isEmojiPageTouch = false
+                    isEmojiScrolling = false
                     activeEmojiTabIndex = null
                     activeEmojiGridIndex = null
                     activeEmojiControlIndex = null
                     listener.onEmojiTouchStateChanged(null, null, null)
 
-                    if (!flickTriggered && !longPressTriggered) {
+                    if (!wasScrolling && !flickTriggered && !longPressTriggered) {
                         if (distSq < touchSlopPx * touchSlopPx) {
                             if (tabIdx != null) {
                                 listener.onEmojiCategoryTap(tabIdx)
                             } else if (gridIdx != null) {
-                                val activeEmojis = keyAtlas.emojiAtlas.categoryEmojis[keyAtlas.emojiAtlas.activeCategoryIndex]
+                                val activeEmojis = keyAtlas.emojiAtlas.getActiveEmojiList()
                                 if (gridIdx in activeEmojis.indices) {
-                                    val codepoint = activeEmojis[gridIdx]
-                                    val emojiStr = keyAtlas.emojiAtlas.getEmojiString(codepoint)
-                                    keyAtlas.emojiAtlas.recordRecentEmoji(codepoint)
+                                    val emojiStr = activeEmojis[gridIdx]
+                                    keyAtlas.emojiAtlas.recordRecentEmoji(emojiStr)
                                     listener.onEmojiTap(emojiStr)
                                 }
                             } else if (ctrlIdx != null) {
                                 listener.onEmojiControlTap(ctrlIdx)
                             }
-                        } else if (distSq >= flickDistanceMinPx * flickDistanceMinPx) {
+                        } else if (distSq >= flickDistanceMinPx * flickDistanceMinPx && Math.abs(dx) > Math.abs(dy) * 1.2f) {
                             val direction = if (dx < 0) FlickDirection.LEFT else FlickDirection.RIGHT
                             listener.onEmojiPageSwipe(direction)
                         }
@@ -515,25 +562,39 @@ class TouchGestureTracker(
                     val inPage2Grid = (keyAtlas.currentPage == KeyboardPage.PAGE_2_EXT_SYM &&
                             keyAtlas.symbolGrid3x3Bounds.contains(touchDownX, touchDownY))
 
-                    if (key != null && !isScrubbing && !flickTriggered) {
-                        if (inPage2Grid && Math.abs(dy) >= touchSlopPx && Math.abs(dy) > Math.abs(dx) * 1.1f) {
-                            // Vertical scroll between 3x3 symbol layers on release
-                            val changed = if (dy < 0) keyAtlas.nextSymbolLayer() else keyAtlas.prevSymbolLayer()
-                            if (changed) {
-                                listener.onSymbolLayerChanged(keyAtlas.activeSymbolLayerIndex)
-                                listener.onStripScroll(0f)
-                            }
-                        } else if (distSq >= flickDistanceMinPx * flickDistanceMinPx) {
-                            // Deliberate flick on release (e.g. fast flick or mouse drag)
-                            val direction = disambiguateFlick(dx, dy)
-                            if (isFlickSupported(key, direction)) {
-                                listener.onKeyFlick(key, direction)
-                            } else if (!longPressTriggered) {
+                    if (key != null) {
+                        if (key.type == KeyType.SPACE_0) {
+                            if (distSq >= flickDistanceMinPx * flickDistanceMinPx && !isScrubbing) {
+                                val direction = disambiguateFlick(dx, dy)
+                                if (isFlickSupported(key, direction)) {
+                                    listener.onKeyFlick(key, direction)
+                                } else if (!longPressTriggered) {
+                                    listener.onKeyTap(key, curX, curY)
+                                }
+                            } else if (scrubStepsDispatched == 0 && !longPressTriggered) {
+                                // Tap fallback (Solution 3): touch on spacebar ended without any cursor steps dispatched
                                 listener.onKeyTap(key, curX, curY)
                             }
-                        } else if (!longPressTriggered) {
-                            // Primary Tap
-                            listener.onKeyTap(key, curX, curY)
+                        } else if (!isScrubbing && !flickTriggered) {
+                            if (inPage2Grid && Math.abs(dy) >= touchSlopPx && Math.abs(dy) > Math.abs(dx) * 1.1f) {
+                                // Vertical scroll between 3x3 symbol layers on release
+                                val changed = if (dy < 0) keyAtlas.nextSymbolLayer() else keyAtlas.prevSymbolLayer()
+                                if (changed) {
+                                    listener.onSymbolLayerChanged(keyAtlas.activeSymbolLayerIndex)
+                                    listener.onStripScroll(0f)
+                                }
+                            } else if (distSq >= flickDistanceMinPx * flickDistanceMinPx) {
+                                // Deliberate flick on release (e.g. fast flick or mouse drag)
+                                val direction = disambiguateFlick(dx, dy)
+                                if (isFlickSupported(key, direction)) {
+                                    listener.onKeyFlick(key, direction)
+                                } else if (!longPressTriggered) {
+                                    listener.onKeyTap(key, curX, curY)
+                                }
+                            } else if (!longPressTriggered) {
+                                // Primary Tap
+                                listener.onKeyTap(key, curX, curY)
+                            }
                         }
                     }
                 }
@@ -543,6 +604,7 @@ class TouchGestureTracker(
                 longPressTriggered = false
                 flickTriggered = false
                 isScrubbing = false
+                scrubStepsDispatched = 0
                 return true
             }
 
@@ -553,6 +615,7 @@ class TouchGestureTracker(
                 actualHandler.removeCallbacks(candidateLongPressRunnable)
                 activeCandidateIndex = null
                 isEmojiPageTouch = false
+                isEmojiScrolling = false
                 activeEmojiTabIndex = null
                 activeEmojiGridIndex = null
                 activeEmojiControlIndex = null
@@ -565,6 +628,7 @@ class TouchGestureTracker(
                 longPressTriggered = false
                 flickTriggered = false
                 isScrubbing = false
+                scrubStepsDispatched = 0
                 return true
             }
         }

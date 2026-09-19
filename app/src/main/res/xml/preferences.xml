@@ -136,6 +136,20 @@
             app:key="space_scrubbing"
             app:title="@string/pref_space_scrubbing"
             app:defaultValue="true" />
+        <ListPreference
+            app:key="space_scrubbing_sensitivity"
+            app:title="@string/pref_space_scrubbing_sensitivity"
+            app:entries="@array/pref_space_scrub_sensitivity_entries"
+            app:entryValues="@array/pref_space_scrub_sensitivity_values"
+            app:defaultValue="normal"
+            app:dependency="space_scrubbing"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            app:key="space_scrubbing_hold"
+            app:title="@string/pref_space_scrubbing_hold"
+            app:summary="@string/pref_space_scrubbing_hold_summary"
+            app:defaultValue="false"
+            app:dependency="space_scrubbing" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/pref_cat_dictionary">

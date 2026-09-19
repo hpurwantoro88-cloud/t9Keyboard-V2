@@ -37,6 +37,9 @@
     <string name="pref_auto_space">Auto-Space After Commit</string>
     <string name="pref_double_space_period">Double-Space Period</string>
     <string name="pref_space_scrubbing">Spacebar Cursor Scrubbing</string>
+    <string name="pref_space_scrubbing_sensitivity">Scrubbing Sensitivity</string>
+    <string name="pref_space_scrubbing_hold">Require Hold Before Scrubbing</string>
+    <string name="pref_space_scrubbing_hold_summary">Hold spacebar briefly (150ms) before dragging to move cursor</string>
 
     <!-- Dictionary -->
     <string name="pref_startup_language">Primary Startup Language</string>
