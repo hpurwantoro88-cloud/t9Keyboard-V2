@@ -50,11 +50,13 @@ object NativeEngineBridge {
     external fun nativePlayClick(style: Int, volume: Float)
     external fun nativeSyncAudioConfig(enabled: Boolean, volume: Float, style: Int)
     external fun nativeRecordUsage(word: String, nowSec: Long)
+    external fun nativeGetWordUsageCount(word: String): Int
     external fun nativeRemoveWord(word: String): Boolean
     external fun nativeResetUserDictionary()
     external fun nativeIsWordDeleted(word: String): Boolean
 
     private val fallbackDeletedWords = HashSet<String>()
+    private val fallbackUsageCounts = HashMap<String, Int>()
 
     fun initEngine(dbPath: String): Boolean {
         if (!isNativeLoaded) return true
@@ -160,8 +162,18 @@ object NativeEngineBridge {
     }
 
     fun recordUsage(word: String, nowSec: Long) {
+        val lower = word.lowercase()
+        fallbackUsageCounts[lower] = (fallbackUsageCounts[lower] ?: 0) + 1
         if (!isNativeLoaded) return
-        nativeRecordUsage(word, nowSec)
+        nativeRecordUsage(lower, nowSec)
+    }
+
+    fun getWordUsageCount(word: String): Int {
+        val lower = word.lowercase()
+        if (!isNativeLoaded) {
+            return fallbackUsageCounts[lower] ?: 0
+        }
+        return nativeGetWordUsageCount(lower)
     }
 
     fun removeWord(word: String): Boolean {
@@ -179,6 +191,7 @@ object NativeEngineBridge {
 
     fun resetUserDictionary() {
         fallbackDeletedWords.clear()
+        fallbackUsageCounts.clear()
         if (!isNativeLoaded) return
         nativeResetUserDictionary()
     }

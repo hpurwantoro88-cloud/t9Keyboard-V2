@@ -1,5 +1,6 @@
 package com.opent9.keyboard
 
+import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.inputmethodservice.InputMethodService
@@ -66,6 +67,7 @@ class OpenT9InputMethodService : InputMethodService() {
     private var lastSpaceTapTime = 0L
     private var lastSelectionStart = 0
     private var composingAnchorPosition = -1
+    internal val lastPickedWords = HashMap<String, String>()
 
     // Multi-tap timer runnable
     private val multiTapTimeoutRunnable = Runnable {
@@ -78,7 +80,18 @@ class OpenT9InputMethodService : InputMethodService() {
         settingsObserver.start()
 
         val dbFile = File(filesDir, "opent9_vocab.dat")
+        dbFile.parentFile?.mkdirs()
         NativeEngineBridge.initEngine(dbFile.absolutePath)
+
+        // Load persistent mapping for last picked words per digit sequence
+        try {
+            val pickedPrefs = getSharedPreferences("opent9_last_picked", Context.MODE_PRIVATE)
+            pickedPrefs.all.forEach { (key, value) ->
+                if (key.startsWith("digits_") && value is String) {
+                    lastPickedWords[key.removePrefix("digits_")] = value
+                }
+            }
+        } catch (_: Exception) {}
 
         // Load static binary DAWGs directly into Linux page cache via mmap
         loadLexicons()
@@ -874,16 +887,27 @@ class OpenT9InputMethodService : InputMethodService() {
             emptyList()
         }
 
-        activeCandidates = if (!preferredWord.isNullOrEmpty() && candidatesList.isNotEmpty()) {
-            val mutable = ArrayList(candidatesList)
-            val matchIdx = mutable.indexOfFirst { it.equals(preferredWord, ignoreCase = true) }
-            if (matchIdx > 0) {
-                val matched = mutable.removeAt(matchIdx)
-                mutable.add(0, matched)
-            } else if (matchIdx < 0) {
-                mutable.add(0, preferredWord)
+        val lang = NativeEngineBridge.getActiveLanguage()
+        val digitsKey = currentComposingDigits.joinToString("")
+        val langKey = "${lang}_$digitsKey"
+        val targetWord = preferredWord ?: lastPickedWords[langKey] ?: lastPickedWords[digitsKey]
+
+        activeCandidates = if (!targetWord.isNullOrEmpty()) {
+            if (candidatesList.isNotEmpty()) {
+                val mutable = ArrayList(candidatesList)
+                val matchIdx = mutable.indexOfFirst { it.equals(targetWord, ignoreCase = true) }
+                if (matchIdx > 0) {
+                    val matched = mutable.removeAt(matchIdx)
+                    mutable.add(0, matched)
+                } else if (matchIdx < 0 && (preferredWord != null || lastPickedWords.containsKey(langKey))) {
+                    mutable.add(0, targetWord)
+                }
+                mutable
+            } else if (preferredWord != null || lastPickedWords.containsKey(langKey)) {
+                listOf(targetWord)
+            } else {
+                emptyList()
             }
-            mutable
         } else {
             candidatesList
         }
@@ -947,9 +971,27 @@ class OpenT9InputMethodService : InputMethodService() {
 
         // Record usage for dynamic dictionary learning if not incognito and not pure numeric
         if (!isIncognito && word.isNotEmpty() && !word.all { it.isDigit() }) {
-            val canonicalWord = EnglishOrthography.toCanonical(word)
-            if (!NativeEngineBridge.isWordDeleted(canonicalWord.lowercase())) {
-                NativeEngineBridge.recordUsage(canonicalWord.lowercase(), System.currentTimeMillis() / 1000L)
+            val canonicalWord = EnglishOrthography.toCanonical(word).lowercase()
+            if (!NativeEngineBridge.isWordDeleted(canonicalWord)) {
+                NativeEngineBridge.recordUsage(canonicalWord, System.currentTimeMillis() / 1000L)
+            }
+            val digitsKey = if (digitsSnapshot.isNotEmpty()) {
+                digitsSnapshot.joinToString("")
+            } else {
+                wordToDigits(canonicalWord).joinToString("")
+            }
+            if (digitsKey.isNotEmpty() && canonicalWord.isNotEmpty()) {
+                val lang = NativeEngineBridge.getActiveLanguage()
+                val langKey = "${lang}_$digitsKey"
+                lastPickedWords[langKey] = canonicalWord
+                lastPickedWords[digitsKey] = canonicalWord
+                try {
+                    getSharedPreferences("opent9_last_picked", Context.MODE_PRIVATE)
+                        .edit()
+                        .putString("digits_$langKey", canonicalWord)
+                        .putString("digits_$digitsKey", canonicalWord)
+                        .apply()
+                } catch (_: Exception) {}
             }
         }
 
@@ -1207,6 +1249,17 @@ class OpenT9InputMethodService : InputMethodService() {
         activeCandidates = activeCandidates.filterNot {
             EnglishOrthography.toCanonical(it).equals(canonical, ignoreCase = true)
         }
+        val keysToRemove = lastPickedWords.filter { it.value.equals(canonical, ignoreCase = true) }.keys.toList()
+        if (keysToRemove.isNotEmpty()) {
+            try {
+                val editor = getSharedPreferences("opent9_last_picked", Context.MODE_PRIVATE).edit()
+                for (k in keysToRemove) {
+                    lastPickedWords.remove(k)
+                    editor.remove("digits_$k")
+                }
+                editor.apply()
+            } catch (_: Exception) {}
+        }
         keyboardView.updateCandidates(activeCandidates)
 
         currentInputConnection?.let { ic ->
@@ -1327,7 +1380,28 @@ class OpenT9InputMethodService : InputMethodService() {
 
         if (candidates.isEmpty()) return emptyList()
 
-        return candidates.map { matchCase(word, it) }
+        val lang = NativeEngineBridge.getActiveLanguage()
+        val digitsKey = digits.joinToString("")
+        val langKey = "${lang}_$digitsKey"
+        val preferred = lastPickedWords[langKey] ?: lastPickedWords[digitsKey]
+
+        val sortedCandidates = if (!preferred.isNullOrEmpty()) {
+            val matchIdx = candidates.indexOfFirst { it.equals(preferred, ignoreCase = true) }
+            if (matchIdx > 0) {
+                val mutable = ArrayList(candidates)
+                val m = mutable.removeAt(matchIdx)
+                mutable.add(0, m)
+                mutable
+            } else if (matchIdx < 0 && lastPickedWords.containsKey(langKey)) {
+                listOf(preferred) + candidates
+            } else {
+                candidates
+            }
+        } else {
+            candidates
+        }
+
+        return sortedCandidates.map { matchCase(word, it) }
     }
 
     private fun wordToDigits(word: String): List<Int> {
@@ -1382,6 +1456,29 @@ class OpenT9InputMethodService : InputMethodService() {
             keyboardView.isWordCorrectionActive = false
             keyboardView.updateCandidates(emptyList())
         }
+
+        // Record usage for dynamic dictionary learning if not incognito and not pure numeric
+        if (!isIncognito && replacement.isNotEmpty() && !replacement.all { it.isDigit() }) {
+            val canonicalWord = EnglishOrthography.toCanonical(replacement).lowercase()
+            if (!NativeEngineBridge.isWordDeleted(canonicalWord)) {
+                NativeEngineBridge.recordUsage(canonicalWord, System.currentTimeMillis() / 1000L)
+            }
+            val digitsKey = wordToDigits(canonicalWord).joinToString("")
+            if (digitsKey.isNotEmpty() && canonicalWord.isNotEmpty()) {
+                val lang = NativeEngineBridge.getActiveLanguage()
+                val langKey = "${lang}_$digitsKey"
+                lastPickedWords[langKey] = canonicalWord
+                lastPickedWords[digitsKey] = canonicalWord
+                try {
+                    getSharedPreferences("opent9_last_picked", Context.MODE_PRIVATE)
+                        .edit()
+                        .putString("digits_$langKey", canonicalWord)
+                        .putString("digits_$digitsKey", canonicalWord)
+                        .apply()
+                } catch (_: Exception) {}
+            }
+        }
+
         updateAutoCaps()
     }
 

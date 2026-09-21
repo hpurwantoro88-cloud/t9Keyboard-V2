@@ -1101,4 +1101,200 @@ class TypingEngineIntegrationTest {
 
         assertTrue(inputView.isWordCorrectionActive)
     }
+
+    @Test
+    fun testWordSelectedThreeTimesBecomesNumberOneInEnglish() {
+        service.onCreateInputView() as T9KeyboardView
+        com.opent9.keyboard.jni.NativeEngineBridge.resetUserDictionary()
+        com.opent9.keyboard.jni.NativeEngineBridge.switchLanguage("EN")
+
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val info = EditorInfo()
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+        service.onStartInputView(info, false)
+
+        val candidatesField = OpenT9InputMethodService::class.java.getDeclaredField("activeCandidates").apply {
+            isAccessible = true
+        }
+
+        val commitIndexMethod = OpenT9InputMethodService::class.java.getDeclaredMethod("commitCandidateIndex", Int::class.java).apply {
+            isAccessible = true
+        }
+
+        val digitsField = OpenT9InputMethodService::class.java.getDeclaredField("currentComposingDigits").apply {
+            isAccessible = true
+        }
+
+        // User selects candidate 1 ("home") from suggestion list 3 times
+        for (i in 1..3) {
+            digitsField.set(service, arrayListOf(4, 6, 6, 3))
+            candidatesField.set(service, listOf("good", "home", "gone"))
+            commitIndexMethod.invoke(service, 1)
+        }
+
+        assertEquals("home must have usage count 3", 3, com.opent9.keyboard.jni.NativeEngineBridge.getWordUsageCount("home"))
+
+        val updateMethod = OpenT9InputMethodService::class.java.getDeclaredMethod("updateCandidatesFromNative", InputConnection::class.java, String::class.java).apply {
+            isAccessible = true
+        }
+
+        digitsField.set(service, arrayListOf(4, 6, 6, 3))
+
+        val guardField = OpenT9InputMethodService::class.java.getDeclaredField("suggestionGuard").apply {
+            isAccessible = true
+        }
+        val guard = guardField.get(service) as com.opent9.keyboard.prediction.SuggestionGuard
+        guard.recordValidCandidates(listOf("good", "home", "gone"), listOf(4, 6, 6, 3))
+
+        updateMethod.invoke(service, ic, null)
+
+        @Suppress("UNCHECKED_CAST")
+        val updatedCandidates = candidatesField.get(service) as List<String>
+        assertTrue("Candidates must not be empty", updatedCandidates.isNotEmpty())
+        assertEquals("home must be promoted to position 0 (#1 suggestion) after selections", "home", updatedCandidates[0])
+    }
+
+    @Test
+    fun testWordSelectedThreeTimesBecomesNumberOneInIndonesian() {
+        service.onCreateInputView() as T9KeyboardView
+        com.opent9.keyboard.jni.NativeEngineBridge.resetUserDictionary()
+        com.opent9.keyboard.jni.NativeEngineBridge.switchLanguage("ID")
+
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val info = EditorInfo()
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+        service.onStartInputView(info, false)
+
+        val candidatesField = OpenT9InputMethodService::class.java.getDeclaredField("activeCandidates").apply {
+            isAccessible = true
+        }
+
+        val commitIndexMethod = OpenT9InputMethodService::class.java.getDeclaredMethod("commitCandidateIndex", Int::class.java).apply {
+            isAccessible = true
+        }
+
+        val digitsField = OpenT9InputMethodService::class.java.getDeclaredField("currentComposingDigits").apply {
+            isAccessible = true
+        }
+
+        // User selects candidate 1 ("sama") from suggestion list 3 times
+        for (i in 1..3) {
+            digitsField.set(service, arrayListOf(7, 2, 6, 2))
+            candidatesField.set(service, listOf("sana", "sama", "rama"))
+            commitIndexMethod.invoke(service, 1)
+        }
+
+        assertEquals("sama must have usage count 3", 3, com.opent9.keyboard.jni.NativeEngineBridge.getWordUsageCount("sama"))
+
+        val updateMethod = OpenT9InputMethodService::class.java.getDeclaredMethod("updateCandidatesFromNative", InputConnection::class.java, String::class.java).apply {
+            isAccessible = true
+        }
+
+        digitsField.set(service, arrayListOf(7, 2, 6, 2))
+
+        val guardField = OpenT9InputMethodService::class.java.getDeclaredField("suggestionGuard").apply {
+            isAccessible = true
+        }
+        val guard = guardField.get(service) as com.opent9.keyboard.prediction.SuggestionGuard
+        guard.recordValidCandidates(listOf("sana", "sama", "rama"), listOf(7, 2, 6, 2))
+
+        updateMethod.invoke(service, ic, null)
+
+        @Suppress("UNCHECKED_CAST")
+        val updatedCandidates = candidatesField.get(service) as List<String>
+        assertTrue("Candidates must not be empty", updatedCandidates.isNotEmpty())
+        assertEquals("sama must be promoted to position 0 (#1 suggestion) after selections", "sama", updatedCandidates[0])
+    }
+
+    @Test
+    fun testLastWordPickedBecomesNumberOneImmediatelyForAllWords() {
+        service.onCreateInputView() as T9KeyboardView
+        com.opent9.keyboard.jni.NativeEngineBridge.resetUserDictionary()
+
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val info = EditorInfo()
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+        service.onStartInputView(info, false)
+
+        val candidatesField = OpenT9InputMethodService::class.java.getDeclaredField("activeCandidates").apply {
+            isAccessible = true
+        }
+        val commitIndexMethod = OpenT9InputMethodService::class.java.getDeclaredMethod("commitCandidateIndex", Int::class.java).apply {
+            isAccessible = true
+        }
+        val updateMethod = OpenT9InputMethodService::class.java.getDeclaredMethod("updateCandidatesFromNative", InputConnection::class.java, String::class.java).apply {
+            isAccessible = true
+        }
+        val digitsField = OpenT9InputMethodService::class.java.getDeclaredField("currentComposingDigits").apply {
+            isAccessible = true
+        }
+        val guardField = OpenT9InputMethodService::class.java.getDeclaredField("suggestionGuard").apply {
+            isAccessible = true
+        }
+        val guard = guardField.get(service) as com.opent9.keyboard.prediction.SuggestionGuard
+
+        // 1. Indonesian Test: User types 7-2-6-2, picks "sama" once (candidate index 1)
+        com.opent9.keyboard.jni.NativeEngineBridge.switchLanguage("ID")
+        digitsField.set(service, arrayListOf(7, 2, 6, 2))
+        candidatesField.set(service, listOf("sana", "sama", "rama"))
+        commitIndexMethod.invoke(service, 1) // Pick "sama"
+
+        // Next suggestion query for 7-2-6-2 -> "sama" MUST immediately be #1
+        digitsField.set(service, arrayListOf(7, 2, 6, 2))
+        guard.recordValidCandidates(listOf("sana", "sama", "rama"), listOf(7, 2, 6, 2))
+        updateMethod.invoke(service, ic, null)
+
+        @Suppress("UNCHECKED_CAST")
+        var cands = candidatesField.get(service) as List<String>
+        assertEquals("sama must immediately become #1 suggestion on next typing", "sama", cands[0])
+
+        // User now picks "sana" (candidate index 1)
+        commitIndexMethod.invoke(service, 1)
+
+        // Next suggestion query for 7-2-6-2 -> "sana" MUST immediately become #1
+        digitsField.set(service, arrayListOf(7, 2, 6, 2))
+        guard.recordValidCandidates(listOf("sama", "sana", "rama"), listOf(7, 2, 6, 2))
+        updateMethod.invoke(service, ic, null)
+
+        @Suppress("UNCHECKED_CAST")
+        cands = candidatesField.get(service) as List<String>
+        assertEquals("sana must immediately become #1 suggestion after being picked", "sana", cands[0])
+
+        // 2. English Test with arbitrary word: User types 2-6-6-5 ("book", "cool", "cook")
+        com.opent9.keyboard.jni.NativeEngineBridge.switchLanguage("EN")
+        digitsField.set(service, arrayListOf(2, 6, 6, 5))
+        candidatesField.set(service, listOf("book", "cool", "cook"))
+        commitIndexMethod.invoke(service, 1) // Pick "cool"
+
+        // Next suggestion query for 2-6-6-5 -> "cool" MUST immediately be #1
+        digitsField.set(service, arrayListOf(2, 6, 6, 5))
+        guard.recordValidCandidates(listOf("book", "cool", "cook"), listOf(2, 6, 6, 5))
+        updateMethod.invoke(service, ic, null)
+
+        @Suppress("UNCHECKED_CAST")
+        cands = candidatesField.get(service) as List<String>
+        assertEquals("cool must immediately become #1 suggestion on next typing", "cool", cands[0])
+    }
 }
+

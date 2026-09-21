@@ -50,6 +50,7 @@ Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeInit(
     JNIEnv* env, jobject thiz, jstring dbPath) {
     const char* path = env->GetStringUTFChars(dbPath, nullptr);
     bool ok = g_dynamicStore.init(path);
+    LOGI("nativeInit: dbPath=%s, ok=%d", path ? path : "null", ok ? 1 : 0);
     env->ReleaseStringUTFChars(dbPath, path);
     g_dawgEngine.setDynamicStore(&g_dynamicStore);
     g_audioEngine.start();
@@ -180,8 +181,19 @@ JNIEXPORT void JNICALL
 Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeRecordUsage(
     JNIEnv* env, jobject thiz, jstring word, jlong nowSec) {
     const char* str = env->GetStringUTFChars(word, nullptr);
-    g_dynamicStore.recordUsage(str, static_cast<uint64_t>(nowSec));
+    bool ok = g_dynamicStore.recordUsage(str, static_cast<uint64_t>(nowSec));
+    LOGI("recordUsage: word=%s, nowSec=%llu, ok=%d", str ? str : "null", static_cast<unsigned long long>(nowSec), ok ? 1 : 0);
     env->ReleaseStringUTFChars(word, str);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeGetWordUsageCount(
+    JNIEnv* env, jobject thiz, jstring word) {
+    if (!word) return 0;
+    const char* str = env->GetStringUTFChars(word, nullptr);
+    uint32_t count = g_dynamicStore.getHitCount(str);
+    env->ReleaseStringUTFChars(word, str);
+    return static_cast<jint>(count);
 }
 
 JNIEXPORT jboolean JNICALL

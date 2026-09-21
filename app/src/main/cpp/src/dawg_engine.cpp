@@ -70,6 +70,8 @@ bool DawgEngine::pushStroke(int digit, float touchX, float touchY, const Spatial
         uint8_t is_terminal;
         uint32_t freq;
         uint32_t max_freq;
+        uint32_t hit_count;
+        uint64_t last_used_timestamp;
     };
 
     TempPath candidatesPool[MAX_BEAM_SIZE * 4];
@@ -87,6 +89,8 @@ bool DawgEngine::pushStroke(int digit, float touchX, float touchY, const Spatial
         p.is_terminal = e.is_terminal;
         p.freq = e.frequency;
         p.max_freq = e.max_frequency;
+        p.hit_count = 0;
+        p.last_used_timestamp = 0;
         p.word_len = prefixLen + 1;
         if (prefixLen > 0) {
             std::memcpy(p.word, prefix, prefixLen);
@@ -150,13 +154,18 @@ bool DawgEngine::pushStroke(int digit, float touchX, float touchY, const Spatial
 
         for (int d = 0; d < dynCount; ++d) {
             const auto& dm = dynamicMatches[d];
+            float baseBoost = config.slang_boost_enabled ? 2.5f : 1.2f;
+            float usageBoost = std::min(static_cast<float>(dm.hit_count) * 0.5f, 10.0f);
+            float totalBoost = (baseBoost + usageBoost) * dm.decay_factor;
+
             bool foundInTerminal = false;
             for (auto& tc : terminalCandidates) {
                 if (std::strcmp(tc.word, dm.word) == 0) {
                     foundInTerminal = true;
                     tc.freq = std::max(tc.freq, dm.effective_freq);
-                    float boost = config.slang_boost_enabled ? 3.0f : 1.5f;
-                    tc.cand_score += boost;
+                    tc.cand_score += totalBoost;
+                    tc.hit_count = dm.hit_count;
+                    tc.last_used_timestamp = dm.last_used_timestamp;
                     break;
                 }
             }
@@ -168,11 +177,12 @@ bool DawgEngine::pushStroke(int digit, float touchX, float touchY, const Spatial
                 p.is_terminal = dm.is_terminal ? 1 : 0;
                 p.freq = dm.effective_freq;
                 p.max_freq = dm.effective_freq;
+                p.hit_count = dm.hit_count;
+                p.last_used_timestamp = dm.last_used_timestamp;
                 float prevSpatial = (currentDepth > 0 && history[currentDepth - 1].beam_count > 0)
                                     ? history[currentDepth - 1].beam[0].spatial_score_sum : 0.0f;
                 p.spatial_sum = prevSpatial + spatialScore;
-                float boost = config.slang_boost_enabled ? 3.0f : 1.5f;
-                p.cand_score = p.spatial_sum + std::log10(1.0f + static_cast<float>(dm.effective_freq)) + (dm.is_terminal ? boost : 0.0f);
+                p.cand_score = p.spatial_sum + std::log10(1.0f + static_cast<float>(dm.effective_freq)) + (dm.is_terminal ? totalBoost : 0.0f);
                 p.beam_score = p.cand_score;
                 terminalCandidates.push_back(p);
             }
@@ -210,6 +220,18 @@ bool DawgEngine::pushStroke(int digit, float touchX, float touchY, const Spatial
     }
 
     std::sort(terminalCandidates.begin(), terminalCandidates.end(), [](const TempPath& a, const TempPath& b) {
+        // Priority 1: Exact terminal length match over forward prefix completion
+        if (a.is_terminal != b.is_terminal) return a.is_terminal > b.is_terminal;
+
+        // Priority 2: Most recently used/picked candidate (last picked is #1!)
+        if (a.last_used_timestamp != b.last_used_timestamp) {
+            return a.last_used_timestamp > b.last_used_timestamp;
+        }
+
+        // Priority 3: Candidate hit count
+        if (a.hit_count != b.hit_count) return a.hit_count > b.hit_count;
+
+        // Priority 4: Candidate score and corpus frequency
         if (a.cand_score != b.cand_score) return a.cand_score > b.cand_score;
         return a.freq > b.freq;
     });

@@ -32,10 +32,14 @@ public:
         char word[MAX_STORE_WORD_LEN];
         uint8_t length;
         uint32_t effective_freq;
+        uint32_t hit_count;
+        uint64_t last_used_timestamp;
+        float decay_factor;
         bool is_terminal;
     };
 
     uint32_t getEffectiveFrequency(const char* word, uint64_t nowSec, uint32_t halfLifeDays) const;
+    uint32_t getHitCount(const char* word) const;
     bool isCustomWord(const char* word) const;
     bool isDeleted(const char* word) const;
 

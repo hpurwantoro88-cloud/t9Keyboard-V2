@@ -374,6 +374,94 @@ int main() {
     assert(foundGonersOrHomers && "466377 must suggest real words 'goners' or 'homers' instead of gibberish 'goodss'");
     std::cout << "[PASS] Test 11: Closest word typo correction and overtype verified" << std::endl;
 
+    // ------------------------------------------------------------------------
+    // Test 12: Dynamic Usage Ranking Promotion (Indonesian & English)
+    // ------------------------------------------------------------------------
+    // 12A: Indonesian 7-2-6-2 ('sana' vs 'sama')
+    engine.setLexiconData(idBuffer.data(), idBuffer.size());
+    DynamicStore test12Store;
+    engine.setDynamicStore(&test12Store);
+
+    // Initial check: sana should be #1, sama should be #2 based on static unigram frequency
+    engine.reset();
+    engine.pushStroke(7, 0, 0, scorer, g_config);
+    engine.pushStroke(2, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(2, 0, 0, scorer, g_config);
+    assert(engine.getCandidateCount() >= 2);
+    assert(std::strcmp(engine.getCandidates()[0].word, "sana") == 0);
+    assert(std::strcmp(engine.getCandidates()[1].word, "sama") == 0);
+
+    // Record single usage for 'sama' (more recent than initial)
+    uint64_t usageTime = static_cast<uint64_t>(std::time(nullptr));
+    test12Store.recordUsage("sama", usageTime + 1);
+
+    // Now re-query 7-2-6-2: 'sama' MUST be promoted to #1 immediately on 1 selection!
+    engine.reset();
+    engine.pushStroke(7, 0, 0, scorer, g_config);
+    engine.pushStroke(2, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(2, 0, 0, scorer, g_config);
+    assert(engine.getCandidateCount() >= 2);
+    assert(std::strcmp(engine.getCandidates()[0].word, "sama") == 0);
+    assert(std::strcmp(engine.getCandidates()[1].word, "sana") == 0);
+
+    // Now pick 'sana' again: 'sana' becomes #1 again!
+    test12Store.recordUsage("sana", usageTime + 2);
+    engine.reset();
+    engine.pushStroke(7, 0, 0, scorer, g_config);
+    engine.pushStroke(2, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(2, 0, 0, scorer, g_config);
+    assert(engine.getCandidateCount() >= 2);
+    assert(std::strcmp(engine.getCandidates()[0].word, "sana") == 0);
+    assert(std::strcmp(engine.getCandidates()[1].word, "sama") == 0);
+
+    std::cout << "  [ID] 7262 verified: last picked word immediately becomes #1" << std::endl;
+
+    // 12B: English 4-6-6-3 ('good' vs 'home')
+    engine.setLexiconData(enBuffer.data(), enBuffer.size());
+    DynamicStore test12StoreEn;
+    engine.setDynamicStore(&test12StoreEn);
+
+    // Initial check: 'good' is #1, 'home' is #2
+    engine.reset();
+    engine.pushStroke(4, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(3, 0, 0, scorer, g_config);
+    assert(engine.getCandidateCount() >= 2);
+    assert(std::strcmp(engine.getCandidates()[0].word, "good") == 0);
+    assert(std::strcmp(engine.getCandidates()[1].word, "home") == 0);
+
+    // Record usage for 'home' once:
+    test12StoreEn.recordUsage("home", usageTime + 1);
+
+    // Re-query 4-6-6-3: 'home' MUST be promoted to #1 immediately!
+    engine.reset();
+    engine.pushStroke(4, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(3, 0, 0, scorer, g_config);
+    assert(engine.getCandidateCount() >= 2);
+    assert(std::strcmp(engine.getCandidates()[0].word, "home") == 0);
+    assert(std::strcmp(engine.getCandidates()[1].word, "good") == 0);
+
+    // Now pick 'good' again: 'good' becomes #1 again!
+    test12StoreEn.recordUsage("good", usageTime + 2);
+    engine.reset();
+    engine.pushStroke(4, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(3, 0, 0, scorer, g_config);
+    assert(engine.getCandidateCount() >= 2);
+    assert(std::strcmp(engine.getCandidates()[0].word, "good") == 0);
+    assert(std::strcmp(engine.getCandidates()[1].word, "home") == 0);
+
+    std::cout << "  [EN] 4663 verified: last picked word immediately becomes #1" << std::endl;
+
+    std::cout << "[PASS] Test 12: Dynamic usage ranking promotion verified for both Indonesian and English" << std::endl;
+
     std::cout << "\n========================================" << std::endl;
     std::cout << "ALL OPENT9 CORE C++ TESTS PASSED!" << std::endl;
     std::cout << "========================================" << std::endl;

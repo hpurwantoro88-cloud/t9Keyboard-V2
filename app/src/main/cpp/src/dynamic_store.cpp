@@ -69,8 +69,8 @@ bool DynamicStore::save() {
     }
     file.close();
 
-    std::rename(tmpPath.c_str(), dbPath.c_str());
-    return true;
+    int res = std::rename(tmpPath.c_str(), dbPath.c_str());
+    return res == 0;
 }
 
 int DynamicStore::findEntryIndex(const char* word) const {
@@ -184,7 +184,9 @@ int DynamicStore::findMatchingWords(const int* digits, int length, uint64_t nowS
                                     DynamicMatch* outMatches, int maxMatches) const {
     if (!digits || length <= 0 || !outMatches || maxMatches <= 0) return 0;
 
-    int matchCount = 0;
+    std::vector<DynamicMatch> matches;
+    matches.reserve(32);
+
     for (const auto& entry : entries) {
         if (entry.is_deleted) continue;
         size_t len = std::strlen(entry.word);
@@ -198,21 +200,43 @@ int DynamicStore::findMatchingWords(const int* digits, int length, uint64_t nowS
             }
         }
         if (matched) {
-            DynamicMatch& m = outMatches[matchCount++];
+            DynamicMatch m;
             std::memcpy(m.word, entry.word, len + 1);
             m.length = static_cast<uint8_t>(len);
             m.effective_freq = getEffectiveFrequency(entry.word, nowSec, halfLifeDays);
+            m.hit_count = entry.hit_count;
+            m.last_used_timestamp = entry.last_used_timestamp;
+            double decayFactor = 1.0;
+            if (halfLifeDays > 0) {
+                uint64_t elapsedSec = (nowSec >= entry.last_used_timestamp) ? (nowSec - entry.last_used_timestamp) : 0;
+                double halfLifeSec = static_cast<double>(halfLifeDays) * 86400.0;
+                decayFactor = std::pow(0.5, static_cast<double>(elapsedSec) / halfLifeSec);
+            }
+            m.decay_factor = static_cast<float>(decayFactor);
             m.is_terminal = (static_cast<int>(len) == length);
-            if (matchCount >= maxMatches) break;
+            matches.push_back(m);
         }
     }
 
-    std::sort(outMatches, outMatches + matchCount, [](const DynamicMatch& a, const DynamicMatch& b) {
+    std::sort(matches.begin(), matches.end(), [](const DynamicMatch& a, const DynamicMatch& b) {
         if (a.is_terminal != b.is_terminal) return a.is_terminal > b.is_terminal;
+        if (a.last_used_timestamp != b.last_used_timestamp) return a.last_used_timestamp > b.last_used_timestamp;
+        if (a.hit_count != b.hit_count) return a.hit_count > b.hit_count;
         return a.effective_freq > b.effective_freq;
     });
 
-    return matchCount;
+    int count = std::min(static_cast<int>(matches.size()), maxMatches);
+    for (int i = 0; i < count; ++i) {
+        outMatches[i] = matches[i];
+    }
+    return count;
+}
+
+uint32_t DynamicStore::getHitCount(const char* word) const {
+    if (!word) return 0;
+    int idx = findEntryIndex(word);
+    if (idx < 0) return 0;
+    return entries[idx].hit_count;
 }
 
 uint32_t DynamicStore::getEffectiveFrequency(const char* word, uint64_t nowSec, uint32_t halfLifeDays) const {
