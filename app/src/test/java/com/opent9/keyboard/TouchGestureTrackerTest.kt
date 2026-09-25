@@ -405,21 +405,24 @@ class TouchGestureTrackerTest {
         // Utility row is y in [615, 780]
         val y = 700f
 
-        // Center of Key 13 (LANG_SWITCH) is at x = 405f
-        val langKey = atlas.findKeyAt(405f, y)
-        assertNotNull(langKey)
-        assertEquals(KeyType.LANG_SWITCH, langKey?.type)
+        // Center of Key 12 (Utility Key: PAGE_SWITCH) is at x = 135f
+        val utilityKey = atlas.findKeyAt(135f, y)
+        assertNotNull(utilityKey)
+        assertEquals(KeyType.PAGE_SWITCH, utilityKey?.type)
+        assertEquals(12, utilityKey?.id)
 
-        // Boundary between Key 13 and Key 14 is at x = 540f
-        // Touch at x = 530f (within 24px of boundary) should resolve to SPACE_0 to protect space taps
-        val spaceMarginKey = atlas.findKeyAt(530f, y)
+        // Boundary between Key 12 and Key 14 is at x = 270f
+        // Touch at x = 260f (within 24px of boundary) should resolve to SPACE_0 to protect space taps
+        val spaceMarginKey = atlas.findKeyAt(260f, y)
         assertNotNull(spaceMarginKey)
         assertEquals(KeyType.SPACE_0, spaceMarginKey?.type)
+        assertEquals(14, spaceMarginKey?.id)
 
-        // Center of Key 14 (SPACE_0) is at x = 675f
+        // Center of Key 14 (SPACE_0 spanning cols 1..3: 270f to 1080f) is at x = 675f
         val spaceKey = atlas.findKeyAt(675f, y)
         assertNotNull(spaceKey)
         assertEquals(KeyType.SPACE_0, spaceKey?.type)
+        assertEquals(14, spaceKey?.id)
     }
 
     @Test

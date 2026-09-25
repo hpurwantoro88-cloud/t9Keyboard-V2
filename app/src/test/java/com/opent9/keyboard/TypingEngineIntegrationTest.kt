@@ -215,6 +215,79 @@ class TypingEngineIntegrationTest {
     }
 
     @Test
+    fun testWordCorrectionCandidateRemovalDoesNotCorruptCommittedText() {
+        val inputView = service.onCreateInputView() as T9KeyboardView
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val info = EditorInfo()
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+
+        service.onStartInputView(info, false)
+        inputView.setT9Mode(true)
+
+        // Type 4-3-5-5-6 ("hello")
+        val key4 = inputView.keyAtlas.keys.first { it.digitValue == 4 }
+        val key3 = inputView.keyAtlas.keys.first { it.digitValue == 3 }
+        val key5 = inputView.keyAtlas.keys.first { it.digitValue == 5 }
+        val key6 = inputView.keyAtlas.keys.first { it.digitValue == 6 }
+        val keySpace = inputView.keyAtlas.keys.first { it.type == com.opent9.keyboard.ui.KeyType.SPACE_0 }
+
+        inputView.onKeyTapAction?.invoke(key4, key4.centerX, key4.centerY)
+        inputView.onKeyTapAction?.invoke(key3, key3.centerX, key3.centerY)
+        inputView.onKeyTapAction?.invoke(key5, key5.centerX, key5.centerY)
+        inputView.onKeyTapAction?.invoke(key5, key5.centerX, key5.centerY)
+        inputView.onKeyTapAction?.invoke(key6, key6.centerX, key6.centerY)
+
+        // Commit with Space
+        inputView.onKeyTapAction?.invoke(keySpace, keySpace.centerX, keySpace.centerY)
+        val initialText = editText.text.toString()
+        assertTrue("Committed text must contain a word", initialText.trim().isNotEmpty())
+        assertTrue("Committed text must end with space", initialText.endsWith(" "))
+
+        // Move cursor back inside the word
+        val wordLen = initialText.trim().length
+        editText.setSelection(wordLen)
+        service.onUpdateSelection(initialText.length, initialText.length, wordLen, wordLen, -1, -1)
+
+        val candidatesField = OpenT9InputMethodService::class.java.getDeclaredField("activeCandidates").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val wordCandidates = candidatesField.get(service) as List<String>
+        assertFalse("Candidates should be populated for word correction", wordCandidates.isEmpty())
+
+        val candidateToRemove = wordCandidates.first()
+        inputView.onCandidateLongPressAction?.invoke(0, candidateToRemove)
+
+        val dialog = org.robolectric.shadows.ShadowAlertDialog.getLatestDialog() as? android.app.AlertDialog
+        if (dialog != null) {
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.performClick()
+            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        } else {
+            service.removeCandidateSuggestion(candidateToRemove)
+        }
+
+        // Verify candidate was removed
+        @Suppress("UNCHECKED_CAST")
+        val remainingCandidates = candidatesField.get(service) as List<String>
+        assertFalse("Candidate must be removed from suggestions", remainingCandidates.contains(candidateToRemove))
+
+        // CRITICAL: The committed text in editText must NOT be duplicated or corrupted with an uncommitted composing span
+        assertEquals("Committed text must remain unaltered", initialText, editText.text.toString())
+
+        val hasActiveField = OpenT9InputMethodService::class.java.getDeclaredField("hasActiveComposing").apply {
+            isAccessible = true
+        }
+        assertFalse("hasActiveComposing must remain false", hasActiveField.getBoolean(service))
+    }
+
+    @Test
     fun testMultiTapWordBufferingOnSpace() {
         val inputView = service.onCreateInputView() as T9KeyboardView
         val textInfo = EditorInfo().apply {

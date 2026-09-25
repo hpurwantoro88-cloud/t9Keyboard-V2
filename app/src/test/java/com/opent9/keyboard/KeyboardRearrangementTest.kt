@@ -52,9 +52,9 @@ class KeyboardRearrangementTest {
         assertEquals(10, atlas.grid[2][2].id)
         assertEquals(11, atlas.grid[2][3].id)
 
-        // Row 3: 12(?123), 13(LANG), 14(SPACE 2 blocks spanning cols 2 & 3)
+        // Row 3: 12(Utility: ?123/EN/😊), 14(SPACE 3 blocks spanning cols 1..3)
         assertEquals(12, atlas.grid[3][0].id)
-        assertEquals(13, atlas.grid[3][1].id)
+        assertEquals(14, atlas.grid[3][1].id)
         assertEquals(14, atlas.grid[3][2].id)
         assertEquals(14, atlas.grid[3][3].id)
 
@@ -62,13 +62,22 @@ class KeyboardRearrangementTest {
         assertEquals(0f, atlas.keys[0].bounds.left, 0.01f)
         assertEquals(stripHeight, atlas.keys[0].bounds.top, 0.01f)
         assertEquals(3 * colWidth, atlas.keys[3].bounds.left, 0.01f)
-        assertEquals(2 * colWidth, atlas.keys[14].bounds.left, 0.01f)
+        assertEquals(1 * colWidth, atlas.keys[14].bounds.left, 0.01f)
         assertEquals(4 * colWidth, atlas.keys[14].bounds.right, 0.01f)
+        assertTrue(atlas.keys[13].bounds.isEmpty)
 
         // Verify findKeyAt
         val keyDel = atlas.findKeyAt(colWidth * 3.5f, stripHeight + rowHeight * 0.5f)
         assertNotNull(keyDel)
         assertEquals(3, keyDel?.id)
+
+        val keyUtility = atlas.findKeyAt(colWidth * 0.5f, stripHeight + rowHeight * 3.5f)
+        assertNotNull(keyUtility)
+        assertEquals(12, keyUtility?.id)
+
+        val keySpaceCol1 = atlas.findKeyAt(colWidth * 1.5f, stripHeight + rowHeight * 3.5f)
+        assertNotNull(keySpaceCol1)
+        assertEquals(14, keySpaceCol1?.id)
 
         val keySpaceCol2 = atlas.findKeyAt(colWidth * 2.5f, stripHeight + rowHeight * 3.5f)
         assertNotNull(keySpaceCol2)
@@ -107,11 +116,11 @@ class KeyboardRearrangementTest {
         assertEquals(9, atlas.grid[2][2].id) // 8
         assertEquals(10, atlas.grid[2][3].id) // 9
 
-        // Bottom row utility keys: SPACE(14: cols 0..1), ?123(12), LANG(13)
+        // Bottom row utility keys: SPACE(14: cols 0..2), Utility(12: col 3)
         assertEquals(14, atlas.grid[3][0].id)
         assertEquals(14, atlas.grid[3][1].id)
-        assertEquals(12, atlas.grid[3][2].id)
-        assertEquals(13, atlas.grid[3][3].id)
+        assertEquals(14, atlas.grid[3][2].id)
+        assertEquals(12, atlas.grid[3][3].id)
 
         // DEL key should now be at the left edge
         assertEquals(0f, atlas.keys[3].bounds.left, 0.01f)
@@ -141,9 +150,9 @@ class KeyboardRearrangementTest {
         val rowHeight = atlas.rowHeight
         val stripHeight = atlas.stripHeight
 
-        // Row 0 should now be Utility row: ?123(12), LANG(13), SPACE(14: 2 blocks)
+        // Row 0 should now be Utility row: Utility(12), SPACE(14: 3 blocks cols 1..3)
         assertEquals(12, atlas.grid[0][0].id)
-        assertEquals(13, atlas.grid[0][1].id)
+        assertEquals(14, atlas.grid[0][1].id)
         assertEquals(14, atlas.grid[0][2].id)
         assertEquals(14, atlas.grid[0][3].id)
 
@@ -186,11 +195,11 @@ class KeyboardRearrangementTest {
         atlas.setLayoutConfiguration(colPosition = "left", rowPosition = "top")
         atlas.computeGeometry(1080f, 780f, 3.0f)
 
-        // Utility row on top (Row 0): SPACE(14: cols 0..1), ?123(12), LANG(13)
+        // Utility row on top (Row 0): SPACE(14: cols 0..2), Utility(12: col 3)
         assertEquals(14, atlas.grid[0][0].id)
         assertEquals(14, atlas.grid[0][1].id)
-        assertEquals(12, atlas.grid[0][2].id)
-        assertEquals(13, atlas.grid[0][3].id)
+        assertEquals(14, atlas.grid[0][2].id)
+        assertEquals(12, atlas.grid[0][3].id)
 
         // Col 0, Rows 1..3: DEL(3), SHIFT(7), ENTER(11)
         assertEquals(3, atlas.grid[1][0].id)
@@ -211,29 +220,21 @@ class KeyboardRearrangementTest {
     fun test4thRowOrderPresets() {
         val atlas = KeyAtlas()
 
-        // 1. Space Center: ?123, SPACE (2 blocks: cols 1..2), LANG
-        atlas.setLayoutConfiguration(colPosition = "right", rowPosition = "bottom", rowOrder = "space_center")
-        atlas.computeGeometry(1080f, 780f, 3.0f)
-        assertEquals(12, atlas.grid[3][0].id) // ?123
-        assertEquals(14, atlas.grid[3][1].id) // SPACE
-        assertEquals(14, atlas.grid[3][2].id) // SPACE
-        assertEquals(13, atlas.grid[3][3].id) // LANG
-
-        // 2. Space Left: SPACE (2 blocks: cols 0..1), LANG, ?123
+        // 1. Space Left: SPACE (3 blocks: cols 0..2), Utility(12: col 3)
         atlas.setLayoutConfiguration(colPosition = "right", rowPosition = "bottom", rowOrder = "space_left")
         atlas.computeGeometry(1080f, 780f, 3.0f)
         assertEquals(14, atlas.grid[3][0].id) // SPACE
         assertEquals(14, atlas.grid[3][1].id) // SPACE
-        assertEquals(13, atlas.grid[3][2].id) // LANG
-        assertEquals(12, atlas.grid[3][3].id) // ?123
+        assertEquals(14, atlas.grid[3][2].id) // SPACE
+        assertEquals(12, atlas.grid[3][3].id) // Utility
 
-        // 3. Flipped: SPACE (2 blocks: cols 0..1), LANG, ?123
-        atlas.setLayoutConfiguration(colPosition = "right", rowPosition = "bottom", rowOrder = "reverse")
+        // 2. Default: Utility(12: col 0), SPACE (3 blocks: cols 1..3)
+        atlas.setLayoutConfiguration(colPosition = "right", rowPosition = "bottom", rowOrder = "default")
         atlas.computeGeometry(1080f, 780f, 3.0f)
-        assertEquals(14, atlas.grid[3][0].id) // SPACE
+        assertEquals(12, atlas.grid[3][0].id) // Utility
         assertEquals(14, atlas.grid[3][1].id) // SPACE
-        assertEquals(13, atlas.grid[3][2].id) // LANG
-        assertEquals(12, atlas.grid[3][3].id) // ?123
+        assertEquals(14, atlas.grid[3][2].id) // SPACE
+        assertEquals(14, atlas.grid[3][3].id) // SPACE
     }
 
     @Test
@@ -275,9 +276,9 @@ class KeyboardRearrangementTest {
         view.layout(0, 0, 1080, 780)
 
         // Verify keyAtlas in view reflects left column and top row
-        assertEquals(14, view.keyAtlas.grid[0][0].id) // SPACE on top-left (cols 0..1)
+        assertEquals(14, view.keyAtlas.grid[0][0].id) // SPACE on top-left (cols 0..2)
         assertEquals(3, view.keyAtlas.grid[1][0].id) // DEL on left
-        assertEquals(12, view.keyAtlas.grid[0][2].id) // ?123 on top
+        assertEquals(12, view.keyAtlas.grid[0][3].id) // ?123/Utility on top-right (col 3)
 
         // Now update preferences dynamically while dimensions are unchanged
         prefs.edit()

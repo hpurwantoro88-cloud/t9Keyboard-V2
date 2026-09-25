@@ -65,6 +65,7 @@ class PageController(private val keyAtlas: KeyAtlas) {
         }
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun handlePage0Flick(
         key: KeyInfo,
         direction: FlickDirection,
@@ -110,17 +111,17 @@ class PageController(private val keyAtlas: KeyAtlas) {
                     else -> {}
                 }
             }
-            12 -> { // [ ?123 ]
+            12 -> { // [ ?123 / EN / 😊 Combined Utility Key ]
                 when (direction) {
-                    FlickDirection.UP -> onOpenSettings()
-                    FlickDirection.DOWN -> onSwitchPage(KeyboardPage.PAGE_2_EXT_SYM)
+                    FlickDirection.UP -> onSwitchLanguage()
+                    FlickDirection.DOWN -> onSwitchPage(KeyboardPage.PAGE_3_EMOJI)
                     else -> {}
                 }
             }
-            13 -> { // [ EN / ID ] (merged with emoticon)
+            13 -> { // Legacy / Fallback
                 when (direction) {
-                    FlickDirection.UP -> onSwitchPage(KeyboardPage.PAGE_3_EMOJI)
-                    FlickDirection.DOWN -> onSwitchLanguage()
+                    FlickDirection.UP -> onSwitchLanguage()
+                    FlickDirection.DOWN -> onSwitchPage(KeyboardPage.PAGE_3_EMOJI)
                     else -> {}
                 }
             }

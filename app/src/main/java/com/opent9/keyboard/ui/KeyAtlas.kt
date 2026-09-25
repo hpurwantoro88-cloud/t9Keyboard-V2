@@ -264,47 +264,34 @@ class KeyAtlas {
 
         if (col4thPosition == "left") {
             when (row4thOrder) {
-                "space_center" -> {
-                    // Col 0: ?123, Col 1..2: SPACE, Col 3: LANG
-                    setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
-                    setKeyMultiColPosition(keys[14], utilityRow, 1, 2, offsetX)
-                    setKeyGridPosition(keys[13], utilityRow, 3, offsetX)
-                }
                 "space_right" -> {
-                    // Col 0: ?123, Col 1: LANG, Col 2..3: SPACE
+                    // Col 0: Utility (key 12), Col 1..3: SPACE (3 blocks)
                     setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
-                    setKeyGridPosition(keys[13], utilityRow, 1, offsetX)
-                    setKeyMultiColPosition(keys[14], utilityRow, 2, 2, offsetX)
+                    setKeyMultiColPosition(keys[14], utilityRow, 1, 3, offsetX)
                 }
                 else -> {
-                    // Default for left action col: [ SPACE (2 blocks) ] [ ?123 ] [ LANG ]
-                    setKeyMultiColPosition(keys[14], utilityRow, 0, 2, offsetX)
-                    setKeyGridPosition(keys[12], utilityRow, 2, offsetX)
-                    setKeyGridPosition(keys[13], utilityRow, 3, offsetX)
+                    // Default for left action col: [ SPACE (3 blocks: cols 0..2) ] [ Utility (key 12: col 3) ]
+                    setKeyMultiColPosition(keys[14], utilityRow, 0, 3, offsetX)
+                    setKeyGridPosition(keys[12], utilityRow, 3, offsetX)
                 }
             }
         } else {
             when (row4thOrder) {
-                "space_center" -> {
-                    // [ ?123 ] [ SPACE (2 blocks) ] [ EN / ID ]
-                    setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
-                    setKeyMultiColPosition(keys[14], utilityRow, 1, 2, offsetX)
-                    setKeyGridPosition(keys[13], utilityRow, 3, offsetX)
-                }
                 "space_left", "reverse" -> {
-                    // [ SPACE (2 blocks) ] [ EN / ID ] [ ?123 ]
-                    setKeyMultiColPosition(keys[14], utilityRow, 0, 2, offsetX)
-                    setKeyGridPosition(keys[13], utilityRow, 2, offsetX)
+                    // [ SPACE (3 blocks: cols 0..2) ] [ Utility (key 12: col 3) ]
+                    setKeyMultiColPosition(keys[14], utilityRow, 0, 3, offsetX)
                     setKeyGridPosition(keys[12], utilityRow, 3, offsetX)
                 }
                 else -> {
-                    // Default: [ ?123 ] [ EN / ID ] [ SPACE (2 blocks) ]
+                    // Default: [ Utility (key 12: col 0) ] [ SPACE (3 blocks: cols 1..3) ]
                     setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
-                    setKeyGridPosition(keys[13], utilityRow, 1, offsetX)
-                    setKeyMultiColPosition(keys[14], utilityRow, 2, 2, offsetX)
+                    setKeyMultiColPosition(keys[14], utilityRow, 1, 3, offsetX)
                 }
             }
         }
+        keys[13].bounds.set(0f, 0f, 0f, 0f)
+        keys[13].centerX = 0f
+        keys[13].centerY = 0f
         keys[15].bounds.set(0f, 0f, 0f, 0f)
         keys[15].centerX = 0f
         keys[15].centerY = 0f
@@ -509,9 +496,9 @@ class KeyAtlas {
         setupKey(10, KeyType.DIGIT_T9, "WXYZ", "9", digit = 9)
         setupKey(11, KeyType.ENTER, "↵", "")
 
-        // Row 4: [ ?123 ] [ EN / ID ] [ ␣ 0 SPACE (2 blocks) ]
+        // Row 4: [ ?123 / EN / 😊 (1 block) ] [ ␣ 0 SPACE (3 blocks) ]
         setupKey(12, KeyType.PAGE_SWITCH, "?123", "")
-        setupKey(13, KeyType.LANG_SWITCH, keys[13].primaryLabel.ifEmpty { "EN" }, "😊")
+        setupKey(13, KeyType.LANG_SWITCH, "", "")
         setupKey(14, KeyType.SPACE_0, "␣", "0", digit = 0)
         setupKey(15, KeyType.EMOJI_DOT, "", "")
         applyPage0UtilityRowLayout(lastOffsetX)
@@ -628,7 +615,7 @@ class KeyAtlas {
         val c = ((x - lastOffsetX) / colWidth).toInt().coerceIn(0, 3)
         val candidateKey = grid[r][c]
 
-        if (candidateKey.type == KeyType.LANG_SWITCH) {
+        if (candidateKey.id == 12 || candidateKey.type == KeyType.LANG_SWITCH) {
             val spaceMargin = 8f * density
             if (c + 1 in 0..3 && grid[r][c + 1].type == KeyType.SPACE_0 && x >= candidateKey.bounds.right - spaceMargin) {
                 return grid[r][c + 1]

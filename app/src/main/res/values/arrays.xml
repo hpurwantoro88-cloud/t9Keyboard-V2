@@ -51,16 +51,12 @@
     </string-array>
 
     <string-array name="pref_row_order_entries">
-        <item>\?123, Language, Space, Emoji (Default)</item>
-        <item>Space Center (?123, Space, Language, Emoji)</item>
-        <item>Space Left (Space, Language, ?123, Emoji)</item>
-        <item>Flipped (Emoji, Space, Language, ?123)</item>
+        <item>Utility Left, Space Right (Default)</item>
+        <item>Space Left, Utility Right</item>
     </string-array>
     <string-array name="pref_row_order_values">
         <item>default</item>
-        <item>space_center</item>
         <item>space_left</item>
-        <item>reverse</item>
     </string-array>
 
     <string-array name="pref_col_order_entries">

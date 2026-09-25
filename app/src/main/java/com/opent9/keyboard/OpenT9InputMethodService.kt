@@ -1260,10 +1260,11 @@ class OpenT9InputMethodService : InputMethodService() {
                 editor.apply()
             } catch (_: Exception) {}
         }
-        keyboardView.updateCandidates(activeCandidates)
-
-        currentInputConnection?.let { ic ->
-            if (hasActiveComposing && currentComposingDigits.isNotEmpty()) {
+        if (hasActiveComposing && currentComposingDigits.isNotEmpty()) {
+            if (::keyboardView.isInitialized) {
+                keyboardView.updateCandidates(activeCandidates)
+            }
+            currentInputConnection?.let { ic ->
                 val savedStrokes = ArrayList(currentComposingStrokes)
                 suggestionGuard.reset()
                 NativeEngineBridge.resetT9()
@@ -1275,11 +1276,12 @@ class OpenT9InputMethodService : InputMethodService() {
                     NativeEngineBridge.pushStroke(s.digit, s.touchX, s.touchY)
                 }
                 updateCandidatesFromNative(ic)
-            } else if (activeCandidates.isNotEmpty()) {
-                val topCandidate = applyShiftFormatting(activeCandidates[0])
-                ic.setComposingText(topCandidate, 1)
-            } else {
-                ic.setComposingText("", 0)
+            }
+        } else {
+            if (activeCandidates.isEmpty()) {
+                clearWordCorrection()
+            } else if (::keyboardView.isInitialized) {
+                keyboardView.updateCandidates(activeCandidates)
             }
         }
         try {

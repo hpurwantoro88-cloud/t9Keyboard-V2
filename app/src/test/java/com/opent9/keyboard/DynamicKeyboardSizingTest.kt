@@ -44,9 +44,9 @@ class DynamicKeyboardSizingTest {
         assertEquals(270f, key1.bounds.right, 0.01f)
         assertEquals(285f, key1.bounds.bottom, 0.01f)
 
-        // Verify key 14 bounds on Page 0 (Row 3, Col 2 & 3: [ ␣ 0 SPACE (2 blocks) ])
+        // Verify key 14 bounds on Page 0 (Row 3, Col 1..3: [ ␣ 0 SPACE (3 blocks) ])
         val keySpace = atlas.keys[14]
-        assertEquals(540f, keySpace.bounds.left, 0.01f)
+        assertEquals(270f, keySpace.bounds.left, 0.01f)
         assertEquals(615f, keySpace.bounds.top, 0.01f)
         assertEquals(1080f, keySpace.bounds.right, 0.01f)
         assertEquals(780f, keySpace.bounds.bottom, 0.01f)
