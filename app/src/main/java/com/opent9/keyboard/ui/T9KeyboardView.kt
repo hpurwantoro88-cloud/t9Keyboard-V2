@@ -160,11 +160,43 @@ open class T9KeyboardView @JvmOverloads constructor(
         isFakeBoldText = true
     }
 
+    // Dedicated page renderers (Zero allocations in onDraw)
+    private val suggestionStripRenderer = SuggestionStripRenderer(
+        stripBackgroundPaint = stripBackgroundPaint,
+        pillPaint = pillPaint,
+        pillTextPaint = pillTextPaint,
+        candidateTextPaint = candidateTextPaint,
+        candidatePrefixPaint = candidatePrefixPaint,
+        dividerPaint = dividerPaint,
+        keyBackgroundPaint = keyBackgroundPaint,
+        keyBorderPaint = keyBorderPaint,
+        subTextPaint = subTextPaint
+    )
+    private val emojiPageRenderer = EmojiPageRenderer(
+        pillPaint = pillPaint,
+        keyPressedPaint = keyPressedPaint,
+        keyBackgroundPaint = keyBackgroundPaint,
+        subTextPaint = subTextPaint,
+        primaryTextPaint = primaryTextPaint
+    )
+    private val page1NumSymRenderer = Page1NumSymRenderer(
+        backgroundPaint = backgroundPaint,
+        page1KeyActionPaint = page1KeyActionPaint,
+        keyBorderPaint = keyBorderPaint,
+        keyPressedPaint = keyPressedPaint,
+        keyBackgroundPaint = keyBackgroundPaint,
+        page1OpTextPaint = page1OpTextPaint,
+        page1DigitTextPaint = page1DigitTextPaint,
+        page1SmallTextPaint = page1SmallTextPaint,
+        page1SymTextPaint = page1SymTextPaint,
+        iconPaint = iconPaint,
+        iconFillPaint = iconFillPaint
+    )
+
     // Pre-allocated paths & rects
     private val scratchRect = RectF()
     private val glowRect = RectF()
     private val iconPath = Path()
-    private val page1ClipPath = Path()
 
     // Key coordinates pre-allocated arrays
     private val candidateItemLeft = FloatArray(16)
@@ -492,103 +524,56 @@ open class T9KeyboardView @JvmOverloads constructor(
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
 
         if (keyAtlas.currentPage == KeyboardPage.PAGE_3_EMOJI) {
-            drawEmojiPage(canvas)
+            emojiPageRenderer.drawEmojiPage(
+                canvas = canvas,
+                emojiAtlas = emojiAtlas,
+                emojiScrollOffset = gestureTracker.emojiScrollOffset,
+                activeTabIndex = activeEmojiTabIndex,
+                activeGridIndex = activeEmojiGridIndex,
+                activeControlIndex = activeEmojiControlIndex,
+                density = resources.displayMetrics.density
+            )
             return
         }
 
         if (keyAtlas.currentPage == KeyboardPage.PAGE_1_NUM_SYM) {
-            drawPage1(canvas)
+            page1NumSymRenderer.drawPage1(
+                canvas = canvas,
+                width = width.toFloat(),
+                height = height.toFloat(),
+                keyAtlas = keyAtlas,
+                columnScrollOffset = gestureTracker.page1ColumnScrollOffset,
+                activeOperatorIndex = gestureTracker.activeOperatorIndex,
+                activeKeyId = activeKeyId,
+                imeAction = imeAction,
+                density = resources.displayMetrics.density
+            )
             return
         }
 
         if (keyAtlas.currentPage == KeyboardPage.PAGE_2_EXT_SYM) {
-            drawPage2Strip(canvas)
+            suggestionStripRenderer.drawPage2Strip(
+                canvas = canvas,
+                keyAtlas = keyAtlas,
+                density = resources.displayMetrics.density
+            )
         } else {
             // 1. Draw Suggestion Strip (40dp)
-            drawSuggestionStrip(canvas)
+            suggestionStripRenderer.drawSuggestionStrip(
+                canvas = canvas,
+                keyAtlas = keyAtlas,
+                scrollOffset = gestureTracker.stripScrollOffset,
+                isT9Mode = isT9Mode,
+                candidates = candidates,
+                candidateItemLeft = candidateItemLeft,
+                candidateItemRight = candidateItemRight,
+                density = resources.displayMetrics.density,
+                formatWord = { formatCandidateWord(it) }
+            )
         }
 
         // 2. Draw Keypad (4 rows x 4 columns)
         drawKeypad(canvas)
-    }
-
-    private fun drawPage2Strip(canvas: Canvas) {
-        val density = resources.displayMetrics.density
-        canvas.drawRect(keyAtlas.stripBounds, stripBackgroundPaint)
-
-        val tabMargin = 3f * density
-        val cornerRadius = 8f * density
-
-        for (i in 0 until 4) {
-            val bounds = keyAtlas.symbolLayerTabBounds[i]
-            scratchRect.set(
-                bounds.left + tabMargin,
-                bounds.top + tabMargin,
-                bounds.right - tabMargin,
-                bounds.bottom - tabMargin
-            )
-
-            val isActive = (i == keyAtlas.activeSymbolLayerIndex)
-            val bgPaint = if (isActive) pillPaint else keyBackgroundPaint
-            canvas.drawRoundRect(scratchRect, cornerRadius, cornerRadius, bgPaint)
-            if (isActive) {
-                canvas.drawRoundRect(scratchRect, cornerRadius, cornerRadius, keyBorderPaint)
-            }
-
-            val textPaint = if (isActive) pillTextPaint else subTextPaint
-            val title = keyAtlas.symbolLayerTabTitles[i]
-            val textY = bounds.centerY() - ((textPaint.descent() + textPaint.ascent()) / 2f)
-            canvas.drawText(title, bounds.centerX(), textY, textPaint)
-        }
-    }
-
-    private fun drawSuggestionStrip(canvas: Canvas) {
-        canvas.drawRect(keyAtlas.stripBounds, stripBackgroundPaint)
-
-        // Fixed Left Pill (12% width)
-        val pillMargin = 4f * resources.displayMetrics.density
-        val pillRadius = 4f * resources.displayMetrics.density
-        scratchRect.set(
-            keyAtlas.pillBounds.left + pillMargin,
-            keyAtlas.pillBounds.top + pillMargin,
-            keyAtlas.pillBounds.right - pillMargin,
-            keyAtlas.pillBounds.bottom - pillMargin
-        )
-        canvas.drawRoundRect(scratchRect, pillRadius, pillRadius, pillPaint)
-        val pillLabel = if (isT9Mode) "T9" else "ABC"
-        val pillTextY = keyAtlas.pillBounds.centerY() - ((pillTextPaint.descent() + pillTextPaint.ascent()) / 2f)
-        canvas.drawText(pillLabel, keyAtlas.pillBounds.centerX(), pillTextY, pillTextPaint)
-
-        // Divider between pill and viewport
-        val density = resources.displayMetrics.density
-        canvas.drawLine(
-            keyAtlas.candidateViewportBounds.left, keyAtlas.stripBounds.top + (2f * density),
-            keyAtlas.candidateViewportBounds.left, keyAtlas.stripBounds.bottom - (2f * density),
-            dividerPaint
-        )
-
-        // Candidate Viewport (88% width) with clip & scroll
-        canvas.save()
-        canvas.clipRect(keyAtlas.candidateViewportBounds)
-        canvas.translate(gestureTracker.stripScrollOffset, 0f)
-
-        val candCount = candidates.size.coerceAtMost(16)
-        val textY = keyAtlas.stripBounds.centerY() - ((candidateTextPaint.descent() + candidateTextPaint.ascent()) / 2f)
-
-        for (i in 0 until candCount) {
-            val left = candidateItemLeft[i]
-            val right = candidateItemRight[i]
-            val word = formatCandidateWord(candidates[i])
-
-            // Highlight 1st candidate
-            val paint = if (i == 0) candidatePrefixPaint else candidateTextPaint
-            val textX = left + 12f * resources.displayMetrics.density
-            canvas.drawText(word, textX, textY, paint)
-
-            // Vertical divider between items
-            canvas.drawLine(right, keyAtlas.stripBounds.top + (2.67f * density), right, keyAtlas.stripBounds.bottom - (2.67f * density), dividerPaint)
-        }
-        canvas.restore()
     }
 
     private fun drawKeypad(canvas: Canvas) {
@@ -730,248 +715,21 @@ open class T9KeyboardView @JvmOverloads constructor(
     }
 
     private fun drawEnterIcon(canvas: Canvas, cx: Float, cy: Float, density: Float) {
-        val size = (minOf(keyAtlas.rowHeight, keyAtlas.colWidth) * 0.28f).coerceIn(12f * density, 24f * density)
-        iconPath.reset()
-        when (imeAction) {
-            EditorInfo.IME_ACTION_SEARCH -> {
-                // Magnifying glass
-                val r = size * 0.35f
-                canvas.drawCircle(cx - (size * 0.1f), cy - (size * 0.1f), r, iconPaint)
-                canvas.drawLine(cx + (size * 0.15f), cy + (size * 0.15f), cx + (size * 0.45f), cy + (size * 0.45f), iconPaint)
-            }
-            EditorInfo.IME_ACTION_GO, EditorInfo.IME_ACTION_SEND -> {
-                // Right arrow / Paper plane
-                iconPath.moveTo(cx - (size * 0.35f), cy - (size * 0.35f))
-                iconPath.lineTo(cx + (size * 0.4f), cy)
-                iconPath.lineTo(cx - (size * 0.35f), cy + (size * 0.35f))
-                iconPath.lineTo(cx - (size * 0.15f), cy)
-                iconPath.close()
-                canvas.drawPath(iconPath, iconFillPaint)
-            }
-            EditorInfo.IME_ACTION_NEXT -> {
-                // Tab right arrow
-                iconPath.moveTo(cx - (size * 0.3f), cy - (size * 0.35f))
-                iconPath.lineTo(cx + (size * 0.2f), cy)
-                iconPath.lineTo(cx - (size * 0.3f), cy + (size * 0.35f))
-                canvas.drawPath(iconPath, iconPaint)
-                canvas.drawLine(cx + (size * 0.3f), cy - (size * 0.35f), cx + (size * 0.3f), cy + (size * 0.35f), iconPaint)
-            }
-            EditorInfo.IME_ACTION_DONE -> {
-                // Checkmark
-                iconPath.moveTo(cx - (size * 0.35f), cy)
-                iconPath.lineTo(cx - (size * 0.05f), cy + (size * 0.3f))
-                iconPath.lineTo(cx + (size * 0.4f), cy - (size * 0.3f))
-                canvas.drawPath(iconPath, iconPaint)
-            }
-            else -> {
-                // Return carriage arrow
-                iconPath.moveTo(cx + (size * 0.3f), cy - (size * 0.3f))
-                iconPath.lineTo(cx + (size * 0.3f), cy + (size * 0.1f))
-                iconPath.lineTo(cx - (size * 0.25f), cy + (size * 0.1f))
-                canvas.drawPath(iconPath, iconPaint)
-                // arrow head
-                iconPath.reset()
-                iconPath.moveTo(cx - (size * 0.1f), cy - (size * 0.1f))
-                iconPath.lineTo(cx - (size * 0.35f), cy + (size * 0.1f))
-                iconPath.lineTo(cx - (size * 0.1f), cy + (size * 0.3f))
-                canvas.drawPath(iconPath, iconPaint)
-            }
-        }
+        val minDim = minOf(keyAtlas.rowHeight, keyAtlas.colWidth)
+        KeyboardVectorIcons.drawEnterIcon(canvas, cx, cy, density, imeAction, minDim, iconPath, iconPaint, iconFillPaint)
     }
 
     private fun drawShiftIcon(canvas: Canvas, cx: Float, cy: Float, density: Float) {
-        val s = (minOf(keyAtlas.rowHeight, keyAtlas.colWidth) * 0.25f).coerceIn(10f * density, 20f * density)
-        iconPath.reset()
-        iconPath.moveTo(cx, cy - (s * 0.5f))
-        iconPath.lineTo(cx + (s * 0.45f), cy)
-        iconPath.lineTo(cx + (s * 0.2f), cy)
-        iconPath.lineTo(cx + (s * 0.2f), cy + (s * 0.45f))
-        iconPath.lineTo(cx - (s * 0.2f), cy + (s * 0.45f))
-        iconPath.lineTo(cx - (s * 0.2f), cy)
-        iconPath.lineTo(cx - (s * 0.45f), cy)
-        iconPath.close()
-
-        when (shiftState) {
-            0 -> canvas.drawPath(iconPath, iconPaint) // Hollow outline (LOWERCASE)
-            1 -> canvas.drawPath(iconPath, iconFillPaint) // Solid filled (TITLECASE)
-            2 -> { // Solid filled with base bar (UPPERCASE / CAPS LOCK)
-                canvas.drawPath(iconPath, iconFillPaint)
-                canvas.drawLine(cx - (s * 0.45f), cy + (s * 0.65f), cx + (s * 0.45f), cy + (s * 0.65f), iconPaint)
-            }
-        }
+        val minDim = minOf(keyAtlas.rowHeight, keyAtlas.colWidth)
+        KeyboardVectorIcons.drawShiftIcon(canvas, cx, cy, density, shiftState, minDim, iconPath, iconPaint, iconFillPaint)
     }
 
     private fun drawDelIcon(canvas: Canvas, cx: Float, cy: Float, density: Float) {
-        val s = (minOf(keyAtlas.rowHeight, keyAtlas.colWidth) * 0.25f).coerceIn(10f * density, 20f * density)
-        iconPath.reset()
-        iconPath.moveTo(cx - (s * 0.5f), cy)
-        iconPath.lineTo(cx - (s * 0.15f), cy - (s * 0.35f))
-        iconPath.lineTo(cx + (s * 0.5f), cy - (s * 0.35f))
-        iconPath.lineTo(cx + (s * 0.5f), cy + (s * 0.35f))
-        iconPath.lineTo(cx - (s * 0.15f), cy + (s * 0.35f))
-        iconPath.close()
-        canvas.drawPath(iconPath, iconPaint)
-
-        // Draw inner 'x'
-        val xs = s * 0.15f
-        val xcx = cx + (s * 0.15f)
-        canvas.drawLine(xcx - xs, cy - xs, xcx + xs, cy + xs, iconPaint)
-        canvas.drawLine(xcx - xs, cy + xs, xcx + xs, cy - xs, iconPaint)
+        val minDim = minOf(keyAtlas.rowHeight, keyAtlas.colWidth)
+        KeyboardVectorIcons.drawDelIcon(canvas, cx, cy, density, minDim, iconPath, iconPaint)
     }
 
-    private fun drawEmojiPage(canvas: Canvas) {
-        val density = resources.displayMetrics.density
-        // Draw category tabs (2 tabs: Smileys, Memoji)
-        val tabCount = emojiAtlas.categories.size
-        for (i in 0 until tabCount) {
-            val bounds = emojiAtlas.categoryTabBounds[i]
-            if (i == emojiAtlas.activeCategoryIndex) {
-                canvas.drawRoundRect(bounds, 8f * density, 8f * density, pillPaint)
-            } else if (i == activeEmojiTabIndex) {
-                canvas.drawRoundRect(bounds, 8f * density, 8f * density, keyPressedPaint)
-            }
-            val textY = bounds.centerY() - ((subTextPaint.descent() + subTextPaint.ascent()) / 2f)
-            canvas.drawText(emojiAtlas.categories[i], bounds.centerX(), textY, subTextPaint)
-        }
 
-        // Draw active category scrollable emoji grid
-        val scrollY = gestureTracker.emojiScrollOffset
-        val gridTop = emojiAtlas.gridTop
-        val gridBottom = emojiAtlas.gridBottom
-        val rowHeight = emojiAtlas.gridRowHeight
-        val colWidth = emojiAtlas.gridColWidth
-        val cols = emojiAtlas.gridCols
-        val offsetX = emojiAtlas.currentOffsetX
-        val activeEmojis = emojiAtlas.getActiveEmojiList()
-
-        canvas.save()
-        canvas.clipRect(offsetX, gridTop, offsetX + (cols * colWidth), gridBottom)
-
-        val totalRows = (activeEmojis.size + cols - 1) / cols
-        if (rowHeight > 0f) {
-            val startRow = maxOf(0, ((-scrollY) / rowHeight).toInt())
-            val endRow = minOf(totalRows - 1, ((-scrollY + emojiAtlas.visibleGridHeight) / rowHeight).toInt() + 1)
-            for (r in startRow..endRow) {
-                for (c in 0 until cols) {
-                    val idx = r * cols + c
-                    if (idx !in activeEmojis.indices) continue
-                    val left = offsetX + (c * colWidth)
-                    val top = gridTop + (r * rowHeight) + scrollY
-                    val right = left + colWidth
-                    val bottom = top + rowHeight
-
-                    if (idx == activeEmojiGridIndex) {
-                        scratchRect.set(left + 2f * density, top + 2f * density, right - 2f * density, bottom - 2f * density)
-                        canvas.drawRoundRect(scratchRect, 8f * density, 8f * density, keyPressedPaint)
-                    }
-                    val emojiStr = activeEmojis[idx]
-                    val textY = top + (rowHeight / 2f) - ((primaryTextPaint.descent() + primaryTextPaint.ascent()) / 2f)
-                    canvas.drawText(emojiStr, left + (colWidth / 2f), textY, primaryTextPaint)
-                }
-            }
-        }
-        canvas.restore()
-
-        // Draw control row (ABC, Recents, Space, Del)
-        val ctrlRow = emojiAtlas.controlRowBounds
-        val ctrlLabels = arrayOf("ABC", "🕒 Recents", "␣ Space", "⌫ DEL")
-        for (i in 0 until 4) {
-            val bounds = ctrlRow[i]
-            val bgPaint = if (i == activeEmojiControlIndex) keyPressedPaint else keyBackgroundPaint
-            canvas.drawRoundRect(bounds, 8f * density, 8f * density, bgPaint)
-            val textY = bounds.centerY() - ((subTextPaint.descent() + subTextPaint.ascent()) / 2f)
-            canvas.drawText(ctrlLabels[i], bounds.centerX(), textY, subTextPaint)
-        }
-    }
-
-    private fun drawPage1(canvas: Canvas) {
-        val density = resources.displayMetrics.density
-        val cornerRadius = 10f * density
-
-        // 1. Draw keyboard background matching active theme
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
-
-        // 2. Draw Left Scrollable Operator Column
-        val opContainer = keyAtlas.page1ScrollContainerBounds
-        canvas.drawRoundRect(opContainer, cornerRadius, cornerRadius, page1KeyActionPaint)
-        canvas.drawRoundRect(opContainer, cornerRadius, cornerRadius, keyBorderPaint)
-
-        canvas.save()
-        page1ClipPath.reset()
-        page1ClipPath.addRoundRect(opContainer, cornerRadius, cornerRadius, Path.Direction.CW)
-        canvas.clipPath(page1ClipPath)
-
-        val slotHeight = opContainer.height() / 4f
-        val scrollY = gestureTracker.page1ColumnScrollOffset
-        val opItems = keyAtlas.page1OperatorItems
-        for (i in opItems.indices) {
-            val itemTop = opContainer.top + (i * slotHeight) + scrollY
-            val itemBottom = itemTop + slotHeight
-
-            if (itemBottom < opContainer.top || itemTop > opContainer.bottom) continue
-
-            // Highlight pressed operator
-            if (gestureTracker.activeOperatorIndex == i) {
-                scratchRect.set(
-                    opContainer.left + (2f * density),
-                    itemTop + (2f * density),
-                    opContainer.right - (2f * density),
-                    itemBottom - (2f * density)
-                )
-                canvas.drawRoundRect(scratchRect, 8f * density, 8f * density, keyPressedPaint)
-            }
-
-            val itemCenterY = itemTop + (slotHeight / 2f)
-            val textY = itemCenterY - ((page1OpTextPaint.descent() + page1OpTextPaint.ascent()) / 2f)
-            canvas.drawText(opItems[i], opContainer.centerX(), textY, page1OpTextPaint)
-        }
-        canvas.restore()
-
-        // 3. Draw Page 1 Keys
-        for (key in keyAtlas.page1Keys) {
-            val isPressed = (key.id == activeKeyId)
-            val bgPaint = if (key.isActionKey) {
-                if (isPressed) keyPressedPaint else page1KeyActionPaint
-            } else {
-                if (isPressed) keyPressedPaint else keyBackgroundPaint
-            }
-
-            canvas.drawRoundRect(key.bounds, cornerRadius, cornerRadius, bgPaint)
-            canvas.drawRoundRect(key.bounds, cornerRadius, cornerRadius, keyBorderPaint)
-
-            when (key.type) {
-                KeyType.DEL -> {
-                    drawDelIcon(canvas, key.centerX, key.centerY, density)
-                }
-                KeyType.ENTER -> {
-                    drawEnterIcon(canvas, key.centerX, key.centerY, density)
-                }
-                KeyType.SPACE_0 -> {
-                    drawPage1SpaceIcon(canvas, key.centerX, key.centerY, density)
-                }
-                else -> {
-                    val paint = when (key.primaryLabel) {
-                        "1", "2", "3", "4", "5", "6", "7", "8", "9", "0" -> page1DigitTextPaint
-                        "ABC", "!?#" -> page1SmallTextPaint
-                        else -> page1SymTextPaint
-                    }
-                    val textY = key.centerY - ((paint.descent() + paint.ascent()) / 2f)
-                    canvas.drawText(key.primaryLabel, key.centerX, textY, paint)
-                }
-            }
-        }
-    }
-
-    private fun drawPage1SpaceIcon(canvas: Canvas, cx: Float, cy: Float, density: Float) {
-        val hw = (minOf(keyAtlas.rowHeight, keyAtlas.colWidth) * 0.14f).coerceIn(6f * density, 12f * density)
-        val hh = hw * 0.5f
-        iconPath.reset()
-        iconPath.moveTo(cx - hw, cy - hh)
-        iconPath.lineTo(cx - hw, cy + hh)
-        iconPath.lineTo(cx + hw, cy + hh)
-        iconPath.lineTo(cx + hw, cy - hh)
-        canvas.drawPath(iconPath, iconPaint)
-    }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         return gestureTracker.onTouchEvent(event) { touchX ->

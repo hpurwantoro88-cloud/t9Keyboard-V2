@@ -57,8 +57,10 @@ class TouchGestureTracker(
     var spaceScrubHoldDelayMs: Long = 150L
     var spaceScrubAspectRatio: Float = 1.3f
 
-    var scrubStepsDispatched: Int = 0
-        private set
+    val spaceScrubTracker = SpaceScrubTracker()
+
+    val scrubStepsDispatched: Int
+        get() = spaceScrubTracker.scrubStepsDispatched
 
     val touchSlopPx: Float
         get() = if (keyAtlas.density > 0f) 10f * keyAtlas.density else TOUCH_SLOP_PX
@@ -86,8 +88,8 @@ class TouchGestureTracker(
     private var activeKey: KeyInfo? = null
     private var longPressTriggered = false
     private var flickTriggered = false
-    private var isScrubbing = false
-    private var scrubAccumulator = 0f
+    val isScrubbing: Boolean
+        get() = spaceScrubTracker.isScrubbing
 
     // Strip dragging state
     var stripScrollOffset = 0f
@@ -184,9 +186,7 @@ class TouchGestureTracker(
                 touchDownTime = now
                 longPressTriggered = false
                 flickTriggered = false
-                isScrubbing = false
-                scrubAccumulator = 0f
-                scrubStepsDispatched = 0
+                spaceScrubTracker.reset()
 
                 if (keyAtlas.currentPage == KeyboardPage.PAGE_3_EMOJI) {
                     isEmojiPageTouch = true
@@ -285,9 +285,7 @@ class TouchGestureTracker(
                 touchDownTime = now
                 longPressTriggered = false
                 flickTriggered = false
-                isScrubbing = false
-                scrubAccumulator = 0f
-                scrubStepsDispatched = 0
+                spaceScrubTracker.reset()
 
                 if (py < keyAtlas.stripHeight && keyAtlas.currentPage != KeyboardPage.PAGE_1_NUM_SYM) {
                     isCandidateStripTouch = true
@@ -404,29 +402,22 @@ class TouchGestureTracker(
                     val key = activeKey
                     if (key != null && key.type == KeyType.SPACE_0) {
                         // Spacebar Cursor Scrubbing (Trackpad Mode)
-                        if (!isScrubbing) {
-                            val absDx = Math.abs(dx)
-                            val absDy = Math.abs(dy)
-                            val isHorizontal = absDx > absDy * spaceScrubAspectRatio
-                            val holdSatisfied = !spaceScrubRequireHold || (elapsed >= spaceScrubHoldDelayMs)
-
-                            if (isHorizontal && holdSatisfied && absDx >= spaceScrubActivationPx) {
-                                isScrubbing = true
+                        spaceScrubTracker.onMove(
+                            dx = dx,
+                            dy = dy,
+                            elapsed = elapsed,
+                            aspectRatio = spaceScrubAspectRatio,
+                            requireHold = spaceScrubRequireHold,
+                            holdDelayMs = spaceScrubHoldDelayMs,
+                            activationDistancePx = spaceScrubActivationPx,
+                            stepPx = scrubStepPx,
+                            onScrubStart = {
                                 actualHandler.removeCallbacks(longPressRunnable)
-                                scrubAccumulator = if (dx > 0) spaceScrubActivationPx else -spaceScrubActivationPx
-                                val initialStep = if (dx > 0) 1 else -1
-                                scrubStepsDispatched += 1
-                                listener.onSpaceScrub(initialStep)
-                            }
-                        } else {
-                            val scrubDelta = dx - scrubAccumulator
-                            if (Math.abs(scrubDelta) >= scrubStepPx) {
-                                val steps = (scrubDelta / scrubStepPx).toInt()
-                                scrubAccumulator += steps * scrubStepPx
-                                scrubStepsDispatched += Math.abs(steps)
+                            },
+                            onStep = { steps ->
                                 listener.onSpaceScrub(steps)
                             }
-                        }
+                        )
                     } else if (distSq >= touchSlopPx * touchSlopPx) {
                         // Moved beyond touch slop: cancel long press
                         actualHandler.removeCallbacks(longPressRunnable)
@@ -603,8 +594,7 @@ class TouchGestureTracker(
                 activePointerId = MotionEvent.INVALID_POINTER_ID
                 longPressTriggered = false
                 flickTriggered = false
-                isScrubbing = false
-                scrubStepsDispatched = 0
+                spaceScrubTracker.reset()
                 return true
             }
 
@@ -635,8 +625,7 @@ class TouchGestureTracker(
         activePointerId = MotionEvent.INVALID_POINTER_ID
         longPressTriggered = false
         flickTriggered = false
-        isScrubbing = false
-        scrubStepsDispatched = 0
+        spaceScrubTracker.reset()
     }
 
     fun isFlickSupported(key: KeyInfo, direction: FlickDirection): Boolean {
