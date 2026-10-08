@@ -28,20 +28,7 @@ open class T9KeyboardView @JvmOverloads constructor(
     val keyAtlas = KeyAtlas()
     val emojiAtlas: EmojiAtlas get() = keyAtlas.emojiAtlas
     val gestureTracker = TouchGestureTracker(keyAtlas, this)
-
-    private val vibrator: Vibrator? by lazy {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vm?.defaultVibrator ?: (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)
-            } else {
-                @Suppress("DEPRECATION")
-                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            }
-        } catch (_: Exception) {
-            null
-        }
-    }
+    val feedbackManager = KeyboardFeedbackManager(context) { settingsObserver }
 
     // Pre-allocated Paints (Zero allocations in onDraw)
     private val backgroundPaint = Paint().apply {
@@ -1002,44 +989,7 @@ open class T9KeyboardView @JvmOverloads constructor(
     }
 
     open fun playClickFeedback() {
-        val audioEnabled = settingsObserver?.isAudioEnabled() ?: true
-        if (audioEnabled) {
-            val volume = settingsObserver?.getAudioVolume() ?: 0.6f
-            val style = settingsObserver?.getAudioStyle() ?: 0
-            if (volume > 0f) {
-                if (NativeEngineBridge.isNativeLoaded) {
-                    NativeEngineBridge.playClick(style, volume)
-                } else {
-                    try {
-                        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                        audioManager?.playSoundEffect(AudioManager.FX_KEY_CLICK, volume)
-                    } catch (_: Exception) {}
-                }
-            }
-        }
-
-        val hapticEnabled = settingsObserver?.isHapticEnabled() ?: true
-        if (hapticEnabled) {
-            val intensity = settingsObserver?.getVibrationIntensity() ?: 25L
-            if (intensity > 0L) {
-                try {
-                    val vib = vibrator
-                    if (vib != null && vib.hasVibrator()) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            vib.vibrate(
-                                VibrationEffect.createOneShot(
-                                    intensity.coerceIn(1L, 100L),
-                                    VibrationEffect.DEFAULT_AMPLITUDE
-                                )
-                            )
-                        } else {
-                            @Suppress("DEPRECATION")
-                            vib.vibrate(intensity.coerceIn(1L, 100L))
-                        }
-                    }
-                } catch (_: Exception) {}
-            }
-        }
+        feedbackManager.playClickFeedback()
     }
 
     // TouchGestureListener callbacks
@@ -1172,5 +1122,19 @@ open class T9KeyboardView @JvmOverloads constructor(
         this.activeEmojiGridIndex = gridIndex
         this.activeEmojiControlIndex = controlIndex
         invalidate()
+    }
+
+    fun cancelAllGestures() {
+        gestureTracker.cancelAllGestures()
+        activeKeyId = null
+        activeEmojiTabIndex = null
+        activeEmojiGridIndex = null
+        activeEmojiControlIndex = null
+        invalidate()
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        cancelAllGestures()
     }
 }

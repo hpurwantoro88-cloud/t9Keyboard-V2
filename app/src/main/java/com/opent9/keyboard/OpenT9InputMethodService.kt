@@ -12,15 +12,15 @@ import android.text.TextUtils
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
+import android.view.Window
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.widget.Toast
 import android.app.AlertDialog
 import com.opent9.keyboard.jni.NativeEngineBridge
-import com.opent9.keyboard.prediction.EnglishOrthography
-import com.opent9.keyboard.prediction.IndonesianOrthography
-import com.opent9.keyboard.prediction.SuggestionGuard
+import com.opent9.keyboard.lexicon.LexiconLoader
+import com.opent9.keyboard.prediction.*
 import com.opent9.keyboard.settings.SettingsActivity
 import com.opent9.keyboard.settings.SettingsObserver
 import com.opent9.keyboard.ui.*
@@ -48,20 +48,13 @@ class OpenT9InputMethodService : InputMethodService() {
     private val currentComposingDigits = ArrayList<Int>(32)
     private val currentComposingStrokes = ArrayList<ComposingStroke>(32)
     private var hasActiveComposing = false
+    private var isMultiTapActive = false
     private var isIncognito = false
     private var isPasswordMode = false
     private var ignoreSelectionUpdateCount = 0
     private val multiTapWordBuffer = StringBuilder(64)
     private val suggestionGuard = SuggestionGuard()
     private var activeCandidates: List<String> = emptyList()
-
-    data class WordCorrectionContext(
-        val originalWord: String,
-        val isSelection: Boolean,
-        val beforeLength: Int = 0,
-        val afterLength: Int = 0
-    )
-
     private var activeWordCorrectionContext: WordCorrectionContext? = null
     private var isBackspaceAction = false
     private var lastSpaceTapTime = 0L
@@ -94,59 +87,17 @@ class OpenT9InputMethodService : InputMethodService() {
         } catch (_: Exception) {}
 
         // Load static binary DAWGs directly into Linux page cache via mmap
-        loadLexicons()
+        val lexiconLoader = LexiconLoader(assets, filesDir)
+        lexiconLoader.loadLexicons(settingsObserver.getStartupLanguage())
     }
 
-    private fun loadLexicons() {
-        loadLexiconForLanguage("EN", "dictionaries/en_lexicon.dawg")
-        loadLexiconForLanguage("ID", "dictionaries/id_lexicon.dawg")
-
-        val startupLang = settingsObserver.getStartupLanguage()
-        NativeEngineBridge.switchLanguage(startupLang)
-    }
-
-    private fun loadLexiconForLanguage(langCode: String, assetPath: String) {
-        var loaded = false
-        try {
-            assets.openFd(assetPath).use { afd ->
-                loaded = NativeEngineBridge.loadLexiconFd(
-                    langCode,
-                    afd.parcelFileDescriptor.fd,
-                    afd.startOffset,
-                    afd.length
-                )
-            }
-        } catch (e: Exception) {
-            Log.w("OpenT9", "Direct asset openFd failed for $assetPath: ${e.message}")
-        }
-
-        if (!loaded) {
-            try {
-                val outFile = File(filesDir, assetPath.substringAfterLast('/'))
-                if (!outFile.exists() || outFile.length() == 0L) {
-                    outFile.parentFile?.mkdirs()
-                    assets.open(assetPath).use { input ->
-                        outFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                }
-                ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
-                    loaded = NativeEngineBridge.loadLexiconFd(
-                        langCode,
-                        pfd.fd,
-                        0L,
-                        outFile.length()
-                    )
-                }
-                Log.i("OpenT9", "Loaded $langCode lexicon via fallback file ($outFile): $loaded")
-            } catch (e: Exception) {
-                Log.e("OpenT9", "Failed to load $langCode lexicon via fallback: ${e.message}", e)
-            }
-        }
+    override fun onConfigureWindow(win: Window, isFullscreen: Boolean, isCandidatesOnly: Boolean) {
+        super.onConfigureWindow(win, isFullscreen, isCandidatesOnly)
+        win.addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
     }
 
     override fun onCreateInputView(): View {
+        window?.window?.addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
         keyboardView = T9KeyboardView(this)
         keyboardView.settingsObserver = settingsObserver
         pageController = PageController(keyboardView.keyAtlas)
@@ -369,25 +320,75 @@ class OpenT9InputMethodService : InputMethodService() {
         keyboardView.setShiftState(shiftController.currentMode.stateValue)
     }
 
-    override fun onFinishInputView(finishingInput: Boolean) {
-        super.onFinishInputView(finishingInput)
-        if (hasActiveComposing) {
-            commitActiveCandidate(addSpace = false)
-        }
-        resetComposingState()
-        if (::keyboardView.isInitialized) {
-            keyboardView.updateCandidates(emptyList())
+    override fun onWindowShown() {
+        super.onWindowShown()
+        if (settingsObserver.isAudioEnabled()) {
+            NativeEngineBridge.startAudio()
         }
     }
 
-    override fun onFinishInput() {
-        super.onFinishInput()
+    override fun onWindowHidden() {
+        super.onWindowHidden()
+        NativeEngineBridge.stopAudio()
+        if (::keyboardView.isInitialized) {
+            keyboardView.cancelAllGestures()
+        }
+    }
+
+    override fun onFinishInputView(finishingInput: Boolean) {
         if (hasActiveComposing) {
-            commitActiveCandidate(addSpace = false)
+            finalizeComposingOnFinish(currentInputConnection)
+        } else if (isMultiTapActive) {
+            commitMultiTapActive()
+        }
+        super.onFinishInputView(finishingInput)
+        NativeEngineBridge.stopAudio()
+        if (::keyboardView.isInitialized) {
+            keyboardView.cancelAllGestures()
+            keyboardView.updateCandidates(emptyList())
         }
         resetComposingState()
+    }
+
+    override fun onFinishInput() {
+        if (hasActiveComposing) {
+            finalizeComposingOnFinish(currentInputConnection)
+        } else if (isMultiTapActive) {
+            commitMultiTapActive()
+        }
+        super.onFinishInput()
+        NativeEngineBridge.stopAudio()
         if (::keyboardView.isInitialized) {
+            keyboardView.cancelAllGestures()
             keyboardView.updateCandidates(emptyList())
+        }
+        resetComposingState()
+    }
+
+    private fun finalizeComposingOnFinish(ic: InputConnection?) {
+        val word = if (activeCandidates.isNotEmpty()) {
+            applyShiftFormatting(activeCandidates[0])
+        } else if (currentComposingDigits.isNotEmpty()) {
+            val lang = NativeEngineBridge.getActiveLanguage()
+            val fallback = suggestionGuard.projectWordFromDigits(currentComposingDigits, alt = false, lang = lang)
+            applyShiftFormatting(fallback)
+        } else {
+            ""
+        }
+
+        ic?.finishComposingText()
+        deleteController.clearCommitHistory()
+
+        if (!isIncognito && word.isNotEmpty() && !word.all { it.isDigit() }) {
+            val canonicalWord = EnglishOrthography.toCanonical(word)
+            if (!NativeEngineBridge.isWordDeleted(canonicalWord.lowercase())) {
+                NativeEngineBridge.recordUsage(canonicalWord.lowercase(), System.currentTimeMillis() / 1000L)
+            }
+        }
+
+        shiftController.onCharacterCommitted()
+        if (::keyboardView.isInitialized) {
+            keyboardView.setShiftState(shiftController.currentMode.stateValue)
         }
     }
 
@@ -419,7 +420,7 @@ class OpenT9InputMethodService : InputMethodService() {
         if (isBackspaceAction) {
             isBackspaceAction = false
             clearWordCorrection()
-            if (!hasActiveComposing && currentComposingDigits.isEmpty()) {
+            if (!hasActiveComposing && currentComposingDigits.isEmpty() && !isMultiTapActive) {
                 updateAutoCaps(clearManualOverride = cursorMoved)
             }
             lastSelectionStart = newSelStart
@@ -442,14 +443,19 @@ class OpenT9InputMethodService : InputMethodService() {
             if (isUserCursorMove) {
                 finalizeComposingOnCursorMove(currentInputConnection)
             }
-        } else if (::keyboardView.isInitialized && !keyboardView.isT9Mode && multiTapWordBuffer.isNotEmpty()) {
-            if (newSelStart < oldSelStart || kotlin.math.abs(newSelStart - oldSelStart) > 1 || newSelStart != newSelEnd) {
+        } else if (::keyboardView.isInitialized && !keyboardView.isT9Mode && (isMultiTapActive || multiTapWordBuffer.isNotEmpty())) {
+            val isUserCursorMove = if (candidatesStart >= 0 && candidatesEnd >= 0) {
+                newSelStart != candidatesEnd || newSelEnd != candidatesEnd
+            } else {
+                newSelStart < oldSelStart || kotlin.math.abs(newSelStart - oldSelStart) > 1 || newSelStart != newSelEnd
+            }
+            if (isUserCursorMove) {
                 commitMultiTapActive()
                 flushMultiTapWord()
             }
         }
 
-        if (!hasActiveComposing && currentComposingDigits.isEmpty()) {
+        if (!hasActiveComposing && currentComposingDigits.isEmpty() && !isMultiTapActive) {
             updateAutoCaps(clearManualOverride = cursorMoved)
 
             if (!isPasswordMode) {
@@ -580,6 +586,15 @@ class OpenT9InputMethodService : InputMethodService() {
                 if (activeWordCorrectionContext != null) {
                     clearWordCorrection()
                     deleteController.deleteSingleOrSurrogate(ic)
+                    updateAutoCaps(clearManualOverride = true)
+                    return
+                }
+                if (isMultiTapActive) {
+                    mainHandler.removeCallbacks(multiTapTimeoutRunnable)
+                    NativeEngineBridge.multiTapReset()
+                    isMultiTapActive = false
+                    ic.setComposingText("", 0)
+                    ic.finishComposingText()
                     updateAutoCaps(clearManualOverride = true)
                     return
                 }
@@ -810,6 +825,7 @@ class OpenT9InputMethodService : InputMethodService() {
 
     private fun handleMultiTap(digit: Int, ic: InputConnection) {
         mainHandler.removeCallbacks(multiTapTimeoutRunnable)
+        isMultiTapActive = true
         val now = System.currentTimeMillis()
         val res = NativeEngineBridge.handleMultiTapPress(digit, now, shiftController.currentMode.stateValue)
 
@@ -832,6 +848,7 @@ class OpenT9InputMethodService : InputMethodService() {
 
     private fun commitMultiTapActive() {
         mainHandler.removeCallbacks(multiTapTimeoutRunnable)
+        isMultiTapActive = false
         val ic = currentInputConnection ?: return
         val committed = NativeEngineBridge.multiTapCommit()
         if (committed != 0.toChar()) {
@@ -978,7 +995,7 @@ class OpenT9InputMethodService : InputMethodService() {
             val digitsKey = if (digitsSnapshot.isNotEmpty()) {
                 digitsSnapshot.joinToString("")
             } else {
-                wordToDigits(canonicalWord).joinToString("")
+                WordCorrectionHelper.wordToDigits(canonicalWord).joinToString("")
             }
             if (digitsKey.isNotEmpty() && canonicalWord.isNotEmpty()) {
                 val lang = NativeEngineBridge.getActiveLanguage()
@@ -1200,6 +1217,7 @@ class OpenT9InputMethodService : InputMethodService() {
         mainHandler.removeCallbacks(multiTapTimeoutRunnable)
         NativeEngineBridge.resetT9()
         NativeEngineBridge.multiTapReset()
+        isMultiTapActive = false
         currentComposingDigits.clear()
         currentComposingStrokes.clear()
         multiTapWordBuffer.clear()
@@ -1317,8 +1335,8 @@ class OpenT9InputMethodService : InputMethodService() {
         val textBefore = ic.getTextBeforeCursor(48, 0)?.toString() ?: ""
         val textAfter = ic.getTextAfterCursor(48, 0)?.toString() ?: ""
 
-        val beforePart = extractWordPartBefore(textBefore)
-        val afterPart = extractWordPartAfter(textAfter)
+        val beforePart = WordCorrectionHelper.extractWordPartBefore(textBefore)
+        val afterPart = WordCorrectionHelper.extractWordPartAfter(textAfter)
         val fullWord = beforePart + afterPart
 
         if (fullWord.isNotEmpty() && fullWord.length <= 32 && fullWord.any { it.isLetter() }) {
@@ -1342,26 +1360,8 @@ class OpenT9InputMethodService : InputMethodService() {
         clearWordCorrection()
     }
 
-    private fun isWordChar(c: Char): Boolean = c.isLetterOrDigit() || c == '\''
-
-    private fun extractWordPartBefore(text: String): String {
-        var idx = text.length - 1
-        while (idx >= 0 && isWordChar(text[idx])) {
-            idx--
-        }
-        return text.substring(idx + 1)
-    }
-
-    private fun extractWordPartAfter(text: String): String {
-        var idx = 0
-        while (idx < text.length && isWordChar(text[idx])) {
-            idx++
-        }
-        return text.substring(0, idx)
-    }
-
     private fun querySuggestionsForWord(word: String): List<String> {
-        val digits = wordToDigits(word)
+        val digits = WordCorrectionHelper.wordToDigits(word)
         if (digits.isEmpty()) return emptyList()
 
         NativeEngineBridge.resetT9()
@@ -1403,33 +1403,7 @@ class OpenT9InputMethodService : InputMethodService() {
             candidates
         }
 
-        return sortedCandidates.map { matchCase(word, it) }
-    }
-
-    private fun wordToDigits(word: String): List<Int> {
-        val digits = ArrayList<Int>(word.length)
-        for (ch in word.lowercase()) {
-            val d = when (ch) {
-                'a', 'b', 'c' -> 2
-                'd', 'e', 'f' -> 3
-                'g', 'h', 'i' -> 4
-                'j', 'k', 'l' -> 5
-                'm', 'n', 'o' -> 6
-                'p', 'q', 'r', 's' -> 7
-                't', 'u', 'v' -> 8
-                'w', 'x', 'y', 'z' -> 9
-                else -> continue
-            }
-            digits.add(d)
-        }
-        return digits
-    }
-
-    private fun matchCase(source: String, target: String): String {
-        if (source.isEmpty() || target.isEmpty()) return target
-        if (source.all { it.isUpperCase() }) return target.uppercase()
-        if (source[0].isUpperCase()) return target.replaceFirstChar { it.uppercase() }
-        return target.lowercase()
+        return sortedCandidates.map { WordCorrectionHelper.matchCase(word, it) }
     }
 
     private fun commitWordCorrectionCandidate(index: Int) {
@@ -1465,7 +1439,7 @@ class OpenT9InputMethodService : InputMethodService() {
             if (!NativeEngineBridge.isWordDeleted(canonicalWord)) {
                 NativeEngineBridge.recordUsage(canonicalWord, System.currentTimeMillis() / 1000L)
             }
-            val digitsKey = wordToDigits(canonicalWord).joinToString("")
+            val digitsKey = WordCorrectionHelper.wordToDigits(canonicalWord).joinToString("")
             if (digitsKey.isNotEmpty() && canonicalWord.isNotEmpty()) {
                 val lang = NativeEngineBridge.getActiveLanguage()
                 val langKey = "${lang}_$digitsKey"
@@ -1516,6 +1490,7 @@ class OpenT9InputMethodService : InputMethodService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        NativeEngineBridge.stopAudio()
         settingsObserver.stop()
     }
 }

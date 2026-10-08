@@ -128,8 +128,14 @@ class PageController(private val keyAtlas: KeyAtlas) {
             14 -> { // [ 0 ␣ SPACE ]
                 when (direction) {
                     FlickDirection.DOWN -> ic.commitText("\u00A0", 1) // Non-breaking space
-                    FlickDirection.LEFT -> ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT))
-                    FlickDirection.RIGHT -> ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
+                    FlickDirection.LEFT -> {
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT))
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_LEFT))
+                    }
+                    FlickDirection.RIGHT -> {
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT))
+                    }
                     else -> {}
                 }
             }

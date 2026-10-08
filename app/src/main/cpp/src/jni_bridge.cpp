@@ -43,6 +43,23 @@ Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeSyncAudioConfig(
     g_config.audio_enabled = enabled ? 1 : 0;
     g_config.audio_volume = volume;
     g_config.audio_style = style;
+    if (!enabled) {
+        g_audioEngine.stop();
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeStartAudio(
+    JNIEnv* env, jobject thiz) {
+    if (g_config.audio_enabled) {
+        g_audioEngine.start();
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeStopAudio(
+    JNIEnv* env, jobject thiz) {
+    g_audioEngine.stop();
 }
 
 JNIEXPORT jboolean JNICALL
@@ -53,7 +70,6 @@ Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeInit(
     LOGI("nativeInit: dbPath=%s, ok=%d", path ? path : "null", ok ? 1 : 0);
     env->ReleaseStringUTFChars(dbPath, path);
     g_dawgEngine.setDynamicStore(&g_dynamicStore);
-    g_audioEngine.start();
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 

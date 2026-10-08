@@ -573,4 +573,146 @@ class SystemKeysAndMultiTapTest {
         assertNotNull(nextIntent)
         assertEquals(com.opent9.keyboard.settings.SettingsActivity::class.java.name, nextIntent.component?.className)
     }
+
+    @Test
+    fun testSpaceFlickSendsPairedKeyEvents() {
+        val atlas = KeyAtlas()
+        atlas.computeGeometry(1080f, 780f, 2.75f)
+        val controller = PageController(atlas)
+        val ic = mockk<InputConnection>(relaxed = true)
+        val capturedEvents = mutableListOf<KeyEvent>()
+        every { ic.sendKeyEvent(capture(capturedEvents)) } returns true
+
+        // Flick Left on Key 14
+        controller.handleKeyFlick(
+            key = atlas.keys[14],
+            direction = FlickDirection.LEFT,
+            ic = ic,
+            onSwitchLanguage = {},
+            onClearField = {},
+            onDeletePrecedingWord = {},
+            onForceSubmit = {},
+            onOpenSettings = {},
+            onSwitchPage = {}
+        )
+
+        assertEquals(2, capturedEvents.size)
+        assertEquals(KeyEvent.ACTION_DOWN, capturedEvents[0].action)
+        assertEquals(KeyEvent.KEYCODE_DPAD_LEFT, capturedEvents[0].keyCode)
+        assertEquals(KeyEvent.ACTION_UP, capturedEvents[1].action)
+        assertEquals(KeyEvent.KEYCODE_DPAD_LEFT, capturedEvents[1].keyCode)
+
+        capturedEvents.clear()
+
+        // Flick Right on Key 14
+        controller.handleKeyFlick(
+            key = atlas.keys[14],
+            direction = FlickDirection.RIGHT,
+            ic = ic,
+            onSwitchLanguage = {},
+            onClearField = {},
+            onDeletePrecedingWord = {},
+            onForceSubmit = {},
+            onOpenSettings = {},
+            onSwitchPage = {}
+        )
+
+        assertEquals(2, capturedEvents.size)
+        assertEquals(KeyEvent.ACTION_DOWN, capturedEvents[0].action)
+        assertEquals(KeyEvent.KEYCODE_DPAD_RIGHT, capturedEvents[0].keyCode)
+        assertEquals(KeyEvent.ACTION_UP, capturedEvents[1].action)
+        assertEquals(KeyEvent.KEYCODE_DPAD_RIGHT, capturedEvents[1].keyCode)
+    }
+
+    @Test
+    fun testMultiTapWithShiftTitlecaseSecondCharIsUppercaseB() {
+        val controller = org.robolectric.Robolectric.buildService(OpenT9InputMethodService::class.java)
+        val service = controller.create().get()
+
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+        val info = EditorInfo()
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+
+        val inputView = service.onCreateInputView() as T9KeyboardView
+        service.onStartInputView(info, false)
+        inputView.setT9Mode(false) // Multi-tap mode
+
+        val shiftKey = inputView.keyAtlas.keys.first { it.type == KeyType.SHIFT }
+        val key2 = inputView.keyAtlas.keys.first { it.type == KeyType.DIGIT_T9 && it.digitValue == 2 }
+
+        // Enable Shift (Titlecase)
+        inputView.onKeyTapAction?.invoke(shiftKey, shiftKey.centerX, shiftKey.centerY)
+
+        // 1st tap on key 2 -> produces uppercase 'A'
+        inputView.onKeyTapAction?.invoke(key2, key2.centerX, key2.centerY)
+        assertEquals("A", editText.text.toString())
+
+        // 2nd tap on key 2 -> MUST produce uppercase 'B' (not 'b')!
+        inputView.onKeyTapAction?.invoke(key2, key2.centerX, key2.centerY)
+        assertEquals("B", editText.text.toString())
+
+        // 3rd tap on key 2 -> MUST produce uppercase 'C'
+        inputView.onKeyTapAction?.invoke(key2, key2.centerX, key2.centerY)
+        assertEquals("C", editText.text.toString())
+
+        // Let timeout elapse to commit
+        org.robolectric.shadows.ShadowLooper.runUiThreadTasksIncludingDelayedTasks()
+        assertEquals("C", editText.text.toString())
+
+        // Next character typed should now be lowercase
+        val key3 = inputView.keyAtlas.keys.first { it.type == KeyType.DIGIT_T9 && it.digitValue == 3 }
+        inputView.onKeyTapAction?.invoke(key3, key3.centerX, key3.centerY)
+        assertEquals("Cd", editText.text.toString())
+    }
+
+    @Test
+    fun testNoDoubleCommitOnMinimizeOrFinishInputView() {
+        val controller = org.robolectric.Robolectric.buildService(OpenT9InputMethodService::class.java)
+        val service = controller.create().get()
+
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+        val info = EditorInfo()
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+
+        val inputView = service.onCreateInputView() as T9KeyboardView
+        service.onStartInputView(info, false)
+        inputView.setT9Mode(true) // T9 mode
+
+        // Type 'home' (4, 6, 6, 3) in T9
+        val k4 = inputView.keyAtlas.keys.first { it.type == KeyType.DIGIT_T9 && it.digitValue == 4 }
+        val k6 = inputView.keyAtlas.keys.first { it.type == KeyType.DIGIT_T9 && it.digitValue == 6 }
+        val k3 = inputView.keyAtlas.keys.first { it.type == KeyType.DIGIT_T9 && it.digitValue == 3 }
+
+        inputView.onKeyTapAction?.invoke(k4, k4.centerX, k4.centerY)
+        inputView.onKeyTapAction?.invoke(k6, k6.centerX, k6.centerY)
+        inputView.onKeyTapAction?.invoke(k6, k6.centerX, k6.centerY)
+        inputView.onKeyTapAction?.invoke(k3, k3.centerX, k3.centerY)
+
+        val textDuringComposing = editText.text.toString()
+        assertTrue("Text should not be empty during composing", textDuringComposing.isNotEmpty())
+
+        // Simulate minimize / finishInputView
+        service.onFinishInputView(false)
+
+        // Text must NOT be double committed (must equal textDuringComposing, not duplicated)
+        assertEquals(textDuringComposing, editText.text.toString())
+
+        // Simulate returning to the app
+        service.onStartInputView(info, true)
+        assertEquals(textDuringComposing, editText.text.toString())
+    }
 }

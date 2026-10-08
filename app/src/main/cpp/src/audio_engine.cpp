@@ -47,7 +47,12 @@ void AudioEngine::generateWaveforms() {
 }
 
 bool AudioEngine::start() {
-    if (stream) return true;
+    std::lock_guard<std::mutex> lock(streamMutex);
+    if (stream && stream->getState() == oboe::StreamState::Started) return true;
+    if (stream) {
+        stream->close();
+        stream.reset();
+    }
 
     oboe::AudioStreamBuilder builder;
     builder.setDirection(oboe::Direction::Output);
@@ -75,6 +80,7 @@ bool AudioEngine::start() {
 }
 
 void AudioEngine::stop() {
+    std::lock_guard<std::mutex> lock(streamMutex);
     if (stream) {
         stream->stop();
         stream->close();

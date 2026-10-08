@@ -49,6 +49,8 @@ object NativeEngineBridge {
 
     external fun nativePlayClick(style: Int, volume: Float)
     external fun nativeSyncAudioConfig(enabled: Boolean, volume: Float, style: Int)
+    external fun nativeStartAudio()
+    external fun nativeStopAudio()
     external fun nativeRecordUsage(word: String, nowSec: Long)
     external fun nativeGetWordUsageCount(word: String): Int
     external fun nativeRemoveWord(word: String): Boolean
@@ -78,6 +80,16 @@ object NativeEngineBridge {
     fun syncAudioConfig(enabled: Boolean, volume: Float, style: Int) {
         if (!isNativeLoaded) return
         nativeSyncAudioConfig(enabled, volume, style)
+    }
+
+    fun startAudio() {
+        if (!isNativeLoaded) return
+        nativeStartAudio()
+    }
+
+    fun stopAudio() {
+        if (!isNativeLoaded) return
+        nativeStopAudio()
     }
 
     fun loadLexiconFd(langCode: String, fd: Int, offset: Long, length: Long): Boolean {
@@ -226,11 +238,15 @@ object NativeEngineBridge {
             var committedPrev = false
             var committedChar = 0.toChar()
 
+            var effectiveShift = shiftState
             if (fallbackActiveDigit != -1 && fallbackActiveDigit != digit) {
                 committedPrev = true
                 committedChar = fallbackCurrentChar
                 fallbackActiveDigit = digit
                 fallbackCycleIndex = 0
+                if (effectiveShift == 1) {
+                    effectiveShift = 0
+                }
             } else if (fallbackActiveDigit == digit) {
                 fallbackCycleIndex = (fallbackCycleIndex + 1) % seq.length
             } else {
@@ -240,7 +256,7 @@ object NativeEngineBridge {
 
             fallbackLastPressTime = timestampMs
             val baseChar = seq[fallbackCycleIndex]
-            fallbackCurrentChar = if ((shiftState == 1 || shiftState == 2) && baseChar.isLowerCase()) {
+            fallbackCurrentChar = if ((effectiveShift == 1 || effectiveShift == 2) && baseChar.isLowerCase()) {
                 baseChar.uppercaseChar()
             } else {
                 baseChar

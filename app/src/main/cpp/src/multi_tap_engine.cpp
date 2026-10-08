@@ -49,6 +49,9 @@ char MultiTapEngine::onKeyPress(int digit, uint64_t timestampMs, ShiftStateEnum 
         }
         activeDigit = digit;
         cycleIndex = 0;
+        if (shift == ShiftStateEnum::TITLECASE) {
+            shift = ShiftStateEnum::LOWERCASE;
+        }
     } else if (activeDigit == digit) {
         // Same key pressed: advance cycle
         cycleIndex = (cycleIndex + 1) % seqLen;

@@ -609,30 +609,34 @@ class TouchGestureTracker(
             }
 
             MotionEvent.ACTION_CANCEL -> {
-                actualHandler.removeCallbacks(longPressRunnable)
-                actualHandler.removeCallbacks(repeatDeleteRunnable)
-                actualHandler.removeCallbacks(emojiRepeatDeleteRunnable)
-                actualHandler.removeCallbacks(candidateLongPressRunnable)
-                activeCandidateIndex = null
-                isEmojiPageTouch = false
-                isEmojiScrolling = false
-                activeEmojiTabIndex = null
-                activeEmojiGridIndex = null
-                activeEmojiControlIndex = null
-                listener.onEmojiTouchStateChanged(null, null, null)
-                isPage1ColumnTouch = false
-                activeOperatorIndex = null
-                listener.onTouchStateChanged(null)
-                activeKey = null
-                activePointerId = MotionEvent.INVALID_POINTER_ID
-                longPressTriggered = false
-                flickTriggered = false
-                isScrubbing = false
-                scrubStepsDispatched = 0
+                cancelAllGestures()
                 return true
             }
         }
         return false
+    }
+
+    fun cancelAllGestures() {
+        actualHandler.removeCallbacks(longPressRunnable)
+        actualHandler.removeCallbacks(repeatDeleteRunnable)
+        actualHandler.removeCallbacks(emojiRepeatDeleteRunnable)
+        actualHandler.removeCallbacks(candidateLongPressRunnable)
+        activeCandidateIndex = null
+        isEmojiPageTouch = false
+        isEmojiScrolling = false
+        activeEmojiTabIndex = null
+        activeEmojiGridIndex = null
+        activeEmojiControlIndex = null
+        listener.onEmojiTouchStateChanged(null, null, null)
+        isPage1ColumnTouch = false
+        activeOperatorIndex = null
+        listener.onTouchStateChanged(null)
+        activeKey = null
+        activePointerId = MotionEvent.INVALID_POINTER_ID
+        longPressTriggered = false
+        flickTriggered = false
+        isScrubbing = false
+        scrubStepsDispatched = 0
     }
 
     fun isFlickSupported(key: KeyInfo, direction: FlickDirection): Boolean {

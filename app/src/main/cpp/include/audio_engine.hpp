@@ -3,6 +3,7 @@
 #include <memory>
 #include <atomic>
 #include <vector>
+#include <mutex>
 #include <oboe/Oboe.h>
 
 enum class SoundStyle : uint32_t {
@@ -27,6 +28,7 @@ public:
         int32_t numFrames) override;
 
 private:
+    std::mutex streamMutex;
     std::shared_ptr<oboe::AudioStream> stream;
     std::atomic<bool> isPlaying{false};
     std::atomic<size_t> playbackFrameIndex{0};
