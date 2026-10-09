@@ -31,134 +31,28 @@ open class T9KeyboardView @JvmOverloads constructor(
     val feedbackManager = KeyboardFeedbackManager(context) { settingsObserver }
 
     // Pre-allocated Paints (Zero allocations in onDraw)
-    private val backgroundPaint = Paint().apply {
-        color = Color.parseColor("#121214")
-        style = Paint.Style.FILL
-    }
-    private val keyBackgroundPaint = Paint().apply {
-        color = Color.parseColor("#1E1E22")
-        style = Paint.Style.FILL
-        isAntiAlias = true
-    }
-    private val keyPressedPaint = Paint().apply {
-        color = Color.parseColor("#34343C")
-        style = Paint.Style.FILL
-        isAntiAlias = true
-    }
-    private val keyBorderPaint = Paint().apply {
-        color = Color.parseColor("#28282E")
-        style = Paint.Style.STROKE
-        strokeWidth = 1.5f
-        isAntiAlias = true
-    }
-    private val primaryTextPaint = Paint().apply {
-        color = Color.parseColor("#E0E0E6")
-        isAntiAlias = true
-        textAlign = Paint.Align.CENTER
-        textSize = 42f
-    }
-    private val subTextPaint = Paint().apply {
-        color = Color.parseColor("#8E8E98")
-        isAntiAlias = true
-        textAlign = Paint.Align.CENTER
-        textSize = 24f
-    }
-    private val keyCornerSubTextPaint = Paint().apply {
-        color = Color.parseColor("#8E8E98")
-        isAntiAlias = true
-        textAlign = Paint.Align.RIGHT
-        textSize = 20f
-    }
-    private val dualSymTextPaint = Paint().apply {
-        color = Color.parseColor("#E0E0E6")
-        isAntiAlias = true
-        textAlign = Paint.Align.CENTER
-        textSize = 34f
-    }
-    private val stripBackgroundPaint = Paint().apply {
-        color = Color.parseColor("#18181C")
-        style = Paint.Style.FILL
-    }
-    private val pillPaint = Paint().apply {
-        color = Color.parseColor("#2A2A32")
-        style = Paint.Style.FILL
-        isAntiAlias = true
-    }
-    private val pillTextPaint = Paint().apply {
-        color = Color.parseColor("#00E5FF")
-        isAntiAlias = true
-        textAlign = Paint.Align.CENTER
-        textSize = 28f
-        isFakeBoldText = true
-    }
-    private val candidateTextPaint = Paint().apply {
-        color = Color.parseColor("#FFFFFF")
-        isAntiAlias = true
-        textAlign = Paint.Align.LEFT
-        textSize = 34f
-    }
-    private val candidatePrefixPaint = Paint().apply {
-        color = Color.parseColor("#00E5FF")
-        isAntiAlias = true
-        textAlign = Paint.Align.LEFT
-        textSize = 34f
-        isFakeBoldText = true
-    }
-    private val dividerPaint = Paint().apply {
-        color = Color.parseColor("#2E2E38")
-        strokeWidth = 2f
-        isAntiAlias = true
-    }
-    private val indicatorGlowPaint = Paint().apply {
-        color = Color.parseColor("#00E5FF")
-        style = Paint.Style.FILL
-        isAntiAlias = true
-    }
-    private val iconPaint = Paint().apply {
-        color = Color.parseColor("#E0E0E6")
-        style = Paint.Style.STROKE
-        strokeWidth = 4f
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-        isAntiAlias = true
-    }
-    private val iconFillPaint = Paint().apply {
-        color = Color.parseColor("#E0E0E6")
-        style = Paint.Style.FILL
-        isAntiAlias = true
-    }
-
-    // Page 1 Dedicated Paints (Matching existing font sizes: 42f digits, 32f operators, 34f symbols, 28f action buttons)
-    private val page1KeyActionPaint = Paint().apply {
-        color = Color.parseColor("#25252C")
-        style = Paint.Style.FILL
-        isAntiAlias = true
-    }
-    private val page1DigitTextPaint = Paint().apply {
-        color = Color.parseColor("#E0E0E6")
-        isAntiAlias = true
-        textAlign = Paint.Align.CENTER
-        textSize = 42f
-    }
-    private val page1OpTextPaint = Paint().apply {
-        color = Color.parseColor("#E0E0E6")
-        isAntiAlias = true
-        textAlign = Paint.Align.CENTER
-        textSize = 32f
-    }
-    private val page1SymTextPaint = Paint().apply {
-        color = Color.parseColor("#E0E0E6")
-        isAntiAlias = true
-        textAlign = Paint.Align.CENTER
-        textSize = 34f
-    }
-    private val page1SmallTextPaint = Paint().apply {
-        color = Color.parseColor("#E0E0E6")
-        isAntiAlias = true
-        textAlign = Paint.Align.CENTER
-        textSize = 28f
-        isFakeBoldText = true
-    }
+    private val backgroundPaint = KeyboardPaintFactory.createFillPaint(Color.parseColor("#121214"), antiAlias = false)
+    private val keyBackgroundPaint = KeyboardPaintFactory.createFillPaint(Color.parseColor("#1E1E22"))
+    private val keyPressedPaint = KeyboardPaintFactory.createFillPaint(Color.parseColor("#34343C"))
+    private val keyBorderPaint = KeyboardPaintFactory.createStrokePaint(1.5f, Color.parseColor("#28282E"))
+    private val primaryTextPaint = KeyboardPaintFactory.createTextPaint(42f, Paint.Align.CENTER, color = Color.parseColor("#E0E0E6"))
+    private val subTextPaint = KeyboardPaintFactory.createTextPaint(24f, Paint.Align.CENTER, color = Color.parseColor("#8E8E98"))
+    private val keyCornerSubTextPaint = KeyboardPaintFactory.createTextPaint(20f, Paint.Align.RIGHT, color = Color.parseColor("#8E8E98"))
+    private val dualSymTextPaint = KeyboardPaintFactory.createTextPaint(34f, Paint.Align.CENTER, color = Color.parseColor("#E0E0E6"))
+    private val stripBackgroundPaint = KeyboardPaintFactory.createFillPaint(Color.parseColor("#18181C"), antiAlias = false)
+    private val pillPaint = KeyboardPaintFactory.createFillPaint(Color.parseColor("#2A2A32"))
+    private val pillTextPaint = KeyboardPaintFactory.createTextPaint(28f, Paint.Align.CENTER, isBold = true, color = Color.parseColor("#00E5FF"))
+    private val candidateTextPaint = KeyboardPaintFactory.createTextPaint(34f, Paint.Align.LEFT, color = Color.parseColor("#FFFFFF"))
+    private val candidatePrefixPaint = KeyboardPaintFactory.createTextPaint(34f, Paint.Align.LEFT, isBold = true, color = Color.parseColor("#00E5FF"))
+    private val dividerPaint = KeyboardPaintFactory.createStrokePaint(2f, Color.parseColor("#2E2E38"))
+    private val indicatorGlowPaint = KeyboardPaintFactory.createFillPaint(Color.parseColor("#00E5FF"))
+    private val iconPaint = KeyboardPaintFactory.createStrokePaint(4f, Color.parseColor("#E0E0E6"), roundCap = true)
+    private val iconFillPaint = KeyboardPaintFactory.createFillPaint(Color.parseColor("#E0E0E6"))
+    private val page1KeyActionPaint = KeyboardPaintFactory.createFillPaint(Color.parseColor("#25252C"))
+    private val page1DigitTextPaint = KeyboardPaintFactory.createTextPaint(42f, Paint.Align.CENTER, color = Color.parseColor("#E0E0E6"))
+    private val page1OpTextPaint = KeyboardPaintFactory.createTextPaint(32f, Paint.Align.CENTER, color = Color.parseColor("#E0E0E6"))
+    private val page1SymTextPaint = KeyboardPaintFactory.createTextPaint(34f, Paint.Align.CENTER, color = Color.parseColor("#E0E0E6"))
+    private val page1SmallTextPaint = KeyboardPaintFactory.createTextPaint(28f, Paint.Align.CENTER, isBold = true, color = Color.parseColor("#E0E0E6"))
 
     // Dedicated page renderers (Zero allocations in onDraw)
     private val suggestionStripRenderer = SuggestionStripRenderer(
@@ -192,11 +86,17 @@ open class T9KeyboardView @JvmOverloads constructor(
         iconPaint = iconPaint,
         iconFillPaint = iconFillPaint
     )
-
-    // Pre-allocated paths & rects
-    private val scratchRect = RectF()
-    private val glowRect = RectF()
-    private val iconPath = Path()
+    private val page0KeypadRenderer = Page0KeypadRenderer(
+        keyBackgroundPaint = keyBackgroundPaint,
+        keyPressedPaint = keyPressedPaint,
+        keyBorderPaint = keyBorderPaint,
+        primaryTextPaint = primaryTextPaint,
+        keyCornerSubTextPaint = keyCornerSubTextPaint,
+        dualSymTextPaint = dualSymTextPaint,
+        indicatorGlowPaint = indicatorGlowPaint,
+        iconPaint = iconPaint,
+        iconFillPaint = iconFillPaint
+    )
 
     // Key coordinates pre-allocated arrays
     private val candidateItemLeft = FloatArray(16)
@@ -267,28 +167,31 @@ open class T9KeyboardView @JvmOverloads constructor(
         currentColors = colors
         isDarkMode = colors.isDark
 
-        backgroundPaint.color = colors.background
-        keyBackgroundPaint.color = colors.keyBackground
-        keyPressedPaint.color = colors.keyPressed
-        keyBorderPaint.color = colors.keyBorder
-        primaryTextPaint.color = colors.primaryText
-        subTextPaint.color = colors.subText
-        keyCornerSubTextPaint.color = colors.subText
-        dualSymTextPaint.color = colors.dualSymText
-        stripBackgroundPaint.color = colors.stripBackground
-        pillPaint.color = colors.pillBackground
-        pillTextPaint.color = colors.pillText
-        candidateTextPaint.color = colors.candidateText
-        candidatePrefixPaint.color = colors.candidatePrefixText
-        dividerPaint.color = colors.divider
-        indicatorGlowPaint.color = colors.indicatorGlow
-        iconPaint.color = colors.iconColor
-        iconFillPaint.color = colors.iconColor
-        page1KeyActionPaint.color = colors.page1KeyAction
-        page1DigitTextPaint.color = colors.page1DigitText
-        page1OpTextPaint.color = colors.page1OpText
-        page1SymTextPaint.color = colors.page1SymText
-        page1SmallTextPaint.color = colors.page1SmallText
+        KeyboardThemeApplier.applyThemeColors(
+            colors = colors,
+            backgroundPaint = backgroundPaint,
+            keyBackgroundPaint = keyBackgroundPaint,
+            keyPressedPaint = keyPressedPaint,
+            keyBorderPaint = keyBorderPaint,
+            primaryTextPaint = primaryTextPaint,
+            subTextPaint = subTextPaint,
+            keyCornerSubTextPaint = keyCornerSubTextPaint,
+            dualSymTextPaint = dualSymTextPaint,
+            stripBackgroundPaint = stripBackgroundPaint,
+            pillPaint = pillPaint,
+            pillTextPaint = pillTextPaint,
+            candidateTextPaint = candidateTextPaint,
+            candidatePrefixPaint = candidatePrefixPaint,
+            dividerPaint = dividerPaint,
+            indicatorGlowPaint = indicatorGlowPaint,
+            iconPaint = iconPaint,
+            iconFillPaint = iconFillPaint,
+            page1KeyActionPaint = page1KeyActionPaint,
+            page1DigitTextPaint = page1DigitTextPaint,
+            page1OpTextPaint = page1OpTextPaint,
+            page1SymTextPaint = page1SymTextPaint,
+            page1SmallTextPaint = page1SmallTextPaint
+        )
 
         invalidate()
     }
@@ -306,25 +209,12 @@ open class T9KeyboardView @JvmOverloads constructor(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val width = MeasureSpec.getSize(widthMeasureSpec)
-        val displayMetrics = resources.displayMetrics
-        val density = displayMetrics.density
-        val config = resources.configuration
-        val isLandscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
-
-        val screenHeightDp = if (density > 0f) displayMetrics.heightPixels / density else 800f
         val prefHeightDp = settingsObserver?.getKeyboardHeightDp() ?: 260
-
-        val targetHeightDp = if (isLandscape) {
-            // Constrain landscape height to 45%-50% of screen height to avoid covering the text field
-            val maxLandscapeHeightDp = if (screenHeightDp > 100f) screenHeightDp * 0.48f else 180f
-            (prefHeightDp * (maxLandscapeHeightDp / 260f)).coerceIn(140f, maxLandscapeHeightDp.coerceAtLeast(160f))
-        } else {
-            // Portrait mode: follow PRD / user preference (220dp to 320dp, default: 260dp)
-            val maxPortraitHeightDp = if (screenHeightDp > 100f) screenHeightDp * 0.45f else 320f
-            prefHeightDp.toFloat().coerceAtMost(maxPortraitHeightDp.coerceAtLeast(220f))
-        }
-
-        val targetHeight = (targetHeightDp * density).toInt()
+        val targetHeight = KeyboardDimensionCalculator.calculateTargetHeight(
+            displayMetrics = resources.displayMetrics,
+            config = resources.configuration,
+            prefHeightDp = prefHeightDp
+        )
         setMeasuredDimension(width, targetHeight)
     }
 
@@ -341,30 +231,14 @@ open class T9KeyboardView @JvmOverloads constructor(
         val displayMetrics = resources.displayMetrics
         val density = displayMetrics.density
 
-        // One-handed mode or tablet ergonomic centering
         val oneHandedMode = settingsObserver?.getOneHandedMode() ?: 0
         val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        val widthDp = if (density > 0f) w / density else 360f
-        val maxErgonomicWidthPx = 480f * density
-
-        val (offsetX, contentWidth) = when {
-            oneHandedMode == 1 -> {
-                // Left-Handed: 85% width, left-aligned
-                Pair(0f, w * 0.85f)
-            }
-            oneHandedMode == 2 -> {
-                // Right-Handed: 85% width, right-aligned
-                Pair(w * 0.15f, w * 0.85f)
-            }
-            widthDp > 600f && !isLandscape -> {
-                // Wide tablet in portrait: centered ergonomic width
-                val cWidth = minOf(w.toFloat(), maxErgonomicWidthPx)
-                Pair((w - cWidth) / 2f, cWidth)
-            }
-            else -> {
-                Pair(0f, w.toFloat())
-            }
-        }
+        val (offsetX, contentWidth) = KeyboardDimensionCalculator.calculateErgonomicOffsetAndWidth(
+            width = w,
+            density = density,
+            isLandscape = isLandscape,
+            oneHandedMode = oneHandedMode
+        )
         settingsObserver?.let { observer ->
             keyAtlas.setLayoutConfiguration(
                 colPosition = observer.get4thColumnPosition(),
@@ -393,41 +267,29 @@ open class T9KeyboardView @JvmOverloads constructor(
     }
 
     fun applyDynamicDimensions() {
-        val density = resources.displayMetrics.density
-        val fontScale = resources.configuration.fontScale
-        val scaledDensity = density * if (fontScale > 0f) fontScale else 1f
-
-        val rowHeight = keyAtlas.rowHeight
-        val stripHeight = keyAtlas.stripHeight
-        val baseRowHeight = 55f * density
-        val rowScale = if (baseRowHeight > 0f) (rowHeight / baseRowHeight).coerceIn(0.60f, 1.40f) else 1.0f
-
-        // Dynamic typography based on row and strip sizes
-        primaryTextPaint.textSize = 16.5f * density * rowScale
-        subTextPaint.textSize = 10f * density * rowScale
-        keyCornerSubTextPaint.textSize = 9.5f * density * rowScale
-        dualSymTextPaint.textSize = 13.5f * density * rowScale
-        pillTextPaint.textSize = (stripHeight * 0.28f).coerceIn(12f * density, 20f * density)
-
         val candSp = settingsObserver?.getCandidateFontSizeSp()?.toFloat() ?: 16f
-        val candSize = (candSp * scaledDensity).coerceAtMost(stripHeight * 0.52f)
-        candidateTextPaint.textSize = candSize
-        candidatePrefixPaint.textSize = candSize
-
-        // Stroke widths
-        keyBorderPaint.strokeWidth = 0.5f * density
-        dividerPaint.strokeWidth = (density * 0.67f).coerceIn(1f, 3f)
-        iconPaint.strokeWidth = (density * 1.33f).coerceIn(2.5f, 5f)
-
-        // Page 1 Dedicated Paints
-        val p1ContainerHeight = keyAtlas.page1ScrollContainerBounds.height()
-        val p1RowScale = if (p1ContainerHeight > 0f && baseRowHeight > 0f) {
-            ((p1ContainerHeight / 3f) / baseRowHeight).coerceIn(0.60f, 1.40f)
-        } else rowScale
-        page1DigitTextPaint.textSize = 16.5f * density * p1RowScale
-        page1OpTextPaint.textSize = 12.67f * density * p1RowScale
-        page1SymTextPaint.textSize = 13.5f * density * p1RowScale
-        page1SmallTextPaint.textSize = 11.33f * density * p1RowScale
+        KeyboardDimensionCalculator.applyDynamicTypography(
+            displayMetrics = resources.displayMetrics,
+            config = resources.configuration,
+            rowHeight = keyAtlas.rowHeight,
+            stripHeight = keyAtlas.stripHeight,
+            p1ContainerHeight = keyAtlas.page1ScrollContainerBounds.height(),
+            candFontSizeSp = candSp,
+            primaryTextPaint = primaryTextPaint,
+            subTextPaint = subTextPaint,
+            keyCornerSubTextPaint = keyCornerSubTextPaint,
+            dualSymTextPaint = dualSymTextPaint,
+            pillTextPaint = pillTextPaint,
+            candidateTextPaint = candidateTextPaint,
+            candidatePrefixPaint = candidatePrefixPaint,
+            keyBorderPaint = keyBorderPaint,
+            dividerPaint = dividerPaint,
+            iconPaint = iconPaint,
+            page1DigitTextPaint = page1DigitTextPaint,
+            page1OpTextPaint = page1OpTextPaint,
+            page1SymTextPaint = page1SymTextPaint,
+            page1SmallTextPaint = page1SmallTextPaint
+        )
     }
 
     fun setT9Mode(enabled: Boolean) {
@@ -469,14 +331,7 @@ open class T9KeyboardView @JvmOverloads constructor(
     var isWordCorrectionActive: Boolean = false
 
     private fun formatCandidateWord(raw: String): String {
-        if (isWordCorrectionActive) {
-            return raw
-        }
-        return when (shiftState) {
-            1 -> raw.replaceFirstChar { it.uppercase() }
-            2 -> raw.uppercase()
-            else -> if (raw == "I" || raw.startsWith("I'")) raw else raw.lowercase()
-        }
+        return CandidateMeasurementHelper.formatCandidateWord(raw, isWordCorrectionActive, shiftState)
     }
 
     val isUppercase: Boolean
@@ -487,36 +342,21 @@ open class T9KeyboardView @JvmOverloads constructor(
         }
 
     fun getDisplayLabel(key: KeyInfo): String {
-        return if (key.type == KeyType.DIGIT_T9) {
-            if (isUppercase) key.upperPrimaryLabel else key.lowerPrimaryLabel
-        } else {
-            key.primaryLabel
-        }
+        return CandidateMeasurementHelper.getDisplayLabel(key, shiftState, candidates.isEmpty())
     }
 
     private fun recomputeCandidateLayout() {
-        val density = resources.displayMetrics.density
-        val minWidth = 64f * density
-        val padding = 24f * density
-        var curX = keyAtlas.candidateViewportBounds.left
-
-        for (i in 0 until candidates.size.coerceAtMost(16)) {
-            val word = formatCandidateWord(candidates[i])
-            val textW = candidateTextPaint.measureText(word)
-            val itemW = (textW + padding).coerceAtLeast(minWidth)
-            candidateItemLeft[i] = curX
-            candidateItemWidth[i] = itemW
-            candidateItemRight[i] = curX + itemW
-            curX += itemW
-        }
-
-        val totalCandWidth = curX - keyAtlas.candidateViewportBounds.left
-        val viewportWidth = keyAtlas.candidateViewportBounds.width()
-        gestureTracker.maxStripScroll = if (totalCandWidth > viewportWidth) {
-            -(totalCandWidth - viewportWidth)
-        } else {
-            0f
-        }
+        gestureTracker.maxStripScroll = CandidateMeasurementHelper.recomputeCandidateLayout(
+            candidates = candidates,
+            candidateTextPaint = candidateTextPaint,
+            candidateViewportLeft = keyAtlas.candidateViewportBounds.left,
+            candidateViewportWidth = keyAtlas.candidateViewportBounds.width(),
+            density = resources.displayMetrics.density,
+            candidateItemLeft = candidateItemLeft,
+            candidateItemWidth = candidateItemWidth,
+            candidateItemRight = candidateItemRight,
+            formatWord = { formatCandidateWord(it) }
+        )
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -573,160 +413,17 @@ open class T9KeyboardView @JvmOverloads constructor(
         }
 
         // 2. Draw Keypad (4 rows x 4 columns)
-        drawKeypad(canvas)
-    }
-
-    private fun drawKeypad(canvas: Canvas) {
-        val density = resources.displayMetrics.density
-        val keyMargin = 3f * density
-        val cornerRadius = 10f * density
-        val baseRowHeight = 55f * density
-        val rowScale = if (baseRowHeight > 0f) (keyAtlas.rowHeight / baseRowHeight).coerceIn(0.60f, 1.40f) else 1f
-
-        for (i in 0 until 16) {
-            val key = keyAtlas.keys[i]
-            if (keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT && key.id == 15) continue
-            if (key.bounds.isEmpty) continue
-
-            scratchRect.set(
-                key.bounds.left + keyMargin,
-                key.bounds.top + keyMargin,
-                key.bounds.right - keyMargin,
-                key.bounds.bottom - keyMargin
-            )
-
-            // Key background (pressed or normal)
-            val bgPaint = if (key.id == activeKeyId) keyPressedPaint else keyBackgroundPaint
-            canvas.drawRoundRect(scratchRect, cornerRadius, cornerRadius, bgPaint)
-            canvas.drawRoundRect(scratchRect, cornerRadius, cornerRadius, keyBorderPaint)
-
-            // Specific key rendering
-            when (key.type) {
-                KeyType.DIGIT_T9, KeyType.PUNCT_1, KeyType.SPACE_0 -> {
-                    // Alphabet / main symbol (primary) centered in the key
-                    val label = getDisplayLabel(key)
-                    val labelY = key.centerY - ((primaryTextPaint.descent() + primaryTextPaint.ascent()) / 2f)
-                    val originalSize = primaryTextPaint.textSize
-                    if (label.length > 4) {
-                        primaryTextPaint.textSize = originalSize * 0.72f
-                    }
-                    canvas.drawText(label, key.centerX, labelY, primaryTextPaint)
-                    if (label.length > 4) {
-                        primaryTextPaint.textSize = originalSize
-                    }
-
-                    // Number (secondary) in upper right corner of the key
-                    if (key.subLabel.isNotEmpty()) {
-                        val numX = scratchRect.right - (7f * density)
-                        val numY = scratchRect.top + (11f * density * rowScale)
-                        canvas.drawText(key.subLabel, numX, numY, keyCornerSubTextPaint)
-                    }
-                }
-                KeyType.LANG_SWITCH -> {
-                    // Language code text (EN or ID)
-                    val langY = key.centerY - (2f * density * rowScale)
-                    canvas.drawText(activeLanguage, key.centerX, langY, primaryTextPaint)
-
-                    // Emoticon indicator / subLabel in upper right corner
-                    if (key.subLabel.isNotEmpty()) {
-                        val subX = scratchRect.right - (7f * density)
-                        val subY = scratchRect.top + (11f * density * rowScale)
-                        canvas.drawText(key.subLabel, subX, subY, keyCornerSubTextPaint)
-                    }
-
-                    // Active T9 Glow Bar directly beneath the language text
-                    if (isT9Mode) {
-                        val barWidth = (28f * density).coerceAtMost(key.bounds.width() * 0.60f)
-                        val barHeight = 3f * density
-                        val barRadius = 1.5f * density
-                        val barTop = key.centerY + (13f * density * rowScale)
-                        glowRect.set(
-                            key.centerX - (barWidth / 2f),
-                            barTop,
-                            key.centerX + (barWidth / 2f),
-                            barTop + barHeight
-                        )
-                        canvas.drawRoundRect(glowRect, barRadius, barRadius, indicatorGlowPaint)
-                    }
-                }
-                KeyType.ENTER -> {
-                    drawEnterIcon(canvas, key.centerX, key.centerY, density)
-                }
-                KeyType.SHIFT -> {
-                    drawShiftIcon(canvas, key.centerX, key.centerY, density)
-                }
-                KeyType.DEL -> {
-                    drawDelIcon(canvas, key.centerX, key.centerY, density)
-                }
-                KeyType.DUAL_SYM -> {
-                    // Left and right glyphs rendered with equal size and color
-                    val glyphOffset = (key.bounds.width() * 0.20f).coerceIn(10f * density, 24f * density)
-                    val leftX = key.centerX - glyphOffset
-                    val rightX = key.centerX + glyphOffset
-                    val symY = key.centerY - ((dualSymTextPaint.descent() + dualSymTextPaint.ascent()) / 2f)
-                    canvas.drawText(key.leftGlyph, leftX, symY, dualSymTextPaint)
-                    canvas.drawText(key.rightGlyph, rightX, symY, dualSymTextPaint)
-                }
-                KeyType.PAGE_SWITCH -> {
-                    if (key.id == 12 && keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT) {
-                        // Combined Utility Key:
-                        // Upper-left corner: Language code (EN / ID) + T9 active indicator
-                        val prevAlign = keyCornerSubTextPaint.textAlign
-                        keyCornerSubTextPaint.textAlign = Paint.Align.LEFT
-                        val langX = scratchRect.left + (7f * density)
-                        val langY = scratchRect.top + (11f * density * rowScale)
-                        canvas.drawText(activeLanguage, langX, langY, keyCornerSubTextPaint)
-
-                        if (isT9Mode) {
-                            val barWidth = 14f * density
-                            val barHeight = 2.5f * density
-                            val barRadius = 1.25f * density
-                            val barTop = langY + (2.5f * density * rowScale)
-                            glowRect.set(
-                                langX,
-                                barTop,
-                                langX + barWidth,
-                                barTop + barHeight
-                            )
-                            canvas.drawRoundRect(glowRect, barRadius, barRadius, indicatorGlowPaint)
-                        }
-
-                        // Upper-right corner: Emoji icon (😊)
-                        keyCornerSubTextPaint.textAlign = Paint.Align.RIGHT
-                        val emojiX = scratchRect.right - (7f * density)
-                        val emojiY = scratchRect.top + (11f * density * rowScale)
-                        canvas.drawText("😊", emojiX, emojiY, keyCornerSubTextPaint)
-                        keyCornerSubTextPaint.textAlign = prevAlign
-
-                        // Center: ?123
-                        val labelY = key.centerY - ((primaryTextPaint.descent() + primaryTextPaint.ascent()) / 2f)
-                        canvas.drawText("?123", key.centerX, labelY, primaryTextPaint)
-                    } else {
-                        val labelY = key.centerY - ((primaryTextPaint.descent() + primaryTextPaint.ascent()) / 2f)
-                        canvas.drawText(key.primaryLabel, key.centerX, labelY, primaryTextPaint)
-                    }
-                }
-                else -> {
-                    val labelY = key.centerY - ((primaryTextPaint.descent() + primaryTextPaint.ascent()) / 2f)
-                    canvas.drawText(key.primaryLabel, key.centerX, labelY, primaryTextPaint)
-                }
-            }
-        }
-    }
-
-    private fun drawEnterIcon(canvas: Canvas, cx: Float, cy: Float, density: Float) {
-        val minDim = minOf(keyAtlas.rowHeight, keyAtlas.colWidth)
-        KeyboardVectorIcons.drawEnterIcon(canvas, cx, cy, density, imeAction, minDim, iconPath, iconPaint, iconFillPaint)
-    }
-
-    private fun drawShiftIcon(canvas: Canvas, cx: Float, cy: Float, density: Float) {
-        val minDim = minOf(keyAtlas.rowHeight, keyAtlas.colWidth)
-        KeyboardVectorIcons.drawShiftIcon(canvas, cx, cy, density, shiftState, minDim, iconPath, iconPaint, iconFillPaint)
-    }
-
-    private fun drawDelIcon(canvas: Canvas, cx: Float, cy: Float, density: Float) {
-        val minDim = minOf(keyAtlas.rowHeight, keyAtlas.colWidth)
-        KeyboardVectorIcons.drawDelIcon(canvas, cx, cy, density, minDim, iconPath, iconPaint)
+        page0KeypadRenderer.drawKeypad(
+            canvas = canvas,
+            keyAtlas = keyAtlas,
+            activeKeyId = activeKeyId,
+            isT9Mode = isT9Mode,
+            activeLanguage = activeLanguage,
+            imeAction = imeAction,
+            shiftState = shiftState,
+            density = resources.displayMetrics.density,
+            getDisplayLabel = { getDisplayLabel(it) }
+        )
     }
 
 
@@ -809,13 +506,7 @@ open class T9KeyboardView @JvmOverloads constructor(
 
     override fun onEmojiCategoryTap(categoryIndex: Int) {
         playClickFeedback()
-        val maxTab = emojiAtlas.categories.size - 1
-        val safeIndex = categoryIndex.coerceIn(0, maxTab)
-        if (safeIndex != emojiAtlas.activeCategoryIndex) {
-            emojiAtlas.activeCategoryIndex = safeIndex
-            gestureTracker.resetEmojiScroll()
-        }
-        invalidate()
+        EmojiInteractionCoordinator.onCategoryTap(categoryIndex, emojiAtlas, { gestureTracker.resetEmojiScroll() }, { invalidate() })
     }
 
     override fun onEmojiTap(emoji: String) {
@@ -826,53 +517,12 @@ open class T9KeyboardView @JvmOverloads constructor(
 
     override fun onEmojiControlTap(controlIndex: Int) {
         playClickFeedback()
-        when (controlIndex) {
-            0 -> {
-                // ABC shortcut: Return directly to Page 0 (PAGE_0_TEXT)
-                keyAtlas.updatePageLayout(KeyboardPage.PAGE_0_TEXT)
-                invalidate()
-                onEmojiControlAction?.invoke(0)
-            }
-            1 -> {
-                // 🕒 Recents: Switch to first tab and scroll to top
-                emojiAtlas.activeCategoryIndex = 0
-                gestureTracker.resetEmojiScroll()
-                invalidate()
-                onEmojiControlAction?.invoke(1)
-            }
-            2 -> {
-                // ␣ Space
-                onEmojiControlAction?.invoke(2)
-            }
-            3 -> {
-                // ⌫ DEL
-                onEmojiControlAction?.invoke(3)
-            }
-        }
+        EmojiInteractionCoordinator.onControlTap(controlIndex, keyAtlas, emojiAtlas, { gestureTracker.resetEmojiScroll() }, { invalidate() }, onEmojiControlAction)
     }
 
     override fun onEmojiPageSwipe(direction: FlickDirection) {
         playClickFeedback()
-        val maxTab = emojiAtlas.categories.size - 1
-        when (direction) {
-            FlickDirection.LEFT -> {
-                val next = (emojiAtlas.activeCategoryIndex + 1).coerceAtMost(maxTab)
-                if (next != emojiAtlas.activeCategoryIndex) {
-                    emojiAtlas.activeCategoryIndex = next
-                    gestureTracker.resetEmojiScroll()
-                    invalidate()
-                }
-            }
-            FlickDirection.RIGHT -> {
-                val prev = (emojiAtlas.activeCategoryIndex - 1).coerceAtLeast(0)
-                if (prev != emojiAtlas.activeCategoryIndex) {
-                    emojiAtlas.activeCategoryIndex = prev
-                    gestureTracker.resetEmojiScroll()
-                    invalidate()
-                }
-            }
-            else -> {}
-        }
+        EmojiInteractionCoordinator.onPageSwipe(direction, emojiAtlas, { gestureTracker.resetEmojiScroll() }, { invalidate() })
     }
 
     override fun onEmojiTouchStateChanged(tabIndex: Int?, gridIndex: Int?, controlIndex: Int?) {
