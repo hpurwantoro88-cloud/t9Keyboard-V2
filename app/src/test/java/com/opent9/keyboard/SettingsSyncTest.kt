@@ -54,10 +54,6 @@ class SettingsSyncTest {
         assertTrue(observer.isSpaceScrubbingEnabled())
         assertEquals("normal", observer.getSpaceScrubbingSensitivity())
         assertEquals(false, observer.isSpaceScrubbingHoldRequired())
-        assertEquals("right", observer.get4thColumnPosition())
-        assertEquals("bottom", observer.get4thRowPosition())
-        assertEquals("default", observer.get4thRowOrder())
-        assertEquals("default", observer.get4thColumnOrder())
 
         // Verify initial sync parameters
         assertEquals(42.0f, syncedSigma, 0.01f)
@@ -100,10 +96,6 @@ class SettingsSyncTest {
             .putBoolean("audio_enabled", false)
             .putInt("audio_volume", 80)
             .putString("audio_style", "2")
-            .putString("col_4th_position", "left")
-            .putString("row_4th_position", "top")
-            .putString("row_4th_order", "space_center")
-            .putString("col_4th_order", "shift_top")
             .apply()
 
         // Verify updated values synchronized
@@ -121,10 +113,6 @@ class SettingsSyncTest {
         assertEquals(false, observer.isAudioEnabled())
         assertEquals(0.8f, observer.getAudioVolume(), 0.01f)
         assertEquals(2, observer.getAudioStyle())
-        assertEquals("left", observer.get4thColumnPosition())
-        assertEquals("top", observer.get4thRowPosition())
-        assertEquals("space_center", observer.get4thRowOrder())
-        assertEquals("shift_top", observer.get4thColumnOrder())
         assertTrue(layoutConfigChangedTriggered)
         assertEquals(false, inputModeChangedValue)
         assertEquals("EN", languageChangedValue)

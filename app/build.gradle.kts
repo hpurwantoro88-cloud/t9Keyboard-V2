@@ -12,8 +12,8 @@ android {
         applicationId = "com.opent9.keyboard"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "3.0.0"
+        versionCode = 2
+        versionName = "3.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

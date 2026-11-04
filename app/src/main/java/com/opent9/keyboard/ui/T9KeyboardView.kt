@@ -252,13 +252,8 @@ open class T9KeyboardView @JvmOverloads constructor(
             oneHandedMode = oneHandedMode
         )
         settingsObserver?.let { observer ->
-            keyAtlas.setLayoutConfiguration(
-                colPosition = observer.get4thColumnPosition(),
-                rowPosition = observer.get4thRowPosition(),
-                rowOrder = observer.get4thRowOrder(),
-                colOrder = observer.get4thColumnOrder()
-            )
             applyScrubSettings(observer)
+            keyAtlas.setLayoutOrder(observer.getKeyboardLayoutOrder())
         }
 
         keyAtlas.computeGeometry(w.toFloat(), h.toFloat(), density, offsetX, contentWidth)

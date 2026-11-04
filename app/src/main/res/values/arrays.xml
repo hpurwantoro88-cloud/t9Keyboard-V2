@@ -32,46 +32,6 @@
         <item>2</item>
     </string-array>
 
-    <string-array name="pref_col_position_entries">
-        <item>Right (Default)</item>
-        <item>Left</item>
-    </string-array>
-    <string-array name="pref_col_position_values">
-        <item>right</item>
-        <item>left</item>
-    </string-array>
-
-    <string-array name="pref_row_position_entries">
-        <item>Bottom (Default)</item>
-        <item>Top</item>
-    </string-array>
-    <string-array name="pref_row_position_values">
-        <item>bottom</item>
-        <item>top</item>
-    </string-array>
-
-    <string-array name="pref_row_order_entries">
-        <item>Utility Left, Space Right (Default)</item>
-        <item>Space Left, Utility Right</item>
-    </string-array>
-    <string-array name="pref_row_order_values">
-        <item>default</item>
-        <item>space_left</item>
-    </string-array>
-
-    <string-array name="pref_col_order_entries">
-        <item>DEL, SHIFT, ENTER (Default)</item>
-        <item>SHIFT, ENTER, DEL</item>
-        <item>ENTER, DEL, SHIFT</item>
-        <item>SHIFT, DEL, ENTER</item>
-    </string-array>
-    <string-array name="pref_col_order_values">
-        <item>default</item>
-        <item>del_bottom</item>
-        <item>enter_top</item>
-        <item>shift_top</item>
-    </string-array>
-
     <string-array name="pref_default_mode_entries">
         <item>Predictive T9</item>
         <item>Multi-Tap ABC</item>

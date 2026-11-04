@@ -42,9 +42,8 @@ class SettingsObserver(
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         syncAll()
-        if (key == "keyboard_height" || key == "candidate_font_size" || key == "one_handed_mode" ||
-            key == "col_4th_position" || key == "row_4th_position" ||
-            key == "row_4th_order" || key == "col_4th_order" ||
+        if (key == KeyboardLayoutConfig.PREF_KEY ||
+            key == "keyboard_height" || key == "candidate_font_size" || key == "one_handed_mode" ||
             key == "long_press_delay" ||
             key == "space_scrubbing" || key == "space_scrubbing_sensitivity" || key == "space_scrubbing_hold"
         ) {
@@ -82,9 +81,9 @@ class SettingsObserver(
     fun getCandidateFontSizeSp(): Int = prefs.getInt("candidate_font_size", 16)
     fun getOneHandedMode(): Int = (prefs.getString("one_handed_mode", "0") ?: "0").toIntOrNull() ?: 0
     fun getLongPressDelay(): Long = prefs.getInt("long_press_delay", 350).toLong()
-    fun get4thColumnPosition(): String = prefs.getString("col_4th_position", "right") ?: "right"
-    fun get4thRowPosition(): String = prefs.getString("row_4th_position", "bottom") ?: "bottom"
-    fun get4thRowOrder(): String = prefs.getString("row_4th_order", "default") ?: "default"
-    fun get4thColumnOrder(): String = prefs.getString("col_4th_order", "default") ?: "default"
     fun getAppTheme(): String = prefs.getString("app_theme", "system") ?: "system"
+    fun getKeyboardLayoutOrder(): List<RearrangeKeyId> {
+        val raw = prefs.getString(KeyboardLayoutConfig.PREF_KEY, null)
+        return KeyboardLayoutConfig.deserialize(raw)
+    }
 }

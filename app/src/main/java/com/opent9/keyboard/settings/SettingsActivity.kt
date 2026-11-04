@@ -54,6 +54,12 @@ class SettingsFragment : PreferenceFragmentCompat() {
             true
         }
 
+        findPreference<Preference>("rearrange_keyboard_layout")?.setOnPreferenceClickListener {
+            val intent = android.content.Intent(requireContext(), RearrangeLayoutActivity::class.java)
+            startActivity(intent)
+            true
+        }
+
         findPreference<Preference>("reset_user_dictionary")?.setOnPreferenceClickListener {
             context?.let { ctx ->
                 AlertDialog.Builder(ctx)

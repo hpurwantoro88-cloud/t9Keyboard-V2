@@ -35,6 +35,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".settings.RearrangeLayoutActivity"
+            android:exported="false"
+            android:label="@string/rearrange_title"
+            android:theme="@style/Theme.AppCompat.DayNight" />
+
     </application>
 
 </manifest>

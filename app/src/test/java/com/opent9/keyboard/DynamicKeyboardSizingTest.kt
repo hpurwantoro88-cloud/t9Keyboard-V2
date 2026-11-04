@@ -44,17 +44,17 @@ class DynamicKeyboardSizingTest {
         assertEquals(270f, key1.bounds.right, 0.01f)
         assertEquals(285f, key1.bounds.bottom, 0.01f)
 
-        // Verify key 13 and 14 bounds on Page 0 (Row 3: [ ?123 ] [ EN/ID ] [ ␣ 0 SPACE (2 blocks) ])
+        // Verify key 13 and 14 bounds on Page 0 (Row 3: [ ?123 ] [ ␣ 0 SPACE (2 blocks) ] [ EN/ID ])
         val keyLang = atlas.keys[13]
-        assertEquals(270f, keyLang.bounds.left, 0.01f)
+        assertEquals(810f, keyLang.bounds.left, 0.01f)
         assertEquals(615f, keyLang.bounds.top, 0.01f)
-        assertEquals(540f, keyLang.bounds.right, 0.01f)
+        assertEquals(1080f, keyLang.bounds.right, 0.01f)
         assertEquals(780f, keyLang.bounds.bottom, 0.01f)
 
         val keySpace = atlas.keys[14]
-        assertEquals(540f, keySpace.bounds.left, 0.01f)
+        assertEquals(270f, keySpace.bounds.left, 0.01f)
         assertEquals(615f, keySpace.bounds.top, 0.01f)
-        assertEquals(1080f, keySpace.bounds.right, 0.01f)
+        assertEquals(810f, keySpace.bounds.right, 0.01f)
         assertEquals(780f, keySpace.bounds.bottom, 0.01f)
 
         // Verify key 300 (first symbol key "1") bounds on Page 2

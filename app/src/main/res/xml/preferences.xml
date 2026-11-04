@@ -16,7 +16,7 @@
             app:key="haptic_enabled"
             app:title="@string/pref_haptic_enabled"
             app:defaultValue="true" />
-        <SeekBarPreference
+        <com.opent9.keyboard.settings.ManualInputSeekBarPreference
             app:key="vibration_intensity"
             app:title="@string/pref_vibration_intensity"
             app:defaultValue="25"
@@ -28,7 +28,7 @@
             app:key="audio_enabled"
             app:title="@string/pref_audio_enabled"
             app:defaultValue="true" />
-        <SeekBarPreference
+        <com.opent9.keyboard.settings.ManualInputSeekBarPreference
             app:key="audio_volume"
             app:title="@string/pref_audio_volume"
             app:defaultValue="60"
@@ -47,14 +47,14 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/pref_cat_layout">
-        <SeekBarPreference
+        <com.opent9.keyboard.settings.ManualInputSeekBarPreference
             app:key="keyboard_height"
             app:title="@string/pref_keyboard_height"
             app:defaultValue="260"
             app:min="220"
             android:max="320"
             app:showSeekBarValue="true" />
-        <SeekBarPreference
+        <com.opent9.keyboard.settings.ManualInputSeekBarPreference
             app:key="candidate_font_size"
             app:title="@string/pref_candidate_font_size"
             app:defaultValue="16"
@@ -68,34 +68,10 @@
             app:entryValues="@array/pref_one_handed_values"
             app:defaultValue="0"
             app:useSimpleSummaryProvider="true" />
-        <ListPreference
-            app:key="col_4th_position"
-            app:title="@string/pref_col_4th_position"
-            app:entries="@array/pref_col_position_entries"
-            app:entryValues="@array/pref_col_position_values"
-            app:defaultValue="right"
-            app:useSimpleSummaryProvider="true" />
-        <ListPreference
-            app:key="row_4th_position"
-            app:title="@string/pref_row_4th_position"
-            app:entries="@array/pref_row_position_entries"
-            app:entryValues="@array/pref_row_position_values"
-            app:defaultValue="bottom"
-            app:useSimpleSummaryProvider="true" />
-        <ListPreference
-            app:key="row_4th_order"
-            app:title="@string/pref_row_4th_order"
-            app:entries="@array/pref_row_order_entries"
-            app:entryValues="@array/pref_row_order_values"
-            app:defaultValue="default"
-            app:useSimpleSummaryProvider="true" />
-        <ListPreference
-            app:key="col_4th_order"
-            app:title="@string/pref_col_4th_order"
-            app:entries="@array/pref_col_order_entries"
-            app:entryValues="@array/pref_col_order_values"
-            app:defaultValue="default"
-            app:useSimpleSummaryProvider="true" />
+        <Preference
+            app:key="rearrange_keyboard_layout"
+            app:title="@string/pref_rearrange_layout"
+            app:summary="@string/pref_rearrange_layout_summary" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/pref_cat_typing">
@@ -106,14 +82,14 @@
             app:entryValues="@array/pref_default_mode_values"
             app:defaultValue="0"
             app:useSimpleSummaryProvider="true" />
-        <SeekBarPreference
+        <com.opent9.keyboard.settings.ManualInputSeekBarPreference
             app:key="long_press_delay"
             app:title="@string/pref_long_press_delay"
             app:defaultValue="350"
             app:min="200"
             android:max="600"
             app:showSeekBarValue="true" />
-        <SeekBarPreference
+        <com.opent9.keyboard.settings.ManualInputSeekBarPreference
             app:key="multi_tap_timeout"
             app:title="@string/pref_multi_tap_timeout"
             app:defaultValue="600"

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?android:attr/colorBackground">
+
+    <!-- Instruction / Hint Banner -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:layout_margin="12dp"
+        android:background="@drawable/bg_preference_seekbar_value">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/rearrange_instruction"
+            android:textSize="14sp"
+            android:lineSpacingExtra="3dp"
+            android:textColor="?android:attr/textColorSecondary" />
+    </LinearLayout>
+
+    <!-- Centered Virtual Keyboard Canvas -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center">
+
+        <com.opent9.keyboard.settings.RearrangeKeyboardView
+            android:id="@+id/rearrange_keyboard_view"
+            android:layout_width="match_parent"
+            android:layout_height="260dp"
+            android:layout_gravity="bottom" />
+    </FrameLayout>
+
+    <!-- Bottom Action Bar (Reset on Left, Save Layout on Right) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="16dp">
+
+        <Button
+            android:id="@+id/btn_reset_layout"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="8dp"
+            android:text="@string/btn_reset"
+            android:textAllCaps="false"
+            android:textSize="15sp"
+            android:textColor="?android:attr/textColorPrimary"
+            android:background="@drawable/bg_preference_seekbar_value" />
+
+        <Button
+            android:id="@+id/btn_save_layout"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="@string/btn_save_layout"
+            android:textAllCaps="false"
+            android:textSize="15sp"
+            android:textColor="#121214"
+            android:backgroundTint="#00E5FF" />
+    </LinearLayout>
+
+</LinearLayout>

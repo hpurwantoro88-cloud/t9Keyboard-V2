@@ -507,16 +507,16 @@ class SystemKeysAndMultiTapTest {
         assertEquals(KeyType.LANG_SWITCH, langKey.type)
         assertEquals(atlas.colWidth, langKey.bounds.width(), 0.01f)
 
-        // 3. Verify key 14 (SPACE_0) spans 2 blocks (cols 2 and 3)
+        // 3. Verify key 14 (SPACE_0) spans 2 blocks (cols 1 and 2)
         val spaceKey = atlas.keys[14]
         assertEquals(KeyType.SPACE_0, spaceKey.type)
         assertEquals(2 * atlas.colWidth, spaceKey.bounds.width(), 0.01f)
-        assertEquals(2 * atlas.colWidth, spaceKey.bounds.left, 0.01f)
-        assertEquals(4 * atlas.colWidth, spaceKey.bounds.right, 0.01f)
+        assertEquals(1 * atlas.colWidth, spaceKey.bounds.left, 0.01f)
+        assertEquals(3 * atlas.colWidth, spaceKey.bounds.right, 0.01f)
         assertEquals(12, atlas.grid[3][0].id)
-        assertEquals(13, atlas.grid[3][1].id)
+        assertEquals(14, atlas.grid[3][1].id)
         assertEquals(14, atlas.grid[3][2].id)
-        assertEquals(14, atlas.grid[3][3].id)
+        assertEquals(13, atlas.grid[3][3].id)
 
         // 4. Verify key 15 is not active on Page 0 (bounds empty)
         assertTrue(atlas.keys[15].bounds.isEmpty)

@@ -1,6 +1,8 @@
 package com.opent9.keyboard.ui
 
 import android.graphics.RectF
+import com.opent9.keyboard.settings.KeyboardLayoutConfig
+import com.opent9.keyboard.settings.RearrangeKeyId
 
 enum class KeyboardPage {
     PAGE_0_TEXT,
@@ -80,10 +82,6 @@ class KeyAtlas {
         )
     }
 
-    var col4thPosition: String = "right"
-    var row4thPosition: String = "bottom"
-    var row4thOrder: String = "default"
-    var col4thOrder: String = "default"
     var lastOffsetX: Float = 0f
         private set
 
@@ -318,18 +316,6 @@ class KeyAtlas {
         } else false
     }
 
-    fun setLayoutConfiguration(
-        colPosition: String = "right",
-        rowPosition: String = "bottom",
-        rowOrder: String = "default",
-        colOrder: String = "default"
-    ) {
-        col4thPosition = colPosition
-        row4thPosition = rowPosition
-        row4thOrder = rowOrder
-        col4thOrder = colOrder
-    }
-
     private fun setKeyGridPosition(key: KeyInfo, r: Int, c: Int, offsetX: Float) {
         key.row = r
         key.col = c
@@ -358,62 +344,75 @@ class KeyAtlas {
         }
     }
 
-    fun applyPage0UtilityRowLayout(offsetX: Float = lastOffsetX) {
-        if (colWidth <= 0f || rowHeight <= 0f) return
-        val utilityRow = if (row4thPosition == "top") 0 else 3
+    var layoutOrder: List<RearrangeKeyId> = KeyboardLayoutConfig.DEFAULT_ORDER
+        private set
 
-        if (col4thPosition == "left") {
-            when (row4thOrder) {
-                "space_center" -> {
-                    // Col 0: ?123, Col 1..2: SPACE, Col 3: LANG
-                    setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
-                    setKeyMultiColPosition(keys[14], utilityRow, 1, 2, offsetX)
-                    setKeyGridPosition(keys[13], utilityRow, 3, offsetX)
-                }
-                "space_right" -> {
-                    // Col 0: ?123, Col 1: LANG, Col 2..3: SPACE
-                    setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
-                    setKeyGridPosition(keys[13], utilityRow, 1, offsetX)
-                    setKeyMultiColPosition(keys[14], utilityRow, 2, 2, offsetX)
-                }
-                else -> {
-                    // Default for left action col: [ SPACE (2 blocks) ] [ ?123 ] [ LANG ]
-                    setKeyMultiColPosition(keys[14], utilityRow, 0, 2, offsetX)
-                    setKeyGridPosition(keys[12], utilityRow, 2, offsetX)
-                    setKeyGridPosition(keys[13], utilityRow, 3, offsetX)
-                }
-            }
-        } else {
-            when (row4thOrder) {
-                "space_center" -> {
-                    // [ ?123 ] [ SPACE (2 blocks) ] [ EN / ID ]
-                    setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
-                    setKeyMultiColPosition(keys[14], utilityRow, 1, 2, offsetX)
-                    setKeyGridPosition(keys[13], utilityRow, 3, offsetX)
-                }
-                "space_left", "reverse" -> {
-                    // [ SPACE (2 blocks) ] [ EN / ID ] [ ?123 ]
-                    setKeyMultiColPosition(keys[14], utilityRow, 0, 2, offsetX)
-                    setKeyGridPosition(keys[13], utilityRow, 2, offsetX)
-                    setKeyGridPosition(keys[12], utilityRow, 3, offsetX)
-                }
-                else -> {
-                    // Default: [ ?123 ] [ EN / ID ] [ SPACE (2 blocks) ]
-                    setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
-                    setKeyGridPosition(keys[13], utilityRow, 1, offsetX)
-                    setKeyMultiColPosition(keys[14], utilityRow, 2, 2, offsetX)
-                }
+    fun setLayoutOrder(order: List<RearrangeKeyId>) {
+        layoutOrder = order
+        if (currentPage == KeyboardPage.PAGE_0_TEXT) {
+            applyPage0RearrangedLayout(order, lastOffsetX)
+        }
+    }
+
+    fun applyPage0RearrangedLayout(order: List<RearrangeKeyId> = layoutOrder, offsetX: Float = lastOffsetX) {
+        if (colWidth <= 0f || rowHeight <= 0f) return
+        layoutOrder = order
+
+        // Reset references for affected cells in grid (col 3 and row 3)
+        for (r in 0..3) {
+            grid[r][3] = keys[r * 4 + 3]
+        }
+        for (c in 0..3) {
+            grid[3][c] = keys[12 + c]
+        }
+
+        var slotIndex = 0
+        for (keyEnum in order) {
+            if (slotIndex >= KeyboardLayoutConfig.TRACK_SLOTS.size) break
+            val key = keys[keyEnum.id]
+            if (keyEnum.span == 1) {
+                val coord = KeyboardLayoutConfig.TRACK_SLOTS[slotIndex]
+                setKeyGridPosition(key, coord.row, coord.col, offsetX)
+                slotIndex += 1
+            } else if (keyEnum.span == 2 && slotIndex + 1 < KeyboardLayoutConfig.TRACK_SLOTS.size) {
+                val coord1 = KeyboardLayoutConfig.TRACK_SLOTS[slotIndex]
+                val coord2 = KeyboardLayoutConfig.TRACK_SLOTS[slotIndex + 1]
+
+                val minCol = minOf(coord1.col, coord2.col)
+                val maxCol = maxOf(coord1.col, coord2.col)
+                val minRow = minOf(coord1.row, coord2.row)
+                val maxRow = maxOf(coord1.row, coord2.row)
+
+                val left = offsetX + (minCol * colWidth)
+                val top = stripHeight + (minRow * rowHeight)
+                val right = offsetX + ((maxCol + 1) * colWidth)
+                val bottom = stripHeight + ((maxRow + 1) * rowHeight)
+
+                key.row = minRow
+                key.col = minCol
+                key.bounds.set(left, top, right, bottom)
+                key.centerX = (left + right) / 2f
+                key.centerY = (top + bottom) / 2f
+
+                grid[coord1.row][coord1.col] = key
+                grid[coord2.row][coord2.col] = key
+
+                slotIndex += 2
             }
         }
+
         keys[15].bounds.set(0f, 0f, 0f, 0f)
         keys[15].centerX = 0f
         keys[15].centerY = 0f
     }
 
+    fun applyPage0UtilityRowLayout(offsetX: Float = lastOffsetX) {
+        applyPage0RearrangedLayout(layoutOrder, offsetX)
+    }
 
     fun applyPage2UtilityRowLayout(offsetX: Float = lastOffsetX) {
         if (colWidth <= 0f || rowHeight <= 0f) return
-        val utilityRow = if (row4thPosition == "top") 0 else 3
+        val utilityRow = 3
         setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
         setKeyGridPosition(keys[13], utilityRow, 1, offsetX)
         setKeyGridPosition(keys[14], utilityRow, 2, offsetX)
@@ -441,11 +440,7 @@ class KeyAtlas {
         pillBounds.set(offsetX, 0f, offsetX + pillWidth, stripHeight)
         candidateViewportBounds.set(offsetX + pillWidth, 0f, offsetX + contentWidth, stripHeight)
 
-        val dialRows = if (row4thPosition == "top") intArrayOf(1, 2, 3) else intArrayOf(0, 1, 2)
-        val dialCols = if (col4thPosition == "left") intArrayOf(1, 2, 3) else intArrayOf(0, 1, 2)
-        val actionCol = if (col4thPosition == "left") 0 else 3
-
-        // 1. 3x3 dial keys
+        // 1. 3x3 dial keys (Rows 0..2, Cols 0..2)
         val dialKeyIds = arrayOf(
             intArrayOf(0, 1, 2),
             intArrayOf(4, 5, 6),
@@ -454,27 +449,15 @@ class KeyAtlas {
         for (i in 0..2) {
             for (j in 0..2) {
                 val key = keys[dialKeyIds[i][j]]
-                setKeyGridPosition(key, dialRows[i], dialCols[j], offsetX)
+                setKeyGridPosition(key, i, j, offsetX)
             }
         }
 
-        // 2. Action column keys (DEL: 3, SHIFT: 7, ENTER: 11)
-        val actionKeyIds = when (col4thOrder) {
-            "del_bottom" -> intArrayOf(7, 11, 3) // SHIFT, ENTER, DEL
-            "enter_top" -> intArrayOf(11, 3, 7)  // ENTER, DEL, SHIFT
-            "shift_top" -> intArrayOf(7, 3, 11)  // SHIFT, DEL, ENTER
-            else -> intArrayOf(3, 7, 11)         // DEL, SHIFT, ENTER (default)
-        }
-        for (i in 0..2) {
-            val key = keys[actionKeyIds[i]]
-            setKeyGridPosition(key, dialRows[i], actionCol, offsetX)
-        }
+        // 2 & 3. Movable action keys and utility row keys (Column 3 and Row 3)
+        applyPage0RearrangedLayout(layoutOrder, offsetX)
 
-        // 3. Utility row keys
-        applyPage0UtilityRowLayout(offsetX)
-
-        val grid3x3Left = offsetX + (dialCols[0] * colWidth)
-        val grid3x3Top = stripHeight + (dialRows[0] * rowHeight)
+        val grid3x3Left = offsetX
+        val grid3x3Top = stripHeight
         symbolGrid3x3Bounds.set(grid3x3Left, grid3x3Top, grid3x3Left + (colWidth * 3f), grid3x3Top + (rowHeight * 3f))
         val tabW = contentWidth / 4f
         for (i in 0 until 4) {
@@ -539,28 +522,22 @@ class KeyAtlas {
         val sideColWidth = width * 0.14f
         val midColWidth = (width - 2f * sideColWidth) / 3f
 
-        val actionColOnLeft = (col4thPosition == "left")
-        val opColLeft = if (actionColOnLeft) width - sideColWidth else 0f
-        val actionColLeft = if (actionColOnLeft) 0f else width - sideColWidth
+        val opColLeft = 0f
+        val actionColLeft = width - sideColWidth
         val midColStart = sideColWidth
 
-        val row0Index = if (row4thPosition == "top") 1 else 0
-        val row1Index = if (row4thPosition == "top") 2 else 1
-        val row2Index = if (row4thPosition == "top") 3 else 2
-        val row3Index = if (row4thPosition == "top") 0 else 3
-
-        val r0Top = topPadding + (row0Index * p1RowHeight)
+        val r0Top = topPadding + (0 * p1RowHeight)
         val r0Bottom = r0Top + p1RowHeight
-        val r1Top = topPadding + (row1Index * p1RowHeight)
+        val r1Top = topPadding + (1 * p1RowHeight)
         val r1Bottom = r1Top + p1RowHeight
-        val r2Top = topPadding + (row2Index * p1RowHeight)
+        val r2Top = topPadding + (2 * p1RowHeight)
         val r2Bottom = r2Top + p1RowHeight
-        val r3Top = topPadding + (row3Index * p1RowHeight)
+        val r3Top = topPadding + (3 * p1RowHeight)
         val r3Bottom = r3Top + p1RowHeight
 
-        // Operator column container spans the 3 dial rows
-        val opTop = if (row4thPosition == "top") r0Top else topPadding
-        val opBottom = if (row4thPosition == "top") r2Bottom else topPadding + (3f * p1RowHeight)
+        // Operator column container spans the 3 dial rows (Rows 0..2)
+        val opTop = topPadding
+        val opBottom = topPadding + (3f * p1RowHeight)
         page1ScrollContainerBounds.set(
             offsetX + opColLeft + keyMargin,
             opTop + keyMargin,
@@ -661,7 +638,7 @@ class KeyAtlas {
         setupKey(13, KeyType.LANG_SWITCH, keys[13].primaryLabel.ifEmpty { "EN" }, "😊")
         setupKey(14, KeyType.SPACE_0, "␣", "0", digit = 0)
         setupKey(15, KeyType.EMOJI_DOT, "", "")
-        applyPage0UtilityRowLayout(lastOffsetX)
+        applyPage0RearrangedLayout(layoutOrder, lastOffsetX)
     }
 
 

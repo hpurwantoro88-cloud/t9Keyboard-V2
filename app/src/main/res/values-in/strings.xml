@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Manual Input for SeekBars -->
+    <string name="pref_seekbar_manual_input_title">Masukkan Nilai</string>
+    <string name="pref_seekbar_range_hint">Rentang nilai: %1$d – %2$d</string>
+    <string name="pref_seekbar_error_empty">Nilai tidak boleh kosong</string>
+    <string name="pref_seekbar_error_invalid">Masukkan angka yang valid</string>
+    <string name="pref_seekbar_input_invalid">Nilai harus di antara %1$d dan %2$d</string>
+    <string name="pref_seekbar_tooltip">Ketuk untuk memasukkan angka secara manual</string>
+    <string name="pref_seekbar_content_description">%1$s: %2$d. Ketuk untuk memasukkan angka secara manual.</string>
+    <string name="dialog_ok">OK</string>
+    <string name="dialog_cancel">Batal</string>
+
+    <!-- Keyboard Rearrangement -->
+    <string name="pref_rearrange_layout">Tata Ulang Baris 4 &amp; Kolom 4</string>
+    <string name="pref_rearrange_layout_summary">Geser dan sesuaikan posisi tombol pada baris 4 dan kolom 4</string>
+    <string name="rearrange_title">Tata Ulang Keyboard</string>
+    <string name="rearrange_instruction">Geser langsung tombol pada baris 4 dan kolom 4 seperti puzzle geser untuk mengubah posisinya. Perubahan tersimpan setelah menekan Simpan Layout.</string>
+    <string name="btn_reset">Reset</string>
+    <string name="btn_save_layout">Simpan Layout</string>
+    <string name="toast_layout_saved">Tata letak keyboard tersimpan</string>
+    <string name="toast_layout_reset">Tata letak dikembalikan ke urutan default</string>
+    <string name="rearrange_strip_hint">Geser tombol baris 4 &amp; kolom 4</string>
+</resources>
