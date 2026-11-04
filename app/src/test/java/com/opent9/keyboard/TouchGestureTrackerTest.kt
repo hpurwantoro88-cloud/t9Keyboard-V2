@@ -188,15 +188,16 @@ class TouchGestureTrackerTest {
     }
 
     @Test
-    fun testPage2TabStripTapSwitchesLayer() {
+    fun testPage2SymbolKeyTapsAndPageSwitch() {
         val atlas = KeyAtlas()
         atlas.computeGeometry(1080f, 780f, 3f)
         atlas.updatePageLayout(KeyboardPage.PAGE_2_EXT_SYM)
-        assertEquals(0, atlas.activeSymbolLayerIndex)
 
-        var changedLayerIndex = -1
+        var tappedKey: KeyInfo? = null
         val listener = object : TouchGestureListener {
-            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {}
+            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {
+                tappedKey = key
+            }
             override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) {}
             override fun onKeyLongPress(key: KeyInfo) {}
             override fun onSpaceScrub(steps: Int) {}
@@ -204,43 +205,48 @@ class TouchGestureTrackerTest {
             override fun onCandidateTap(index: Int) {}
             override fun onStripScroll(newScrollOffset: Float) {}
             override fun onTouchStateChanged(activeKeyId: Int?) {}
-            override fun onSymbolLayerChanged(layerIndex: Int) {
-                changedLayerIndex = layerIndex
-            }
         }
         val tracker = TouchGestureTracker(atlas, listener)
 
-        // Tap tab 1: x in [270, 540], y in [0, 120] (stripHeight = 120f)
+        // 1. Tap on key "1" (key 300, row 0, col 0)
+        val key1 = atlas.page2Keys.first { it.primaryLabel == "1" }
         val t0 = 1000L
-        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, 350f, 60f, 0)) { null }
-        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 50, MotionEvent.ACTION_UP, 350f, 60f, 0)) { null }
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, key1.centerX, key1.centerY, 0)) { null }
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 50, MotionEvent.ACTION_UP, key1.centerX, key1.centerY, 0)) { null }
+        assertNotNull(tappedKey)
+        assertEquals(300, tappedKey?.id)
+        assertEquals("1", tappedKey?.primaryLabel)
 
-        assertEquals(1, atlas.activeSymbolLayerIndex)
-        assertEquals(1, changedLayerIndex)
-        // Key 0 on layer 1 is "@ #"
-        assertEquals("@ #", atlas.keys[0].primaryLabel)
+        // 2. Tap on "=\<" (key 320, page switch to Page 3)
+        tappedKey = null
+        val keyAltSym = atlas.page2Keys.first { it.primaryLabel == "=\\<" }
+        tracker.onTouchEvent(MotionEvent.obtain(t0 + 100, t0 + 100, MotionEvent.ACTION_DOWN, keyAltSym.centerX, keyAltSym.centerY, 0)) { null }
+        tracker.onTouchEvent(MotionEvent.obtain(t0 + 100, t0 + 150, MotionEvent.ACTION_UP, keyAltSym.centerX, keyAltSym.centerY, 0)) { null }
+        assertNotNull(tappedKey)
+        assertEquals(320, tappedKey?.id)
+        assertEquals(KeyType.PAGE_SWITCH, tappedKey?.type)
 
-        // Tap tab 2: x in [540, 810]
-        val t1 = 2000L
-        tracker.onTouchEvent(MotionEvent.obtain(t1, t1, MotionEvent.ACTION_DOWN, 600f, 60f, 0)) { null }
-        tracker.onTouchEvent(MotionEvent.obtain(t1, t1 + 50, MotionEvent.ACTION_UP, 600f, 60f, 0)) { null }
-
-        assertEquals(2, atlas.activeSymbolLayerIndex)
-        assertEquals(2, changedLayerIndex)
-        // Key 0 on layer 2 is "° ℃"
-        assertEquals("° ℃", atlas.keys[0].primaryLabel)
+        // 3. Tap on "12 34" (key 331, switch to Page 1)
+        tappedKey = null
+        val keyNumPad = atlas.page2Keys.first { it.primaryLabel == "12 34" }
+        tracker.onTouchEvent(MotionEvent.obtain(t0 + 200, t0 + 200, MotionEvent.ACTION_DOWN, keyNumPad.centerX, keyNumPad.centerY, 0)) { null }
+        tracker.onTouchEvent(MotionEvent.obtain(t0 + 200, t0 + 250, MotionEvent.ACTION_UP, keyNumPad.centerX, keyNumPad.centerY, 0)) { null }
+        assertNotNull(tappedKey)
+        assertEquals(331, tappedKey?.id)
+        assertEquals(KeyType.PAGE_SWITCH, tappedKey?.type)
     }
 
     @Test
-    fun testPage2VerticalSwipe3x3GridSwitchesLayer() {
+    fun testPage3SymbolKeyTapsAndPageSwitch() {
         val atlas = KeyAtlas()
         atlas.computeGeometry(1080f, 780f, 3f)
-        atlas.updatePageLayout(KeyboardPage.PAGE_2_EXT_SYM)
-        assertEquals(0, atlas.activeSymbolLayerIndex)
+        atlas.updatePageLayout(KeyboardPage.PAGE_3_EXT_SYM_ALT)
 
-        var changedLayerIndex = -1
+        var tappedKey: KeyInfo? = null
         val listener = object : TouchGestureListener {
-            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {}
+            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {
+                tappedKey = key
+            }
             override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) {}
             override fun onKeyLongPress(key: KeyInfo) {}
             override fun onSpaceScrub(steps: Int) {}
@@ -248,70 +254,26 @@ class TouchGestureTrackerTest {
             override fun onCandidateTap(index: Int) {}
             override fun onStripScroll(newScrollOffset: Float) {}
             override fun onTouchStateChanged(activeKeyId: Int?) {}
-            override fun onSymbolLayerChanged(layerIndex: Int) {
-                changedLayerIndex = layerIndex
-            }
         }
         val tracker = TouchGestureTracker(atlas, listener)
 
-        // Inside 3x3 grid: x=200, y=300 -> row 1, col 0
-        // Swipe UP: dy = -60px (|dy| = 60 >= 36)
+        // 1. Tap on key "~" (key 400, row 0, col 0)
+        val keyTilde = atlas.page3Keys.first { it.primaryLabel == "~" }
         val t0 = 1000L
-        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, 200f, 300f, 0)) { null }
-        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 50, MotionEvent.ACTION_MOVE, 200f, 240f, 0)) { null }
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, keyTilde.centerX, keyTilde.centerY, 0)) { null }
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 50, MotionEvent.ACTION_UP, keyTilde.centerX, keyTilde.centerY, 0)) { null }
+        assertNotNull(tappedKey)
+        assertEquals(400, tappedKey?.id)
+        assertEquals("~", tappedKey?.primaryLabel)
 
-        assertEquals(1, atlas.activeSymbolLayerIndex)
-        assertEquals(1, changedLayerIndex)
-        assertEquals("@ #", atlas.keys[0].primaryLabel)
-
-        // Finish touch
-        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 100, MotionEvent.ACTION_UP, 200f, 240f, 0)) { null }
-
-        // Swipe DOWN: dy = +60px
-        val t1 = 2000L
-        tracker.onTouchEvent(MotionEvent.obtain(t1, t1, MotionEvent.ACTION_DOWN, 200f, 240f, 0)) { null }
-        tracker.onTouchEvent(MotionEvent.obtain(t1, t1 + 50, MotionEvent.ACTION_MOVE, 200f, 300f, 0)) { null }
-
-        assertEquals(0, atlas.activeSymbolLayerIndex)
-        assertEquals(0, changedLayerIndex)
-        assertEquals("~ `", atlas.keys[0].primaryLabel)
-    }
-
-    @Test
-    fun testPage2HorizontalFlickOn3x3KeyFlicksKey() {
-        val atlas = KeyAtlas()
-        atlas.computeGeometry(1080f, 780f, 3f)
-        atlas.updatePageLayout(KeyboardPage.PAGE_2_EXT_SYM)
-        assertEquals(0, atlas.activeSymbolLayerIndex)
-
-        var flickedKey: KeyInfo? = null
-        var flickedDirection: FlickDirection? = null
-
-        val listener = object : TouchGestureListener {
-            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {}
-            override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) {
-                flickedKey = key
-                flickedDirection = direction
-            }
-            override fun onKeyLongPress(key: KeyInfo) {}
-            override fun onSpaceScrub(steps: Int) {}
-            override fun onPillTap() {}
-            override fun onCandidateTap(index: Int) {}
-            override fun onStripScroll(newScrollOffset: Float) {}
-            override fun onTouchStateChanged(activeKeyId: Int?) {}
-        }
-        val tracker = TouchGestureTracker(atlas, listener)
-
-        // Horizontal flick right on key 0 (x=100, y=200) -> move to x=160, y=200 (dx = 60, dy = 0)
-        val t0 = 1000L
-        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, 100f, 200f, 0)) { null }
-        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 50, MotionEvent.ACTION_MOVE, 160f, 200f, 0)) { null }
-
-        // Layer should NOT change
-        assertEquals(0, atlas.activeSymbolLayerIndex)
-        assertNotNull(flickedKey)
-        assertEquals(0, flickedKey?.id)
-        assertEquals(FlickDirection.RIGHT, flickedDirection)
+        // 2. Tap on "?123" (key 420, switch back to Page 2)
+        tappedKey = null
+        val keyPage2 = atlas.page3Keys.first { it.primaryLabel == "?123" }
+        tracker.onTouchEvent(MotionEvent.obtain(t0 + 100, t0 + 100, MotionEvent.ACTION_DOWN, keyPage2.centerX, keyPage2.centerY, 0)) { null }
+        tracker.onTouchEvent(MotionEvent.obtain(t0 + 100, t0 + 150, MotionEvent.ACTION_UP, keyPage2.centerX, keyPage2.centerY, 0)) { null }
+        assertNotNull(tappedKey)
+        assertEquals(420, tappedKey?.id)
+        assertEquals(KeyType.PAGE_SWITCH, tappedKey?.type)
     }
 
     @Test
@@ -405,21 +367,27 @@ class TouchGestureTrackerTest {
         // Utility row is y in [615, 780]
         val y = 700f
 
-        // Center of Key 12 (Utility Key: PAGE_SWITCH) is at x = 135f
+        // Center of Key 12 (PAGE_SWITCH) is at x = 135f
         val utilityKey = atlas.findKeyAt(135f, y)
         assertNotNull(utilityKey)
         assertEquals(KeyType.PAGE_SWITCH, utilityKey?.type)
         assertEquals(12, utilityKey?.id)
 
-        // Boundary between Key 12 and Key 14 is at x = 270f
-        // Touch at x = 260f (within 24px of boundary) should resolve to SPACE_0 to protect space taps
-        val spaceMarginKey = atlas.findKeyAt(260f, y)
+        // Center of Key 13 (LANG_SWITCH) is at x = 405f
+        val langKey = atlas.findKeyAt(405f, y)
+        assertNotNull(langKey)
+        assertEquals(KeyType.LANG_SWITCH, langKey?.type)
+        assertEquals(13, langKey?.id)
+
+        // Boundary between Key 13 and Key 14 is at x = 540f
+        // Touch at x = 530f (within 24px of boundary) should resolve to SPACE_0 to protect space taps
+        val spaceMarginKey = atlas.findKeyAt(530f, y)
         assertNotNull(spaceMarginKey)
         assertEquals(KeyType.SPACE_0, spaceMarginKey?.type)
         assertEquals(14, spaceMarginKey?.id)
 
-        // Center of Key 14 (SPACE_0 spanning cols 1..3: 270f to 1080f) is at x = 675f
-        val spaceKey = atlas.findKeyAt(675f, y)
+        // Center of Key 14 (SPACE_0 spanning cols 2..3: 540f to 1080f) is at x = 810f
+        val spaceKey = atlas.findKeyAt(810f, y)
         assertNotNull(spaceKey)
         assertEquals(KeyType.SPACE_0, spaceKey?.type)
         assertEquals(14, spaceKey?.id)

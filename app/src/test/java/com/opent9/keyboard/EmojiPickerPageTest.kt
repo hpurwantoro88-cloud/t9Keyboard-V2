@@ -17,9 +17,10 @@ class EmojiPickerPageTest {
         val emojiAtlas = EmojiAtlas()
         emojiAtlas.computeLayout(1080f, 780f, 3f)
 
-        // 1. Category tabs: 2 tabs across 1080px (each tab is 540px wide, 0..120px tall)
-        assertEquals(0, emojiAtlas.findCategoryTabAt(200f, 50f)) // Tab 0: Smileys
-        assertEquals(1, emojiAtlas.findCategoryTabAt(800f, 50f)) // Tab 1: Memoji
+        // 1. Category tabs: 10 tabs across 1080px (each tab is 108px wide, 0..120px tall)
+        assertEquals(0, emojiAtlas.findCategoryTabAt(50f, 50f)) // Tab 0: Recents
+        assertEquals(1, emojiAtlas.findCategoryTabAt(150f, 50f)) // Tab 1: Smileys
+        assertEquals(7, emojiAtlas.findCategoryTabAt(800f, 50f)) // Tab 7: Objects
         assertNull(emojiAtlas.findCategoryTabAt(50f, 150f)) // Below tabs
 
         // 2. Emoji grid: starts at tabHeight (120px), 4 rows x 7 cols
@@ -117,11 +118,11 @@ class EmojiPickerPageTest {
 
         val tracker = TouchGestureTracker(keyAtlas, listener)
 
-        // 1. Tap on Category Tab 1 (x=800, y=50 -> Tab 1: Memoji)
+        // 1. Tap on Category Tab 1 (x=150, y=50 -> Tab 1: Smileys)
         val t0 = 1000L
-        val downTab = MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, 800f, 50f, 0)
+        val downTab = MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, 150f, 50f, 0)
         tracker.onTouchEvent(downTab) { null }
-        val upTab = MotionEvent.obtain(t0, t0 + 50, MotionEvent.ACTION_UP, 800f, 50f, 0)
+        val upTab = MotionEvent.obtain(t0, t0 + 50, MotionEvent.ACTION_UP, 150f, 50f, 0)
         tracker.onTouchEvent(upTab) { null }
         assertEquals(1, tappedCategory)
 

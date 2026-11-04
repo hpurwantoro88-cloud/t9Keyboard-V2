@@ -42,14 +42,10 @@ class SymbolPagesGestureTracker(
         isPage1ColumnTouch = false
         activeOperatorIndex = null
 
-        if (keyAtlas.currentPage == KeyboardPage.PAGE_2_EXT_SYM && y < keyAtlas.stripHeight) {
-            isPage2TabTouch = true
-            listener.onTouchStateChanged(null)
-            return true
-        }
         isPage2TabTouch = false
         return false
     }
+
 
     fun onMovePage1(dy: Float, touchSlopPx: Float, keyAtlas: KeyAtlas): Boolean {
         if (!isPage1ColumnTouch) return false

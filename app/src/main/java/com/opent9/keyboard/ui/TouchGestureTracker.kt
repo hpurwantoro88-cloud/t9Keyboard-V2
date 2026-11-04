@@ -158,7 +158,7 @@ class TouchGestureTracker(
         flickTriggered = false
         spaceScrubTracker.reset()
 
-        if (keyAtlas.currentPage == KeyboardPage.PAGE_3_EMOJI) {
+        if (keyAtlas.currentPage == KeyboardPage.PAGE_4_EMOJI) {
             symbolPagesTracker.reset()
             activeKey = null
             listener.onTouchStateChanged(null)
@@ -171,7 +171,7 @@ class TouchGestureTracker(
             return true
         }
 
-        if (y < keyAtlas.stripHeight && keyAtlas.currentPage != KeyboardPage.PAGE_1_NUM_SYM) {
+        if (y < keyAtlas.stripHeight && keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT) {
             activeKey = null
             candidateStripTracker.onDown(x, keyAtlas, longPressTimeoutMs, candidateHitTest)
         } else {
@@ -205,7 +205,7 @@ class TouchGestureTracker(
         flickTriggered = false
         spaceScrubTracker.reset()
 
-        if (py < keyAtlas.stripHeight && keyAtlas.currentPage != KeyboardPage.PAGE_1_NUM_SYM) {
+        if (py < keyAtlas.stripHeight && keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT) {
             activeKey = null
             candidateStripTracker.onDown(px, keyAtlas, longPressTimeoutMs, candidateHitTest)
         } else {
@@ -216,6 +216,7 @@ class TouchGestureTracker(
         }
         return true
     }
+
 
     private fun handleActionPointerUp(event: MotionEvent): Boolean {
         val actionIdx = event.actionIndex

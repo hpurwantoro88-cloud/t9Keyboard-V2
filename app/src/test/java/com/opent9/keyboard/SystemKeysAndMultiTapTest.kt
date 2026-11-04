@@ -490,39 +490,45 @@ class SystemKeysAndMultiTapTest {
     }
 
     @Test
-    fun testPage0Space3BlocksAndUtilityKeyFlicks() {
+    fun testPage0Space2BlocksAndUtilityKeyFlicks() {
         val atlas = KeyAtlas()
         atlas.computeGeometry(1080f, 780f, 3f)
         atlas.updatePageLayout(KeyboardPage.PAGE_0_TEXT)
 
         // 1. Verify key 12 is PAGE_SWITCH with primaryLabel ?123
-        val utilityKey = atlas.keys[12]
-        assertEquals("?123", utilityKey.primaryLabel)
-        assertEquals(KeyType.PAGE_SWITCH, utilityKey.type)
-        assertEquals(atlas.colWidth, utilityKey.bounds.width(), 0.01f)
+        val pageSwitchKey = atlas.keys[12]
+        assertEquals("?123", pageSwitchKey.primaryLabel)
+        assertEquals(KeyType.PAGE_SWITCH, pageSwitchKey.type)
+        assertEquals(atlas.colWidth, pageSwitchKey.bounds.width(), 0.01f)
 
-        // 2. Verify key 14 (SPACE_0) spans 3 blocks (cols 1, 2, and 3)
+        // 2. Verify key 13 is LANG_SWITCH with primaryLabel EN
+        val langKey = atlas.keys[13]
+        assertEquals("EN", langKey.primaryLabel)
+        assertEquals(KeyType.LANG_SWITCH, langKey.type)
+        assertEquals(atlas.colWidth, langKey.bounds.width(), 0.01f)
+
+        // 3. Verify key 14 (SPACE_0) spans 2 blocks (cols 2 and 3)
         val spaceKey = atlas.keys[14]
         assertEquals(KeyType.SPACE_0, spaceKey.type)
-        assertEquals(3 * atlas.colWidth, spaceKey.bounds.width(), 0.01f)
-        assertEquals(1 * atlas.colWidth, spaceKey.bounds.left, 0.01f)
+        assertEquals(2 * atlas.colWidth, spaceKey.bounds.width(), 0.01f)
+        assertEquals(2 * atlas.colWidth, spaceKey.bounds.left, 0.01f)
         assertEquals(4 * atlas.colWidth, spaceKey.bounds.right, 0.01f)
-        assertEquals(14, atlas.grid[3][1].id)
+        assertEquals(12, atlas.grid[3][0].id)
+        assertEquals(13, atlas.grid[3][1].id)
         assertEquals(14, atlas.grid[3][2].id)
         assertEquals(14, atlas.grid[3][3].id)
 
-        // 3. Verify key 13 and 15 are not active on Page 0 (bounds empty)
-        assertTrue(atlas.keys[13].bounds.isEmpty)
+        // 4. Verify key 15 is not active on Page 0 (bounds empty)
         assertTrue(atlas.keys[15].bounds.isEmpty)
 
-        // 4. Test flick UP on key 12 switches language
+        // 5. Test flick UP on key 13 switches language
         val controller = PageController(atlas)
         val ic = mockk<InputConnection>(relaxed = true)
         var switchedToPage: KeyboardPage? = null
         var switchedLanguage = false
 
         controller.handleKeyFlick(
-            key = utilityKey,
+            key = langKey,
             direction = FlickDirection.UP,
             ic = ic,
             onSwitchLanguage = { switchedLanguage = true },
@@ -535,11 +541,11 @@ class SystemKeysAndMultiTapTest {
         assertTrue(switchedLanguage)
         assertNull(switchedToPage)
 
-        // 5. Test flick DOWN on key 12 switches to PAGE_3_EMOJI
+        // 6. Test flick DOWN on key 13 switches to PAGE_4_EMOJI
         switchedToPage = null
         switchedLanguage = false
         controller.handleKeyFlick(
-            key = utilityKey,
+            key = langKey,
             direction = FlickDirection.DOWN,
             ic = ic,
             onSwitchLanguage = { switchedLanguage = true },
@@ -549,8 +555,23 @@ class SystemKeysAndMultiTapTest {
             onOpenSettings = {},
             onSwitchPage = { page -> switchedToPage = page }
         )
-        assertEquals(KeyboardPage.PAGE_3_EMOJI, switchedToPage)
+        assertEquals(KeyboardPage.PAGE_4_EMOJI, switchedToPage)
         assertFalse(switchedLanguage)
+
+        // 7. Test flick DOWN on key 12 switches to PAGE_2_EXT_SYM
+        switchedToPage = null
+        controller.handleKeyFlick(
+            key = pageSwitchKey,
+            direction = FlickDirection.DOWN,
+            ic = ic,
+            onSwitchLanguage = { switchedLanguage = true },
+            onClearField = {},
+            onDeletePrecedingWord = {},
+            onForceSubmit = {},
+            onOpenSettings = {},
+            onSwitchPage = { page -> switchedToPage = page }
+        )
+        assertEquals(KeyboardPage.PAGE_2_EXT_SYM, switchedToPage)
     }
 
     @Test

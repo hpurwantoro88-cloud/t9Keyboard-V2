@@ -54,10 +54,9 @@ object FlickDisambiguator {
             KeyboardPage.PAGE_1_NUM_SYM -> {
                 key.id == 7 || key.id == 15
             }
-            KeyboardPage.PAGE_2_EXT_SYM -> {
-                key.type == KeyType.DUAL_SYM
-            }
-            KeyboardPage.PAGE_3_EMOJI -> false
+            KeyboardPage.PAGE_2_EXT_SYM, KeyboardPage.PAGE_3_EXT_SYM_ALT -> false
+            KeyboardPage.PAGE_4_EMOJI -> false
         }
     }
 }
+

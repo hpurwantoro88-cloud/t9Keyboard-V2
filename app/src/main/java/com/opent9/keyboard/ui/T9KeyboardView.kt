@@ -97,6 +97,18 @@ open class T9KeyboardView @JvmOverloads constructor(
         iconPaint = iconPaint,
         iconFillPaint = iconFillPaint
     )
+    private val page23SymbolsRenderer = Page23SymbolsRenderer(
+        backgroundPaint = backgroundPaint,
+        actionKeyPaint = page1KeyActionPaint,
+        keyBorderPaint = keyBorderPaint,
+        keyPressedPaint = keyPressedPaint,
+        keyBackgroundPaint = keyBackgroundPaint,
+        textPaint = page1DigitTextPaint,
+        subTextPaint = subTextPaint,
+        iconPaint = iconPaint,
+        iconFillPaint = iconFillPaint
+    )
+
 
     // Key coordinates pre-allocated arrays
     private val candidateItemLeft = FloatArray(16)
@@ -363,7 +375,7 @@ open class T9KeyboardView @JvmOverloads constructor(
         super.onDraw(canvas)
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
 
-        if (keyAtlas.currentPage == KeyboardPage.PAGE_3_EMOJI) {
+        if (keyAtlas.currentPage == KeyboardPage.PAGE_4_EMOJI) {
             emojiPageRenderer.drawEmojiPage(
                 canvas = canvas,
                 emojiAtlas = emojiAtlas,
@@ -392,14 +404,38 @@ open class T9KeyboardView @JvmOverloads constructor(
         }
 
         if (keyAtlas.currentPage == KeyboardPage.PAGE_2_EXT_SYM) {
-            suggestionStripRenderer.drawPage2Strip(
+            page23SymbolsRenderer.drawSymbolsPage(
                 canvas = canvas,
+                width = width.toFloat(),
+                height = height.toFloat(),
                 keyAtlas = keyAtlas,
+                keys = keyAtlas.page2Keys,
+                activeKeyId = activeKeyId,
+                imeAction = imeAction,
+                activeLanguage = activeLanguage,
                 density = resources.displayMetrics.density
             )
-        } else {
-            // 1. Draw Suggestion Strip (40dp)
-            suggestionStripRenderer.drawSuggestionStrip(
+            return
+        }
+
+        if (keyAtlas.currentPage == KeyboardPage.PAGE_3_EXT_SYM_ALT) {
+            page23SymbolsRenderer.drawSymbolsPage(
+                canvas = canvas,
+                width = width.toFloat(),
+                height = height.toFloat(),
+                keyAtlas = keyAtlas,
+                keys = keyAtlas.page3Keys,
+                activeKeyId = activeKeyId,
+                imeAction = imeAction,
+                activeLanguage = activeLanguage,
+                density = resources.displayMetrics.density
+            )
+            return
+        }
+
+        // 1. Draw Suggestion Strip (40dp)
+        suggestionStripRenderer.drawSuggestionStrip(
+
                 canvas = canvas,
                 keyAtlas = keyAtlas,
                 scrollOffset = gestureTracker.stripScrollOffset,
@@ -410,7 +446,6 @@ open class T9KeyboardView @JvmOverloads constructor(
                 density = resources.displayMetrics.density,
                 formatWord = { formatCandidateWord(it) }
             )
-        }
 
         // 2. Draw Keypad (4 rows x 4 columns)
         page0KeypadRenderer.drawKeypad(

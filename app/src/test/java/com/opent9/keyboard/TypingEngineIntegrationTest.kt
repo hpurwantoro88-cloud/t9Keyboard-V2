@@ -167,12 +167,17 @@ class TypingEngineIntegrationTest {
         inputView.onKeyTapAction?.invoke(abcKey, abcKey.centerX, abcKey.centerY)
         assertEquals(KeyboardPage.PAGE_0_TEXT, inputView.keyAtlas.currentPage)
 
-        // Switch back to Page 1 via ?123
+        // Switch to Page 2 via ?123
         val numKey = inputView.keyAtlas.keys[12] // "?123"
         inputView.onKeyTapAction?.invoke(numKey, numKey.centerX, numKey.centerY)
+        assertEquals(KeyboardPage.PAGE_2_EXT_SYM, inputView.keyAtlas.currentPage)
+
+        // Switch to Page 1 via "12 34" on Page 2
+        val p1Key = inputView.keyAtlas.page2Keys.first { it.primaryLabel == "12 34" }
+        inputView.onKeyTapAction?.invoke(p1Key, p1Key.centerX, p1Key.centerY)
         assertEquals(KeyboardPage.PAGE_1_NUM_SYM, inputView.keyAtlas.currentPage)
 
-        // Tap "!?#" to switch to Page 2
+        // Tap "!?#" to switch back to Page 2
         val symKey = inputView.keyAtlas.page1Keys.first { it.primaryLabel == "!?#" }
         inputView.onKeyTapAction?.invoke(symKey, symKey.centerX, symKey.centerY)
         assertEquals(KeyboardPage.PAGE_2_EXT_SYM, inputView.keyAtlas.currentPage)
@@ -1001,9 +1006,13 @@ class TypingEngineIntegrationTest {
         val typedWord = editText.text.toString()
         assertTrue("A word must be composed", typedWord.isNotEmpty())
 
-        // 2. Switch to Page 1 via "?123"
+        // 2. Switch to Page 2 via "?123" and then to Page 1 via "12 34"
         val keyNum = inputView.keyAtlas.keys[12]
         inputView.onKeyTapAction?.invoke(keyNum, keyNum.centerX, keyNum.centerY)
+        assertEquals(KeyboardPage.PAGE_2_EXT_SYM, inputView.keyAtlas.currentPage)
+
+        val p1Key = inputView.keyAtlas.page2Keys.first { it.primaryLabel == "12 34" }
+        inputView.onKeyTapAction?.invoke(p1Key, p1Key.centerX, p1Key.centerY)
         assertEquals(KeyboardPage.PAGE_1_NUM_SYM, inputView.keyAtlas.currentPage)
 
         // Switching to Page 1 must immediately commit the typed word!

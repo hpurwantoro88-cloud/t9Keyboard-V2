@@ -42,8 +42,9 @@ class EmojiPageRenderer(
                 canvas.drawRoundRect(bounds, 8f * density, 8f * density, keyPressedPaint)
             }
             val textY = bounds.centerY() - ((subTextPaint.descent() + subTextPaint.ascent()) / 2f)
-            canvas.drawText(emojiAtlas.categories[i], bounds.centerX(), textY, subTextPaint)
+            canvas.drawText(emojiAtlas.categoryTabIcons[i], bounds.centerX(), textY, subTextPaint)
         }
+
 
         // 2. Draw active category scrollable emoji grid
         val scrollY = emojiScrollOffset

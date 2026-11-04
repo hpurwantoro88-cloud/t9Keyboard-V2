@@ -58,14 +58,15 @@ object KeyboardActionDispatcher {
 
     fun resolvePageSwitch(label: String): KeyboardPage {
         return when (label) {
-            "?123" -> KeyboardPage.PAGE_1_NUM_SYM
-            "=\\<" -> KeyboardPage.PAGE_2_EXT_SYM
+            "?123" -> KeyboardPage.PAGE_2_EXT_SYM
+            "=\\<" -> KeyboardPage.PAGE_3_EXT_SYM_ALT
             "!?#" -> KeyboardPage.PAGE_2_EXT_SYM
-            "123" -> KeyboardPage.PAGE_1_NUM_SYM
+            "12 34", "1234", "123" -> KeyboardPage.PAGE_1_NUM_SYM
             "ABC" -> KeyboardPage.PAGE_0_TEXT
             else -> KeyboardPage.PAGE_0_TEXT
         }
     }
+
 
     fun handleDirectSymbolTap(
         key: KeyInfo,
@@ -257,8 +258,9 @@ object KeyboardActionDispatcher {
 
             KeyType.EMOJI_DOT -> {
                 ctx.setLastSpaceTapTime(0L)
-                ctx.switchToPage(KeyboardPage.PAGE_3_EMOJI)
+                ctx.switchToPage(KeyboardPage.PAGE_4_EMOJI)
             }
+
 
             KeyType.DIRECT_SYM -> {
                 ctx.setLastSpaceTapTime(0L)

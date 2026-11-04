@@ -131,41 +131,10 @@ class Page0KeypadRenderer(
                     canvas.drawText(key.rightGlyph, rightX, symY, dualSymTextPaint)
                 }
                 KeyType.PAGE_SWITCH -> {
-                    if (key.id == 12 && keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT) {
-                        // Combined Utility Key
-                        val prevAlign = keyCornerSubTextPaint.textAlign
-                        keyCornerSubTextPaint.textAlign = Paint.Align.LEFT
-                        val langX = scratchRect.left + (7f * density)
-                        val langY = scratchRect.top + (11f * density * rowScale)
-                        canvas.drawText(activeLanguage, langX, langY, keyCornerSubTextPaint)
-
-                        if (isT9Mode) {
-                            val barWidth = 14f * density
-                            val barHeight = 2.5f * density
-                            val barRadius = 1.25f * density
-                            val barTop = langY + (2.5f * density * rowScale)
-                            glowRect.set(
-                                langX,
-                                barTop,
-                                langX + barWidth,
-                                barTop + barHeight
-                            )
-                            canvas.drawRoundRect(glowRect, barRadius, barRadius, indicatorGlowPaint)
-                        }
-
-                        keyCornerSubTextPaint.textAlign = Paint.Align.RIGHT
-                        val emojiX = scratchRect.right - (7f * density)
-                        val emojiY = scratchRect.top + (11f * density * rowScale)
-                        canvas.drawText("😊", emojiX, emojiY, keyCornerSubTextPaint)
-                        keyCornerSubTextPaint.textAlign = prevAlign
-
-                        val labelY = key.centerY - ((primaryTextPaint.descent() + primaryTextPaint.ascent()) / 2f)
-                        canvas.drawText("?123", key.centerX, labelY, primaryTextPaint)
-                    } else {
-                        val labelY = key.centerY - ((primaryTextPaint.descent() + primaryTextPaint.ascent()) / 2f)
-                        canvas.drawText(key.primaryLabel, key.centerX, labelY, primaryTextPaint)
-                    }
+                    val labelY = key.centerY - ((primaryTextPaint.descent() + primaryTextPaint.ascent()) / 2f)
+                    canvas.drawText(key.primaryLabel, key.centerX, labelY, primaryTextPaint)
                 }
+
                 else -> {
                     val labelY = key.centerY - ((primaryTextPaint.descent() + primaryTextPaint.ascent()) / 2f)
                     canvas.drawText(key.primaryLabel, key.centerX, labelY, primaryTextPaint)

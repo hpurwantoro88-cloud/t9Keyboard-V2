@@ -4,13 +4,16 @@ import android.graphics.RectF
 
 class EmojiAtlas {
 
+    val categoryTabIcons = arrayOf(
+        "🕒", "😀", "👋", "🐶", "🍔", "⚽", "🚗", "💡", "🔣", "🚩"
+    )
+
     val categories = arrayOf(
-        "😀 Smileys", "👤 Memoji"
+        "Recents", "Smileys", "People", "Animals", "Food", "Activities", "Travel", "Objects", "Symbols", "Flags"
     )
 
     // Full Gboard-style Smileys & Emotion emojis (~170 emojis)
     val smileysAndEmoticons = arrayOf(
-        // Classic smileys & faces
         "😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃", "🫠", "😉", "😊", "😇",
         "🥰", "😍", "🤩", "😘", "😗", "😚", "😙", "🥲", "😋", "😛", "😜", "🤪", "😝", "🤑",
         "🤗", "🫣", "🤭", "🥱", "🤫", "🫡", "🫢", "🤐", "🤨", "🧐", "🤓", "😎", "🥸", "🥳",
@@ -19,44 +22,88 @@ class EmojiAtlas {
         "😓", "🫨", "😶", "😶‍🌫️", "😐", "😑", "😬", "🫥", "🙄", "😯", "😦", "😧", "😮", "😲",
         "😴", "🤤", "😪", "😵", "😵‍💫", "🤐", "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑",
         "🤠", "😈", "👿", "👹", "👺", "🤡", "💩", "👻", "💀", "☠️", "👽", "👾", "🤖", "🎃",
-        // Cat faces
-        "😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "😾",
-        // Monkey faces
-        "🙈", "🙉", "🙊",
-        // Heart & emotion symbols
+        "😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "😾", "🙈", "🙉", "🙊",
         "💋", "💌", "💘", "💝", "💖", "💗", "💓", "💞", "💕", "💟", "💔", "❤️", "🧡", "💛",
-        "💚", "💙", "💜", "🤎", "🖤", "🤍",
-        // Expressive symbols
-        "💯", "💢", "💥", "💫", "💦", "💨", "🕳️", "💬", "👁️‍🗨️", "🗨️", "🗯️", "💭", "💤"
+        "💚", "💙", "💜", "🤎", "🖤", "🤍", "💯", "💢", "💥", "💫", "💦", "💨", "🕳️", "💬", "💭", "💤"
     )
 
-    // Common Memoji list: people, avatars, roles, expressions, gestures & animojis
+    // People & Gestures
     val commonMemojis = arrayOf(
-        // People & Avatars
         "👶", "👧", "🧒", "👦", "👩", "🧑", "👨", "👩‍🦱", "🧑‍🦱", "👨‍🦱", "👩‍🦰", "🧑‍🦰", "👨‍🦰",
-        "👱‍♀️", "👱", "👱‍♂️", "👩‍🦳", "🧑‍🦳", "👨‍🦳", "👩‍🦲", "🧑‍🦲", "👨‍🦲", "👵", "🧓", "👴",
-        "👲", "👳‍♀️", "👳", "👳‍♂️", "🧕", "👮‍♀️", "👮", "👮‍♂️", "👷‍♀️", "👷", "👷‍♂️",
-        "💂‍♀️", "💂", "💂‍♂️", "🕵️‍♀️", "🕵️", "🕵️‍♂️", "👩‍⚕️", "🧑‍⚕️", "👨‍⚕️", "👩‍🎓", "🧑‍🎓", "👨‍🎓",
-        "👩‍🏫", "🧑‍🏫", "👨‍🏫", "👩‍⚖️", "🧑‍⚖️", "👨‍⚖️", "👩‍🌾", "🧑‍🌾", "👨‍🌾", "👩‍🍳", "🧑‍🍳", "👨‍🍳",
-        "👩‍🔧", "🧑‍🔧", "👨‍🔧", "👩‍🏭", "🧑‍🏭", "👨‍🏭", "👩‍💼", "🧑‍💼", "👨‍💼", "👩‍🔬", "🧑‍🔬", "👨‍🔬",
-        "👩‍💻", "🧑‍💻", "👨‍💻", "👩‍🎤", "🧑‍🎤", "👨‍🎤", "👩‍🎨", "🧑‍🎨", "👨‍🎨", "👩‍✈️", "🧑‍✈️", "👨‍✈️",
-        "👩‍🚀", "🧑‍🚀", "👨‍🚀", "👩‍🚒", "🧑‍🚒", "👨‍🚒", "👸", "🤴", "👰", "🤵", "🦸", "🦹", "🧙",
-        "🧝", "🧛", "🧟", "🧞", "🧜", "🧚", "👼",
-        // Avatar Expressions & Actions
+        "👱‍♀️", "👱", "👱‍♂️", "👩‍🦳", "🧑‍🦳", "👨‍🦳", "👵", "🧓", "👴", "👲", "🧕", "👮‍♀️", "👮", "👷",
+        "💂", "🕵️", "👩‍⚕️", "👨‍⚕️", "👩‍🎓", "👨‍🎓", "👩‍🏫", "👨‍🏫", "👩‍⚖️", "👨‍⚖️", "👩‍🌾", "👨‍🌾",
+        "👩‍🍳", "👨‍🍳", "👩‍🔧", "👨‍🔧", "👩‍🏭", "👨‍🏭", "👩‍💼", "👨‍💼", "👩‍🔬", "👨‍🔬", "👩‍💻", "👨‍💻",
+        "👸", "🤴", "👰", "🤵", "🦸", "🦹", "🧙", "🧚", "👼",
         "🙇", "💁", "🙅", "🙆", "🙋", "🧏", "🤦", "🤷", "🙎", "🙍", "💇", "💆", "🧖",
-        "🚶", "🏃", "💃", "🕺", "👯", "🧘", "🛀", "🛌",
-        // Animoji Animals
-        "🐵", "🐶", "🐺", "🐱", "🦁", "🐯", "🦒", "🦊", "🦝", "🐮", "🐷", "🐗", "🐭", "🐹",
-        "🐰", "🐻", "🐨", "🐼", "🐸", "🦓", "🐴", "🦄", "🐔", "🐲", "🐙",
-        // Hand Gestures
+        "🚶", "🏃", "💃", "🕺", "👯", "🧘",
         "👍", "👎", "👌", "🤌", "🤏", "✌️", "🤞", "🫰", "🤟", "🤘", "🤙", "👈", "👉", "👆",
-        "🖕", "👇", "☝️", "🫵", "👋", "🤚", "🖐️", "✋", "🖖", "🫱", "🫲", "👏", "🙌", "🫶",
+        "👇", "☝️", "🫵", "👋", "🤚", "🖐️", "✋", "🖖", "🫱", "🫲", "👏", "🙌", "🫶",
         "👐", "🤲", "🤝", "🙏", "✍️", "💅", "🤳", "💪"
     )
 
-    val categoryEmojiStrings: Array<Array<String>> = arrayOf(
-        smileysAndEmoticons,
-        commonMemojis
+    // Animals & Nature
+    val animalsAndNature = arrayOf(
+        "🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸",
+        "🐵", "🐔", "🐧", "🐦", "🐤", "🦆", "🦅", "🦉", "🦇", "🐺", "🐗", "🐴", "🦄", "🐝",
+        "🐛", "🦋", "🐌", "🐞", "🐜", "🦟", "🐢", "🐍", "🦎", "🐙", "🦑", "🦐", "🦞", "🦀",
+        "🐡", "🐠", "🐟", "🐬", "🐳", "🦈", "🐊", "🐅", "🐆", "🦓", "🦍", "🐘", "🦛", "🦏",
+        "🐪", "🐫", "🦒", "🦘", "🐃", "🐂", "🐄", "🐎", "🐖", "🐏", "🐑", "🐐", "🦌", "🐕",
+        "🐩", "🐈", "🐓", "🦃", "🦚", "🦜", "🦢", "🕊️", "🐇", "🦝", "🌲", "🌳", "🌴", "🌵",
+        "🌾", "🌿", "🍀", "🍁", "🍂", "🍃", "🍄", "🌸", "🌺", "🌹", "🌷", "🌻", "🌼"
+    )
+
+    // Food & Drink
+    val foodAndDrink = arrayOf(
+        "🍏", "🍎", "🍐", "🍊", "🍋", "🍌", "🍉", "🍇", "🍓", "🫐", "🍈", "🍒", "🍑", "🥭",
+        "🍍", "🥥", "🥝", "🍅", "🍆", "🥑", "🥦", "🥬", "🥒", "🌶️", "🌽", "🥕", "🧄", "🧅",
+        "🥔", "🍠", "🥐", "🍞", "🥖", "🥨", "🧀", "🥚", "🍳", "🧈", "🥞", "🧇", "🥓", "🍗",
+        "🍖", "🌭", "🍔", "🍟", "🍕", "🥪", "🥙", "🌮", "🌯", "🥗", "🥘", "🍝", "🍜", "🍲",
+        "🍛", "🍣", "🍱", "🥟", "🍤", "🍙", "🍚", "🍘", "🍢", "🍧", "🍨", "🍦", "🍰", "🎂",
+        "🍮", "🍭", "🍬", "🍫", "🍿", "🍩", "🍪", "🌰", "🥜", "🍯", "🥛", "☕", "🍵", "🧃",
+        "🥤", "🍶", "🍺", "🍻", "🥂", "🍷", "🥃", "🍸", "🍹"
+    )
+
+    // Activities
+    val activitiesList = arrayOf(
+        "⚽", "🏀", "🏈", "⚾", "🥎", "🎾", "🏐", "🏉", "🥏", "🎱", "🏓", "🏸", "🏒", "🏏",
+        "🥅", "⛳", "🏹", "🎣", "🤿", "🥊", "🥋", "🛹", "🛼", "⛸️", "🎿", "🏂", "🏋️", "🤺",
+        "🏇", "🧘", "🏄", "🏊", "🧗", "🚴", "🏆", "🥇", "🥈", "🥉", "🏅", "🎖️", "🎫", "🎟️",
+        "🎪", "🎨", "🎬", "🎤", "🎧", "🎼", "🎹", "🥁", "🎷", "🎺", "🎸", "🎻", "🎲", "🎯", "🎮"
+    )
+
+    // Travel & Places
+    val travelAndPlaces = arrayOf(
+        "🚗", "🚕", "🚙", "🚌", "🚎", "🏎️", "🚓", "🚑", "🚒", "🚐", "🚚", "🚜", "🛴", "🚲",
+        "🛵", "🏍️", "🚨", "🚔", "🚍", "🚆", "🚇", "🚉", "✈️", "🛫", "🛬", "🚀", "🛸", "🚁",
+        "🛶", "⛵", "🚤", "🚢", "⚓", "⛽", "🚦", "🗺️", "🗿", "🗽", "🗼", "🏰", "🏟️", "🎡",
+        "🎢", "🏖️", "🏝️", "🌋", "⛰️", "🏔️", "⛺", "🏠", "🏡", "🏢", "🏦", "🏨", "🏫", "⛪", "🕌"
+    )
+
+    // Objects
+    val objectsList = arrayOf(
+        "⌚", "📱", "💻", "⌨️", "🖥️", "🖨️", "🖱️", "📷", "📸", "📹", "🎥", "📞", "☎️", "📻",
+        "⏱️", "⏰", "🕰️", "⏳", "📡", "🔋", "🔌", "💡", "🔦", "🕯️", "🗑️", "💵", "💰", "💳",
+        "💎", "⚖️", "🧰", "🔧", "🔨", "🛠️", "🔩", "⚙️", "🔑", "🗝️", "🚪", "📦", "✉️", "📧",
+        "📝", "✏️", "✒️", "🖊️", "📌", "📍", "📎", "📏", "✂️", "🔒", "🔓", "🔍", "🔎"
+    )
+
+    // Symbols
+    val symbolsList = arrayOf(
+        "❤️", "🧡", "💛", "💚", "💙", "💜", "🤎", "🖤", "🤍", "💔", "❣️", "💕", "💞", "💓",
+        "💗", "💖", "💘", "💝", "☮️", "✝️", "☪️", "🕉️", "☸️", "✡️", "☯️", "☦️", "🛐", "⛎",
+        "♈", "♉", "♊", "♋", "♌", "♍", "♎", "♏", "♐", "♑", "♒", "♓", "🆔", "☣️", "📴",
+        "🈶", "🈚", "🈸", "🈺", "🈷️", "✴️", "🆚", "🆘", "❌", "⭕", "🛑", "⛔", "📛", "🚫",
+        "💯", "💢", "♨️", "❗", "❕", "❓", "❔", "‼️", "⁉️", "⚠️", "♻️", "✅", "❇️", "✳️",
+        "🌐", "💠", "💤", "🏧", "♿", "🅿️", "🚹", "🚺", "🚼", "🚻", "📶", "🔣", "ℹ️", "🆗",
+        "🆙", "🆒", "🆕", "🆓", "0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣",
+        "🔟", "🔢", "➕", "➖", "➗", "✖️", "♾️", "💲", "💱", "™️", "©️", "®️", "✔️", "☑️", "🔘",
+        "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "⚫", "⚪", "🟥", "🟧", "🟨", "🟩", "🟦", "🟪", "⬛", "⬜"
+    )
+
+    // Flags
+    val flagsList = arrayOf(
+        "🏁", "🚩", "🎌", "🏴", "🏳️", "🏳️‍🌈", "🏳️‍⚧️", "🏴‍☠️", "🇮🇩", "🇺🇸", "🇬🇧", "🇯🇵", "🇰🇷", "🇨🇳",
+        "🇩🇪", "🇫🇷", "🇪🇸", "🇮🇹", "🇷🇺", "🇧🇷", "🇮🇳", "🇨🇦", "🇦🇺", "🇸🇬", "🇲🇾", "🇹🇭", "🇻🇳", "🇵🇭"
     )
 
     // Dynamic Recents
@@ -67,7 +114,20 @@ class EmojiAtlas {
         "❤️", "💯", "🎉", "✨", "🙏", "👌", "🚀"
     )
 
-    var activeCategoryIndex = 0 // default to Tab 0: Smileys & Emoticons
+    val categoryEmojiStrings: Array<Array<String>> = arrayOf(
+        recentEmojis.toTypedArray(),
+        smileysAndEmoticons,
+        commonMemojis,
+        animalsAndNature,
+        foodAndDrink,
+        activitiesList,
+        travelAndPlaces,
+        objectsList,
+        symbolsList,
+        flagsList
+    )
+
+    var activeCategoryIndex = 1 // default to Tab 1: Smileys
     private val scratchChars = CharArray(2)
 
     val gridCols = 7
@@ -88,15 +148,15 @@ class EmojiAtlas {
     var currentOffsetX = 0f
         private set
 
-    val categoryTabBounds = Array(2) { RectF() }
+    val categoryTabBounds = Array(10) { RectF() }
     val emojiGridBounds = Array(28) { RectF() }
     val controlRowBounds = Array(4) { RectF() } // ABC, Recents, Space, Del
 
     fun computeLayout(width: Float, height: Float, density: Float, offsetX: Float = 0f) {
         currentOffsetX = offsetX
         tabHeight = (height * (40f / 260f)).coerceIn(30f * density, 48f * density)
-        val tabWidth = width / 2f
-        for (i in 0 until 2) {
+        val tabWidth = width / categories.size.toFloat()
+        for (i in 0 until categories.size) {
             categoryTabBounds[i].set(offsetX + (i * tabWidth), 0f, offsetX + ((i + 1) * tabWidth), tabHeight)
         }
 
@@ -125,20 +185,23 @@ class EmojiAtlas {
 
     fun computeMaxScroll(tabIndex: Int): Float {
         val safeTab = tabIndex.coerceIn(0, categoryEmojiStrings.size - 1)
-        val items = categoryEmojiStrings[safeTab]
+        val items = if (safeTab == 0) recentEmojis.toTypedArray() else categoryEmojiStrings[safeTab]
         val totalRows = (items.size + gridCols - 1) / gridCols
         val totalHeight = totalRows * gridRowHeight
         return minOf(0f, visibleGridHeight - totalHeight)
     }
 
     fun getActiveEmojiList(): Array<String> {
+        if (activeCategoryIndex == 0) {
+            return recentEmojis.toTypedArray()
+        }
         val safeTab = activeCategoryIndex.coerceIn(0, categoryEmojiStrings.size - 1)
         return categoryEmojiStrings[safeTab]
     }
 
     fun getEmojiString(tabIndex: Int, index: Int): String {
         val safeTab = tabIndex.coerceIn(0, categoryEmojiStrings.size - 1)
-        val items = categoryEmojiStrings[safeTab]
+        val items = if (safeTab == 0) recentEmojis.toTypedArray() else categoryEmojiStrings[safeTab]
         return if (index in items.indices) items[index] else ""
     }
 

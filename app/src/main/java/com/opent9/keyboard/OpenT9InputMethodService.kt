@@ -381,16 +381,17 @@ class OpenT9InputMethodService : InputMethodService() {
                 keyboardView.gestureTracker.resetPage1Scroll()
                 keyboardView.updateCandidates(emptyList())
             }
-            KeyboardPage.PAGE_2_EXT_SYM -> {
+            KeyboardPage.PAGE_2_EXT_SYM, KeyboardPage.PAGE_3_EXT_SYM_ALT -> {
                 keyboardView.setT9Mode(false)
                 keyboardView.updateCandidates(emptyList())
             }
-            KeyboardPage.PAGE_3_EMOJI -> {
+            KeyboardPage.PAGE_4_EMOJI -> {
                 keyboardView.updateCandidates(emptyList())
             }
             KeyboardPage.PAGE_0_TEXT -> {
                 keyboardView.setT9Mode(settingsObserver.isDefaultT9())
             }
+
         }
         keyboardView.keyAtlas.updatePageLayout(targetPage)
         keyboardView.invalidate()

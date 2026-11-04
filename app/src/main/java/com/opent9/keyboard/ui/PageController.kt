@@ -61,9 +61,11 @@ class PageController(private val keyAtlas: KeyAtlas) {
             )
             KeyboardPage.PAGE_1_NUM_SYM -> handlePage1Flick(key, direction, ic)
             KeyboardPage.PAGE_2_EXT_SYM -> handlePage2Flick(key, direction, ic)
-            KeyboardPage.PAGE_3_EMOJI -> {}
+            KeyboardPage.PAGE_3_EXT_SYM_ALT -> handlePage3Flick(key, direction, ic)
+            KeyboardPage.PAGE_4_EMOJI -> {}
         }
     }
+
 
     @Suppress("UNUSED_PARAMETER")
     private fun handlePage0Flick(
@@ -111,20 +113,20 @@ class PageController(private val keyAtlas: KeyAtlas) {
                     else -> {}
                 }
             }
-            12 -> { // [ ?123 / EN / 😊 Combined Utility Key ]
+            12 -> { // [ ?123 ]
                 when (direction) {
-                    FlickDirection.UP -> onSwitchLanguage()
-                    FlickDirection.DOWN -> onSwitchPage(KeyboardPage.PAGE_3_EMOJI)
+                    FlickDirection.DOWN -> onSwitchPage(KeyboardPage.PAGE_2_EXT_SYM)
                     else -> {}
                 }
             }
-            13 -> { // Legacy / Fallback
+            13 -> { // [ EN / ID / 😊 ]
                 when (direction) {
                     FlickDirection.UP -> onSwitchLanguage()
-                    FlickDirection.DOWN -> onSwitchPage(KeyboardPage.PAGE_3_EMOJI)
+                    FlickDirection.DOWN -> onSwitchPage(KeyboardPage.PAGE_4_EMOJI)
                     else -> {}
                 }
             }
+
             14 -> { // [ 0 ␣ SPACE ]
                 when (direction) {
                     FlickDirection.DOWN -> ic.commitText("\u00A0", 1) // Non-breaking space
@@ -211,9 +213,14 @@ class PageController(private val keyAtlas: KeyAtlas) {
         }
     }
 
+    private fun handlePage3Flick(key: KeyInfo, direction: FlickDirection, ic: InputConnection) {
+        // Universal flicks handled by base handler
+    }
+
     private fun commitPairWithCursorInside(ic: InputConnection, open: String, close: String) {
         ic.commitText(open + close, 1)
         ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT))
         ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_LEFT))
     }
 }
+
