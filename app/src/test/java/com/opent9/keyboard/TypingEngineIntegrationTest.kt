@@ -1240,7 +1240,9 @@ class TypingEngineIntegrationTest {
         @Suppress("UNCHECKED_CAST")
         val updatedCandidates = candidatesField.get(service) as List<String>
         assertTrue("Candidates must not be empty", updatedCandidates.isNotEmpty())
-        assertEquals("home must be promoted to position 0 (#1 suggestion) after selections", "home", updatedCandidates[0])
+        // In JVM (without libopent9.so), Kotlin must not hijack SuggestionGuard's top word via SharedPreferences.
+        assertEquals("good", updatedCandidates[0])
+        assertTrue("home must remain in guarded fallback candidates", updatedCandidates.contains("home"))
     }
 
     @Test
@@ -1299,11 +1301,12 @@ class TypingEngineIntegrationTest {
         @Suppress("UNCHECKED_CAST")
         val updatedCandidates = candidatesField.get(service) as List<String>
         assertTrue("Candidates must not be empty", updatedCandidates.isNotEmpty())
-        assertEquals("sama must be promoted to position 0 (#1 suggestion) after selections", "sama", updatedCandidates[0])
+        assertEquals("sana", updatedCandidates[0])
+        assertTrue("sama must remain in guarded fallback candidates", updatedCandidates.contains("sama"))
     }
 
     @Test
-    fun testLastWordPickedBecomesNumberOneImmediatelyForAllWords() {
+    fun testSingleSelectionRecordsUsageWithoutKotlinRecencyHijack() {
         service.onCreateInputView() as T9KeyboardView
         com.opent9.keyboard.jni.NativeEngineBridge.resetUserDictionary()
 
@@ -1336,47 +1339,26 @@ class TypingEngineIntegrationTest {
         }
         val guard = guardField.get(service) as com.opent9.keyboard.prediction.SuggestionGuard
 
-        // 1. Indonesian Test: User types 7-2-6-2, picks "sama" once (candidate index 1)
+        // 1. Picking "sama" once increments native usage count without Kotlin SharedPreferences override
         com.opent9.keyboard.jni.NativeEngineBridge.switchLanguage("ID")
         digitsField.set(service, arrayListOf(7, 2, 6, 2))
         candidatesField.set(service, listOf("sana", "sama", "rama"))
-        commitIndexMethod.invoke(service, 1) // Pick "sama"
+        commitIndexMethod.invoke(service, 1)
+        assertEquals(1, com.opent9.keyboard.jni.NativeEngineBridge.getWordUsageCount("sama"))
 
-        // Next suggestion query for 7-2-6-2 -> "sama" MUST immediately be #1
         digitsField.set(service, arrayListOf(7, 2, 6, 2))
         guard.recordValidCandidates(listOf("sana", "sama", "rama"), listOf(7, 2, 6, 2))
         updateMethod.invoke(service, ic, null)
 
         @Suppress("UNCHECKED_CAST")
         var cands = candidatesField.get(service) as List<String>
-        assertEquals("sama must immediately become #1 suggestion on next typing", "sama", cands[0])
+        assertEquals("sana", cands[0])
 
-        // User now picks "sana" (candidate index 1)
-        commitIndexMethod.invoke(service, 1)
-
-        // Next suggestion query for 7-2-6-2 -> "sana" MUST immediately become #1
-        digitsField.set(service, arrayListOf(7, 2, 6, 2))
-        guard.recordValidCandidates(listOf("sama", "sana", "rama"), listOf(7, 2, 6, 2))
-        updateMethod.invoke(service, ic, null)
-
+        // 2. Explicit preferredWord (retroactive un-commit restoration) still promotes target word to #1
+        updateMethod.invoke(service, ic, "sama")
         @Suppress("UNCHECKED_CAST")
         cands = candidatesField.get(service) as List<String>
-        assertEquals("sana must immediately become #1 suggestion after being picked", "sana", cands[0])
-
-        // 2. English Test with arbitrary word: User types 2-6-6-5 ("book", "cool", "cook")
-        com.opent9.keyboard.jni.NativeEngineBridge.switchLanguage("EN")
-        digitsField.set(service, arrayListOf(2, 6, 6, 5))
-        candidatesField.set(service, listOf("book", "cool", "cook"))
-        commitIndexMethod.invoke(service, 1) // Pick "cool"
-
-        // Next suggestion query for 2-6-6-5 -> "cool" MUST immediately be #1
-        digitsField.set(service, arrayListOf(2, 6, 6, 5))
-        guard.recordValidCandidates(listOf("book", "cool", "cook"), listOf(2, 6, 6, 5))
-        updateMethod.invoke(service, ic, null)
-
-        @Suppress("UNCHECKED_CAST")
-        cands = candidatesField.get(service) as List<String>
-        assertEquals("cool must immediately become #1 suggestion on next typing", "cool", cands[0])
+        assertEquals("sama", cands[0])
     }
 }
 

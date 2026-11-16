@@ -48,6 +48,8 @@
 
     <!-- Dictionary -->
     <string name="pref_startup_language">Primary Startup Language</string>
+    <string name="pref_bilingual_prediction">Bilingual Prediction (ID + EN)</string>
+    <string name="pref_bilingual_prediction_summary">Suggest English and Indonesian words together without switching language</string>
     <string name="pref_slang_boost">Slang / Bahasa Gaul Priority</string>
     <string name="pref_decay_half_life">Dynamic Decay Half-Life</string>
     <string name="pref_reset_dict">Reset User Dictionary</string>

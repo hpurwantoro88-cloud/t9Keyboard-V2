@@ -15,5 +15,7 @@ native_tests/simulated_speed_typing
 native_tests/test_suggestion_quality
 native_tests/detailed_ram_profile
 tools/dawg_compiler/dawg_builder
+tools/dawg_compiler/lexicon_extractor
+tools/dawg_compiler/ngram_builder
 tools/dawg_compiler/build
 native_tests/build

@@ -18,7 +18,4 @@ interface TouchGestureListener {
     fun onEmojiControlTap(controlIndex: Int) {}
     fun onEmojiPageSwipe(direction: FlickDirection) {}
     fun onEmojiTouchStateChanged(tabIndex: Int?, gridIndex: Int?, controlIndex: Int?) {}
-
-    // Page 2 Symbol layer callback
-    fun onSymbolLayerChanged(layerIndex: Int) {}
 }

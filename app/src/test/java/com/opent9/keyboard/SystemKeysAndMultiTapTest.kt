@@ -222,113 +222,45 @@ class SystemKeysAndMultiTapTest {
     }
 
     @Test
-    fun testPage2FlickDualSymbolsAndSystemKeys() {
+    fun testPage2AndPage3SymbolPagesAndUniversalSystemFlicks() {
         val atlas = KeyAtlas()
         atlas.computeGeometry(1080f, 780f, 3f)
         atlas.updatePageLayout(KeyboardPage.PAGE_2_EXT_SYM)
         val controller = PageController(atlas)
-
         val ic = mockk<InputConnection>(relaxed = true)
 
-        // 1. Dual symbol key 2: [ { } ]
-        val key2 = atlas.keys[2] // { }
-        controller.handleKeyFlick(key2, FlickDirection.LEFT, ic, {}, {}, {}, {})
-        verify { ic.commitText("{", 1) }
+        // 1. Page 2 uses 10-column Gboard-style page2Keys (e.g. '@', '=\\<', '12 34')
+        assertEquals(35, atlas.page2Keys.size)
+        assertTrue(atlas.page2Keys.any { it.primaryLabel == "@" && it.type == KeyType.DIRECT_SYM })
+        assertTrue(atlas.page2Keys.any { it.primaryLabel == "=\\<" && it.type == KeyType.PAGE_SWITCH })
+        assertTrue(atlas.page2Keys.any { it.primaryLabel == "12 34" && it.type == KeyType.PAGE_SWITCH })
 
-        clearMocks(ic)
-        controller.handleKeyFlick(key2, FlickDirection.RIGHT, ic, {}, {}, {}, {})
-        verify { ic.commitText("}", 1) }
+        // 2. Page 3 uses 10-column extended symbols page3Keys (e.g. '~', '√', '?123')
+        atlas.updatePageLayout(KeyboardPage.PAGE_3_EXT_SYM_ALT)
+        assertEquals(35, atlas.page3Keys.size)
+        assertTrue(atlas.page3Keys.any { it.primaryLabel == "~" && it.type == KeyType.DIRECT_SYM })
+        assertTrue(atlas.page3Keys.any { it.primaryLabel == "√" && it.type == KeyType.DIRECT_SYM })
+        assertTrue(atlas.page3Keys.any { it.primaryLabel == "?123" && it.type == KeyType.PAGE_SWITCH })
 
-        clearMocks(ic)
-        controller.handleKeyFlick(key2, FlickDirection.DOWN, ic, {}, {}, {}, {})
-        verify { ic.commitText("{}", 1) }
-        verify(exactly = 1) { ic.sendKeyEvent(match { it.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && it.action == KeyEvent.ACTION_DOWN }) }
-
-        // 2. Dual symbol key 9: [ Rp $ ]
-        val key9 = atlas.keys[9]
-        clearMocks(ic)
-        controller.handleKeyFlick(key9, FlickDirection.LEFT, ic, {}, {}, {}, {})
-        verify { ic.commitText(any(), 1) }
-
-        clearMocks(ic)
-        controller.handleKeyFlick(key9, FlickDirection.RIGHT, ic, {}, {}, {}, {})
-        verify { ic.commitText("$", 1) }
-
-        clearMocks(ic)
-        controller.handleKeyFlick(key9, FlickDirection.DOWN, ic, {}, {}, {}, {})
-        verify { ic.commitText("¢", 1) }
-
-        // 3. System keys on Page 2: DEL flick deletes preceding word
-        val keyDel = atlas.keys[3] // DEL
+        // 3. Universal system key flicks work on Page 2 (DEL flick LEFT deletes preceding word)
+        atlas.updatePageLayout(KeyboardPage.PAGE_2_EXT_SYM)
+        val keyDel = atlas.page2Keys.first { it.type == KeyType.DEL }
         var deletedWord = false
         controller.handleKeyFlick(keyDel, FlickDirection.LEFT, ic, {}, {}, { deletedWord = true }, {})
         assertTrue(deletedWord)
     }
 
     @Test
-    fun testPage2MultiLayerSymbolsAndFlicks() {
+    fun testPage1CalculatorLayoutAndOperatorColumn() {
         val atlas = KeyAtlas()
         atlas.computeGeometry(1080f, 780f, 3f)
-        atlas.updatePageLayout(KeyboardPage.PAGE_2_EXT_SYM)
-        val controller = PageController(atlas)
-        val ic = mockk<InputConnection>(relaxed = true)
+        atlas.updatePageLayout(KeyboardPage.PAGE_1_NUM_SYM)
 
-        // Switch to Layer 1: [ @ #, & *, = ≠, ... ]
-        assertTrue(atlas.setSymbolLayer(1))
-        assertEquals(1, atlas.activeSymbolLayerIndex)
-
-        // Key 0 on layer 1: [ @ # ]
-        val key0 = atlas.keys[0]
-        assertEquals("@ #", key0.primaryLabel)
-        assertEquals("@", key0.leftGlyph)
-        assertEquals("#", key0.rightGlyph)
-
-        clearMocks(ic)
-        controller.handleKeyFlick(key0, FlickDirection.LEFT, ic, {}, {}, {}, {})
-        verify { ic.commitText("@", 1) }
-
-        clearMocks(ic)
-        controller.handleKeyFlick(key0, FlickDirection.RIGHT, ic, {}, {}, {}, {})
-        verify { ic.commitText("#", 1) }
-
-        clearMocks(ic)
-        controller.handleKeyFlick(key0, FlickDirection.DOWN, ic, {}, {}, {}, {})
-        verify { ic.commitText("_", 1) }
-
-        // Key 2 on layer 1: [ = ≠ ]
-        val key2 = atlas.keys[2]
-        clearMocks(ic)
-        controller.handleKeyFlick(key2, FlickDirection.LEFT, ic, {}, {}, {}, {})
-        verify { ic.commitText("=", 1) }
-
-        clearMocks(ic)
-        controller.handleKeyFlick(key2, FlickDirection.RIGHT, ic, {}, {}, {}, {})
-        verify { ic.commitText("≠", 1) }
-
-        clearMocks(ic)
-        controller.handleKeyFlick(key2, FlickDirection.DOWN, ic, {}, {}, {}, {})
-        verify { ic.commitText("≈", 1) }
-
-        // Switch to Layer 2: [ ° ℃, § ¶, ... ]
-        assertTrue(atlas.setSymbolLayer(2))
-        val key0_l2 = atlas.keys[0]
-        assertEquals("° ℃", key0_l2.primaryLabel)
-        clearMocks(ic)
-        controller.handleKeyFlick(key0_l2, FlickDirection.LEFT, ic, {}, {}, {}, {})
-        verify { ic.commitText("°", 1) }
-
-        clearMocks(ic)
-        controller.handleKeyFlick(key0_l2, FlickDirection.DOWN, ic, {}, {}, {}, {})
-        verify { ic.commitText("℉", 1) }
-
-        // Switch to Layer 3: [ ¢ ¥, ₩ ₽, ... « » ]
-        assertTrue(atlas.setSymbolLayer(3))
-        val key8_l3 = atlas.keys[8]
-        assertEquals("« »", key8_l3.primaryLabel)
-        clearMocks(ic)
-        controller.handleKeyFlick(key8_l3, FlickDirection.DOWN, ic, {}, {}, {}, {})
-        verify { ic.commitText("«»", 1) }
-        verify(exactly = 1) { ic.sendKeyEvent(match { it.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && it.action == KeyEvent.ACTION_DOWN }) }
+        assertEquals(6, atlas.page1OperatorItems.size)
+        assertFalse(atlas.page1ScrollContainerBounds.isEmpty)
+        assertTrue(atlas.page1Keys.any { it.primaryLabel == "!?#" && it.type == KeyType.PAGE_SWITCH })
+        assertTrue(atlas.page1Keys.any { it.primaryLabel == "ABC" && it.type == KeyType.PAGE_SWITCH })
+        assertEquals(0, atlas.findPage1OperatorIndex(atlas.page1ScrollContainerBounds.top + 5f, 0f))
     }
 
     @Test

@@ -55,8 +55,10 @@ class SettingsSyncTest {
         assertEquals("normal", observer.getSpaceScrubbingSensitivity())
         assertEquals(false, observer.isSpaceScrubbingHoldRequired())
 
-        // Verify initial sync parameters
-        assertEquals(42.0f, syncedSigma, 0.01f)
+        // Verify initial sync parameters (DPI-normalized touch sigma = 16dp * density)
+        val expectedSigma = SettingsObserver.DEFAULT_TOUCH_SIGMA_DP *
+            context.resources.displayMetrics.density.coerceAtLeast(1.0f)
+        assertEquals(expectedSigma, syncedSigma, 0.01f)
         assertEquals(350, syncedLongPress)
         assertEquals(600, syncedMultiTap)
         assertTrue(syncedAutoSpace)
@@ -133,6 +135,27 @@ class SettingsSyncTest {
         assertEquals("low", observer.getSpaceScrubbingSensitivity())
         assertEquals(true, observer.isSpaceScrubbingHoldRequired())
 
+        observer.stop()
+    }
+
+    @Test
+    fun testBilingualPredictionPreferenceSync() {
+        var syncedBilingual: Boolean? = null
+        val observer = SettingsObserver(
+            context = context,
+            onBilingualSync = { enabled -> syncedBilingual = enabled }
+        )
+        observer.start()
+        assertEquals(false, observer.isBilingualPredictionEnabled())
+        assertEquals(false, syncedBilingual)
+
+        PreferenceManager.getDefaultSharedPreferences(context)
+            .edit()
+            .putBoolean("bilingual_prediction", true)
+            .commit()
+
+        assertEquals(true, observer.isBilingualPredictionEnabled())
+        assertEquals(true, syncedBilingual)
         observer.stop()
     }
 }

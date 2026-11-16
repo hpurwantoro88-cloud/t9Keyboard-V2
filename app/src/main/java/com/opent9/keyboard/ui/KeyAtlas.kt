@@ -27,7 +27,6 @@ enum class KeyType {
     ENTER,
     PAGE_SWITCH,
     LANG_SWITCH,
-    EMOJI_DOT,
     DIRECT_SYM,
     DUAL_SYM
 }
@@ -48,12 +47,6 @@ data class KeyInfo(
     var rightGlyph: String = "",
     var digitValue: Int = -1,
     var isActionKey: Boolean = false
-)
-
-data class SymbolLayerKey(
-    val left: String,
-    val right: String,
-    val downGlyph: String = ""
 )
 
 class KeyAtlas {
@@ -232,90 +225,6 @@ class KeyAtlas {
     )
 
 
-    // Page 2 3x3 Scrollable Symbol Layer Elements
-    val symbolGrid3x3Bounds = RectF()
-    val symbolLayerTabBounds = Array(4) { RectF() }
-    val symbolLayerTabTitles = arrayOf("{ }", "@ #", "° √", "© $")
-    val symbol3x3KeyIndices = intArrayOf(0, 1, 2, 4, 5, 6, 8, 9, 10)
-
-    val symbolLayers: Array<Array<SymbolLayerKey>> = arrayOf(
-        // Layer 0: Brackets, Math & Currencies
-        arrayOf(
-            SymbolLayerKey("~", "`", "^"),
-            SymbolLayerKey("\\", "|", "/"),
-            SymbolLayerKey("{", "}", "{}"),
-            SymbolLayerKey("[", "]", "[]"),
-            SymbolLayerKey("<", ">", "<>"),
-            SymbolLayerKey("(", ")", "()"),
-            SymbolLayerKey("%", "‰", "/"),
-            SymbolLayerKey("Rp", "$", "¢"),
-            SymbolLayerKey("€", "£", "¥")
-        ),
-        // Layer 1: Web, Programming & Punctuation
-        arrayOf(
-            SymbolLayerKey("@", "#", "_"),
-            SymbolLayerKey("&", "*", "^"),
-            SymbolLayerKey("=", "≠", "≈"),
-            SymbolLayerKey("/", "_", "-"),
-            SymbolLayerKey(":", ";", "|"),
-            SymbolLayerKey("!", "?", "~"),
-            SymbolLayerKey("^", "|", "\\"),
-            SymbolLayerKey("+", "-", "±"),
-            SymbolLayerKey("×", "÷", "/")
-        ),
-        // Layer 2: Technical, Math, Units & Bullets
-        arrayOf(
-            SymbolLayerKey("°", "℃", "℉"),
-            SymbolLayerKey("§", "¶", "†"),
-            SymbolLayerKey("±", "∓", "="),
-            SymbolLayerKey("•", "·", "…"),
-            SymbolLayerKey("√", "∛", "^"),
-            SymbolLayerKey("π", "∞", "∆"),
-            SymbolLayerKey("²", "³", "¹"),
-            SymbolLayerKey("µ", "∑", "Ω"),
-            SymbolLayerKey("≤", "≥", "≠")
-        ),
-        // Layer 3: Currencies, Legal, Typography & Quotes
-        arrayOf(
-            SymbolLayerKey("¢", "¥", "Rp"),
-            SymbolLayerKey("₩", "₽", "₺"),
-            SymbolLayerKey("₿", "฿", "$"),
-            SymbolLayerKey("©", "®", "™"),
-            SymbolLayerKey("™", "℠", "℗"),
-            SymbolLayerKey("¿", "¡", "?"),
-            SymbolLayerKey("«", "»", "\"\""),
-            SymbolLayerKey("“", "”", "„"),
-            SymbolLayerKey("‘", "’", "‚")
-        )
-    )
-
-    var activeSymbolLayerIndex: Int = 0
-        private set
-
-    fun setSymbolLayer(index: Int): Boolean {
-        val clamped = index.coerceIn(0, symbolLayers.size - 1)
-        if (activeSymbolLayerIndex != clamped) {
-            activeSymbolLayerIndex = clamped
-            if (currentPage == KeyboardPage.PAGE_2_EXT_SYM) {
-                configurePage2()
-            }
-            return true
-        }
-        return false
-    }
-
-    fun nextSymbolLayer(): Boolean {
-        return if (activeSymbolLayerIndex < symbolLayers.size - 1) {
-            setSymbolLayer(activeSymbolLayerIndex + 1)
-        } else false
-    }
-
-    fun prevSymbolLayer(): Boolean {
-        return if (activeSymbolLayerIndex > 0) {
-            setSymbolLayer(activeSymbolLayerIndex - 1)
-        } else false
-    }
-
     private fun setKeyGridPosition(key: KeyInfo, r: Int, c: Int, offsetX: Float) {
         key.row = r
         key.col = c
@@ -327,21 +236,6 @@ class KeyAtlas {
         key.centerX = left + (colWidth / 2f)
         key.centerY = top + (rowHeight / 2f)
         grid[r][c] = key
-    }
-
-    private fun setKeyMultiColPosition(key: KeyInfo, r: Int, startCol: Int, spanCols: Int, offsetX: Float) {
-        key.row = r
-        key.col = startCol
-        val left = offsetX + (startCol * colWidth)
-        val top = stripHeight + (r * rowHeight)
-        val right = left + (spanCols * colWidth)
-        val bottom = top + rowHeight
-        key.bounds.set(left, top, right, bottom)
-        key.centerX = left + ((spanCols * colWidth) / 2f)
-        key.centerY = top + (rowHeight / 2f)
-        for (c in startCol until (startCol + spanCols).coerceAtMost(4)) {
-            grid[r][c] = key
-        }
     }
 
     var layoutOrder: List<RearrangeKeyId> = KeyboardLayoutConfig.DEFAULT_ORDER
@@ -410,15 +304,6 @@ class KeyAtlas {
         applyPage0RearrangedLayout(layoutOrder, offsetX)
     }
 
-    fun applyPage2UtilityRowLayout(offsetX: Float = lastOffsetX) {
-        if (colWidth <= 0f || rowHeight <= 0f) return
-        val utilityRow = 3
-        setKeyGridPosition(keys[12], utilityRow, 0, offsetX)
-        setKeyGridPosition(keys[13], utilityRow, 1, offsetX)
-        setKeyGridPosition(keys[14], utilityRow, 2, offsetX)
-        setKeyGridPosition(keys[15], utilityRow, 3, offsetX)
-    }
-
     fun computeGeometry(
         width: Float,
         height: Float,
@@ -455,14 +340,6 @@ class KeyAtlas {
 
         // 2 & 3. Movable action keys and utility row keys (Column 3 and Row 3)
         applyPage0RearrangedLayout(layoutOrder, offsetX)
-
-        val grid3x3Left = offsetX
-        val grid3x3Top = stripHeight
-        symbolGrid3x3Bounds.set(grid3x3Left, grid3x3Top, grid3x3Left + (colWidth * 3f), grid3x3Top + (rowHeight * 3f))
-        val tabW = contentWidth / 4f
-        for (i in 0 until 4) {
-            symbolLayerTabBounds[i].set(offsetX + (i * tabW), 0f, offsetX + ((i + 1) * tabW), stripHeight)
-        }
 
         computePage1Geometry(contentWidth, height, density, offsetX)
         computePage23Geometry(page2Keys, contentWidth, height, density, offsetX)
@@ -600,18 +477,13 @@ class KeyAtlas {
         when (page) {
             KeyboardPage.PAGE_0_TEXT -> configurePage0()
             KeyboardPage.PAGE_1_NUM_SYM -> configurePage1()
-            KeyboardPage.PAGE_2_EXT_SYM -> configurePage2()
-            KeyboardPage.PAGE_3_EXT_SYM_ALT -> configurePage3()
+            KeyboardPage.PAGE_2_EXT_SYM, KeyboardPage.PAGE_3_EXT_SYM_ALT -> {}
             KeyboardPage.PAGE_4_EMOJI -> configureEmoji()
         }
     }
 
     private fun configureEmoji() {
         setupKey(12, KeyType.PAGE_SWITCH, "ABC", "")
-    }
-
-    private fun configurePage3() {
-        setupKey(12, KeyType.PAGE_SWITCH, "?123", "")
     }
 
     private fun configurePage0() {
@@ -637,7 +509,7 @@ class KeyAtlas {
         setupKey(12, KeyType.PAGE_SWITCH, "?123", "")
         setupKey(13, KeyType.LANG_SWITCH, keys[13].primaryLabel.ifEmpty { "EN" }, "😊")
         setupKey(14, KeyType.SPACE_0, "␣", "0", digit = 0)
-        setupKey(15, KeyType.EMOJI_DOT, "", "")
+        setupKey(15, KeyType.DIRECT_SYM, "", "")
         applyPage0RearrangedLayout(layoutOrder, lastOffsetX)
     }
 
@@ -666,27 +538,6 @@ class KeyAtlas {
         setupKey(13, KeyType.PAGE_SWITCH, "=\\<", "")
         setupKey(14, KeyType.SPACE_0, "0", "␣", digit = 0)
         setupKey(15, KeyType.DUAL_SYM, ". ,", "", left = ".", right = ",")
-    }
-
-    fun configurePage2() {
-        val layer = symbolLayers[activeSymbolLayerIndex.coerceIn(0, symbolLayers.size - 1)]
-        for (i in 0 until 9) {
-            val keyIndex = symbol3x3KeyIndices[i]
-            val item = layer[i]
-            setupKey(keyIndex, KeyType.DUAL_SYM, "${item.left} ${item.right}", "", left = item.left, right = item.right)
-        }
-
-        // Fixed Column 3 (Col index 3)
-        setupKey(3, KeyType.DEL, "⌫", "")
-        setupKey(7, KeyType.DUAL_SYM, "× ÷", "", left = "×", right = "÷")
-        setupKey(11, KeyType.ENTER, "↵", "")
-
-        // Fixed Row 3 (Bottom Row)
-        setupKey(12, KeyType.PAGE_SWITCH, "ABC", "")
-        setupKey(13, KeyType.PAGE_SWITCH, "123", "")
-        setupKey(14, KeyType.SPACE_0, "0", "␣", digit = 0)
-        setupKey(15, KeyType.DUAL_SYM, "\" '", "", left = "\"", right = "'")
-        applyPage2UtilityRowLayout(lastOffsetX)
     }
 
     private fun setupKey(

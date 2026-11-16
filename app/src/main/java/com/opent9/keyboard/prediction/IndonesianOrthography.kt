@@ -2,21 +2,6 @@ package com.opent9.keyboard.prediction
 
 object IndonesianOrthography {
 
-    // Common Indonesian homograph promotions where a colloquial / high-frequency word
-    // was ranked lower than an archaic or rare dictionary word with the same T9 digits.
-    private val homographPromotions = listOf(
-        "capek" to "abrek",    // 22735
-        "cape" to "base",      // 2273
-        "makasi" to "majasi",  // 625274
-        "makasi" to "oblasi",  // 625274
-        "bener" to "adnes",    // 23637
-        "sis" to "rip",        // 747
-        "haha" to "gaib",      // 4242
-        "dong" to "fond",      // 3664
-        "nih" to "oii",        // 644
-        "kepo" to "leps"       // 5376
-    )
-
     data class SuffixSpec(
         val suffix: String,
         val digits: List<Int>
@@ -37,38 +22,23 @@ object IndonesianOrthography {
     }
 
     /**
-     * Post-processes candidates for Bahasa Indonesia:
-     * 1. Promotes common daily words over rare/archaic homographs.
-     * 2. Synthesizes productive suffix compounding (-nya, -kan, -ku, -mu, etc.)
-     *    when typing beyond a known root word.
+     * Post-processes candidates for Bahasa Indonesia by synthesizing productive suffix
+     * compounding (-nya, -kan, -ku, -mu, etc.) when typing beyond a known root word.
+     * Corpus homograph ranking is handled directly by the native OPENT9D2 lexicon.
      */
     fun processCandidates(rawCandidates: List<String>, digits: List<Int> = emptyList()): List<String> {
         if (rawCandidates.isEmpty()) {
             return rawCandidates
         }
 
-        val result = ArrayList<String>(rawCandidates.size + 4)
+        val result = ArrayList<String>(rawCandidates.size + 2)
         result.addAll(rawCandidates)
 
-        // 1. Promote common daily / informal words over archaic homographs
-        for ((preferred, demoted) in homographPromotions) {
-            promoteCandidate(result, preferred, demoted)
-        }
-
-        // 2. Suffix compounding synthesis for Indonesian morphology
         if (digits.size >= 4) {
             synthesizeSuffixCandidate(result, digits)
         }
 
         return if (result.size > 16) result.subList(0, 16) else result
-    }
-
-    private fun promoteCandidate(list: ArrayList<String>, target: String, demoted: String) {
-        val targetIdx = list.indexOf(target)
-        if (targetIdx > 0 && list.size > 0 && (list[0] == demoted || targetIdx <= 3)) {
-            list.removeAt(targetIdx)
-            list.add(0, target)
-        }
     }
 
     private fun synthesizeSuffixCandidate(result: ArrayList<String>, digits: List<Int>) {
@@ -78,7 +48,6 @@ object IndonesianOrthography {
                 val trailing = digits.subList(digits.size - sLen, digits.size)
                 if (trailing == spec.digits) {
                     val rootLen = digits.size - sLen
-                    // Look for a matching root word in existing candidates
                     val matchingRoot = result.firstOrNull { it.length == rootLen }
                     if (matchingRoot != null) {
                         val compounded = matchingRoot + spec.suffix

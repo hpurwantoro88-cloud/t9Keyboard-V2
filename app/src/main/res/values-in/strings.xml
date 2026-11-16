@@ -21,4 +21,8 @@
     <string name="toast_layout_saved">Tata letak keyboard tersimpan</string>
     <string name="toast_layout_reset">Tata letak dikembalikan ke urutan default</string>
     <string name="rearrange_strip_hint">Geser tombol baris 4 &amp; kolom 4</string>
+
+    <!-- Dictionary -->
+    <string name="pref_bilingual_prediction">Prediksi Bilingual (ID + EN)</string>
+    <string name="pref_bilingual_prediction_summary">Tampilkan saran kata Indonesia dan Inggris bersamaan tanpa ganti bahasa</string>
 </resources>

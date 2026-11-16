@@ -11,6 +11,7 @@ struct NativeConfig {
     uint8_t audio_enabled = 1;
     float audio_volume = 0.6f;
     uint32_t audio_style = 0;               // 0=Classic, 1=Soft, 2=Click
+    uint8_t bilingual_enabled = 0;          // 0 or 1 (ID + EN simultaneous scoring)
 };
 
 extern NativeConfig g_config;

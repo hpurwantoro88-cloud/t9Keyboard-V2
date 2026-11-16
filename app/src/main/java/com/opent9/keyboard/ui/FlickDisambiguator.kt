@@ -45,16 +45,14 @@ object FlickDisambiguator {
                     0 -> direction == FlickDirection.LEFT || direction == FlickDirection.RIGHT || direction == FlickDirection.DOWN
                     1, 2, 4, 5, 6, 8, 9, 10 -> false // Digits 2..9: no flicks on Page 0 (numbers via long-press or Page 1)
                     7 -> direction == FlickDirection.UP // SHIFT
-                    12 -> direction == FlickDirection.DOWN || direction == FlickDirection.UP // ?123
-                    13 -> direction == FlickDirection.UP || direction == FlickDirection.DOWN // LANG (UP = Emoji, DOWN = Lang)
-                    15 -> true // 😊 / .
+                    12 -> direction == FlickDirection.DOWN // ?123 -> PAGE_2_EXT_SYM
+                    13 -> direction == FlickDirection.UP || direction == FlickDirection.DOWN // LANG (UP = Lang, DOWN = Emoji)
                     else -> false
                 }
             }
-            KeyboardPage.PAGE_1_NUM_SYM -> {
-                key.id == 7 || key.id == 15
-            }
-            KeyboardPage.PAGE_2_EXT_SYM, KeyboardPage.PAGE_3_EXT_SYM_ALT -> false
+            KeyboardPage.PAGE_1_NUM_SYM,
+            KeyboardPage.PAGE_2_EXT_SYM,
+            KeyboardPage.PAGE_3_EXT_SYM_ALT,
             KeyboardPage.PAGE_4_EMOJI -> false
         }
     }

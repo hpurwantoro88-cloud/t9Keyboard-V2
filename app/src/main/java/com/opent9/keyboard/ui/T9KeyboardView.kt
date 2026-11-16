@@ -327,13 +327,17 @@ open class T9KeyboardView @JvmOverloads constructor(
         invalidate()
     }
 
-    fun updateCandidates(list: List<String>) {
+    fun updateCandidates(list: List<String>, isIdlePrediction: Boolean = false) {
+        this.isIdlePrediction = isIdlePrediction
         candidates.clear()
         candidates.addAll(list)
         gestureTracker.resetScroll()
         recomputeCandidateLayout()
         invalidate()
     }
+
+    var isIdlePrediction: Boolean = false
+        private set
 
     var isWordCorrectionActive: Boolean = false
 
@@ -439,6 +443,7 @@ open class T9KeyboardView @JvmOverloads constructor(
                 candidateItemLeft = candidateItemLeft,
                 candidateItemRight = candidateItemRight,
                 density = resources.displayMetrics.density,
+                isIdlePrediction = isIdlePrediction,
                 formatWord = { formatCandidateWord(it) }
             )
 
@@ -526,11 +531,6 @@ open class T9KeyboardView @JvmOverloads constructor(
 
     override fun onTouchStateChanged(activeKeyId: Int?) {
         this.activeKeyId = activeKeyId
-        invalidate()
-    }
-
-    override fun onSymbolLayerChanged(layerIndex: Int) {
-        playClickFeedback()
         invalidate()
     }
 

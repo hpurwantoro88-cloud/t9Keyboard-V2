@@ -6,24 +6,10 @@ import org.junit.Test
 class IndonesianOrthographyTest {
 
     @Test
-    fun testHomographPromotionCapekOverAbrek() {
-        val raw = listOf("abrek", "capek", "carek")
+    fun testPassThroughPreservesNativeOrdering() {
+        val raw = listOf("capek", "abrek", "carek")
         val processed = IndonesianOrthography.processCandidates(raw)
-        assertEquals("capek must be promoted to position 0 over obscure abrek", "capek", processed[0])
-    }
-
-    @Test
-    fun testHomographPromotionCapeOverBase() {
-        val raw = listOf("base", "cape", "bare")
-        val processed = IndonesianOrthography.processCandidates(raw)
-        assertEquals("cape must be promoted to position 0 over base", "cape", processed[0])
-    }
-
-    @Test
-    fun testHomographPromotionMakasiOverMajasi() {
-        val raw = listOf("majasi", "oblasi", "makasi")
-        val processed = IndonesianOrthography.processCandidates(raw)
-        assertEquals("makasi must be promoted to position 0 over majasi/oblasi", "makasi", processed[0])
+        assertEquals(raw, processed)
     }
 
     @Test

@@ -375,9 +375,9 @@ int main() {
     std::cout << "[PASS] Test 11: Closest word typo correction and overtype verified" << std::endl;
 
     // ------------------------------------------------------------------------
-    // Test 12: Dynamic Usage Ranking Promotion (Indonesian & English)
+    // Test 12: Unified Decayed-Frequency Ranking (Indonesian & English)
     // ------------------------------------------------------------------------
-    // 12A: Indonesian 7-2-6-2 ('sana' vs 'sama')
+    // 12A: Indonesian 7-2-6-2 ('sana' vs 'sama' - close corpus frequencies)
     engine.setLexiconData(idBuffer.data(), idBuffer.size());
     DynamicStore test12Store;
     engine.setDynamicStore(&test12Store);
@@ -392,11 +392,10 @@ int main() {
     assert(std::strcmp(engine.getCandidates()[0].word, "sana") == 0);
     assert(std::strcmp(engine.getCandidates()[1].word, "sama") == 0);
 
-    // Record single usage for 'sama' (more recent than initial)
+    // Record usage for close competitor 'sama': promotes 'sama' to #1
     uint64_t usageTime = static_cast<uint64_t>(std::time(nullptr));
     test12Store.recordUsage("sama", usageTime + 1);
 
-    // Now re-query 7-2-6-2: 'sama' MUST be promoted to #1 immediately on 1 selection!
     engine.reset();
     engine.pushStroke(7, 0, 0, scorer, g_config);
     engine.pushStroke(2, 0, 0, scorer, g_config);
@@ -406,8 +405,9 @@ int main() {
     assert(std::strcmp(engine.getCandidates()[0].word, "sama") == 0);
     assert(std::strcmp(engine.getCandidates()[1].word, "sana") == 0);
 
-    // Now pick 'sana' again: 'sana' becomes #1 again!
+    // Now pick 'sana' repeatedly (2x) so its user score + higher corpus freq overtakes 'sama'
     test12Store.recordUsage("sana", usageTime + 2);
+    test12Store.recordUsage("sana", usageTime + 3);
     engine.reset();
     engine.pushStroke(7, 0, 0, scorer, g_config);
     engine.pushStroke(2, 0, 0, scorer, g_config);
@@ -417,9 +417,9 @@ int main() {
     assert(std::strcmp(engine.getCandidates()[0].word, "sana") == 0);
     assert(std::strcmp(engine.getCandidates()[1].word, "sama") == 0);
 
-    std::cout << "  [ID] 7262 verified: last picked word immediately becomes #1" << std::endl;
+    std::cout << "  [ID] 7262 verified: proportional decayed-frequency promotion" << std::endl;
 
-    // 12B: English 4-6-6-3 ('good' vs 'home')
+    // 12B: English 4-6-6-3 ('good' vs 'home') - Anti-Recency-Hijacking
     engine.setLexiconData(enBuffer.data(), enBuffer.size());
     DynamicStore test12StoreEn;
     engine.setDynamicStore(&test12StoreEn);
@@ -434,33 +434,359 @@ int main() {
     assert(std::strcmp(engine.getCandidates()[0].word, "good") == 0);
     assert(std::strcmp(engine.getCandidates()[1].word, "home") == 0);
 
-    // Record usage for 'home' once:
-    test12StoreEn.recordUsage("home", usageTime + 1);
+    // Single accidental pick of rare word 'hoof' MUST NOT hijack 'good'
+    test12StoreEn.recordUsage("hoof", usageTime + 1);
+    engine.reset();
+    engine.pushStroke(4, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(6, 0, 0, scorer, g_config);
+    engine.pushStroke(3, 0, 0, scorer, g_config);
+    assert(std::strcmp(engine.getCandidates()[0].word, "good") == 0 && "Rare word picked 1x must not hijack 'good'");
 
-    // Re-query 4-6-6-3: 'home' MUST be promoted to #1 immediately!
+    // Repeated deliberate usage of 'home' (3x) promotes 'home' above 'good'
+    test12StoreEn.recordUsage("home", usageTime + 2);
+    test12StoreEn.recordUsage("home", usageTime + 3);
+    test12StoreEn.recordUsage("home", usageTime + 4);
     engine.reset();
     engine.pushStroke(4, 0, 0, scorer, g_config);
     engine.pushStroke(6, 0, 0, scorer, g_config);
     engine.pushStroke(6, 0, 0, scorer, g_config);
     engine.pushStroke(3, 0, 0, scorer, g_config);
     assert(engine.getCandidateCount() >= 2);
-    assert(std::strcmp(engine.getCandidates()[0].word, "home") == 0);
-    assert(std::strcmp(engine.getCandidates()[1].word, "good") == 0);
+    assert(std::strcmp(engine.getCandidates()[0].word, "home") == 0 && "Repeatedly used 'home' must overtake 'good'");
 
-    // Now pick 'good' again: 'good' becomes #1 again!
-    test12StoreEn.recordUsage("good", usageTime + 2);
+    std::cout << "  [EN] 4663 verified: anti-recency-hijacking + repeated-use promotion" << std::endl;
+    std::cout << "[PASS] Test 12: Unified decayed-frequency ranking verified" << std::endl;
+
+    // ------------------------------------------------------------------------
+    // Test 13: Multi-Key Spatial Border Recovery (4-5-6-3 near 5|6 border -> 'good')
+    // ------------------------------------------------------------------------
+    SpatialScorer gridScorer;
+    // Standard 3x4 keypad spacing (key width ~270px, height ~180px, sigma = 48px)
+    gridScorer.updateKeyGeometry(2, 540.0f, 90.0f);
+    gridScorer.updateKeyGeometry(3, 810.0f, 90.0f);
+    gridScorer.updateKeyGeometry(4, 270.0f, 270.0f);
+    gridScorer.updateKeyGeometry(5, 540.0f, 270.0f);
+    gridScorer.updateKeyGeometry(6, 810.0f, 270.0f);
+    gridScorer.updateKeyGeometry(7, 270.0f, 450.0f);
+    gridScorer.updateKeyGeometry(8, 540.0f, 450.0f);
+    gridScorer.updateKeyGeometry(9, 810.0f, 450.0f);
+
+    NativeConfig spatialConfig = g_config;
+    spatialConfig.touch_variance_sigma = 48.0f; // 16dp @ 3x density
+
+    engine.setLexiconData(enBuffer.data(), enBuffer.size());
+    engine.setDynamicStore(nullptr);
     engine.reset();
-    engine.pushStroke(4, 0, 0, scorer, g_config);
-    engine.pushStroke(6, 0, 0, scorer, g_config);
-    engine.pushStroke(6, 0, 0, scorer, g_config);
-    engine.pushStroke(3, 0, 0, scorer, g_config);
-    assert(engine.getCandidateCount() >= 2);
-    assert(std::strcmp(engine.getCandidates()[0].word, "good") == 0);
-    assert(std::strcmp(engine.getCandidates()[1].word, "home") == 0);
+    // Intended 4-6-6-3 ("good"), but 2nd tap slipped just left of the 5|6 boundary (x=665 -> digit 5)
+    engine.pushStroke(4, 270.0f, 270.0f, gridScorer, spatialConfig);
+    engine.pushStroke(5, 665.0f, 270.0f, gridScorer, spatialConfig);
+    engine.pushStroke(6, 810.0f, 270.0f, gridScorer, spatialConfig);
+    engine.pushStroke(3, 810.0f, 90.0f, gridScorer, spatialConfig);
 
-    std::cout << "  [EN] 4663 verified: last picked word immediately becomes #1" << std::endl;
+    bool recoveredGood = false;
+    for (uint8_t i = 0; i < engine.getCandidateCount(); ++i) {
+        if (std::strcmp(engine.getCandidates()[i].word, "good") == 0) {
+            recoveredGood = true;
+            break;
+        }
+    }
+    assert(recoveredGood && "Spatial border slip 4-5-6-3 near 5|6 border must recover 'good'");
+    std::cout << "[PASS] Test 13: Multi-key spatial border recovery verified ('good' recovered from 4-5-6-3)" << std::endl;
 
-    std::cout << "[PASS] Test 12: Dynamic usage ranking promotion verified for both Indonesian and English" << std::endl;
+    // ------------------------------------------------------------------------
+    // Test 14: DynamicStore flushIfDirty() persistence round-trip
+    // ------------------------------------------------------------------------
+    const char* persistPath = "/tmp/test_opent9_flush.dat";
+    std::remove(persistPath);
+    {
+        DynamicStore writerStore;
+        assert(writerStore.init(persistPath));
+        writerStore.recordUsage("mantul", usageTime);
+        assert(writerStore.flushIfDirty());
+    }
+    {
+        DynamicStore readerStore;
+        assert(readerStore.init(persistPath));
+        assert(readerStore.isCustomWord("mantul"));
+        assert(readerStore.getHitCount("mantul") == 1);
+    }
+    std::remove(persistPath);
+    std::cout << "[PASS] Test 14: DynamicStore flushIfDirty() persistence round-trip verified" << std::endl;
+
+    // ------------------------------------------------------------------------
+    // Test 15: OPENT9D2 Native Curated Homographs, Contractions & Completions
+    // ------------------------------------------------------------------------
+    auto checkTopCandidate = [&](const char* digitsStr, const char* expectedTop) {
+        engine.reset();
+        for (size_t i = 0; digitsStr[i] != '\0'; ++i) {
+            engine.pushStroke(digitsStr[i] - '0', 0.0f, 0.0f, scorer, g_config);
+        }
+        assert(engine.getCandidateCount() > 0);
+        if (std::strcmp(engine.getCandidates()[0].word, expectedTop) != 0) {
+            std::cerr << "Mismatch for " << digitsStr << ": expected '" << expectedTop
+                      << "', got '" << engine.getCandidates()[0].word << "'" << std::endl;
+            assert(false);
+        }
+    };
+
+    auto checkContainsCandidate = [&](const char* digitsStr, const char* target) {
+        engine.reset();
+        for (size_t i = 0; digitsStr[i] != '\0'; ++i) {
+            engine.pushStroke(digitsStr[i] - '0', 0.0f, 0.0f, scorer, g_config);
+        }
+        bool found = false;
+        for (uint8_t i = 0; i < engine.getCandidateCount(); ++i) {
+            if (std::strcmp(engine.getCandidates()[i].word, target) == 0) {
+                found = true;
+                break;
+            }
+        }
+        assert(found && "Expected candidate missing from top 16");
+    };
+
+    // English contractions & homographs directly in OPENT9D2
+    engine.setLexiconData(enBuffer.data(), enBuffer.size());
+    engine.setDynamicStore(nullptr);
+    checkTopCandidate("3668", "don't");
+    checkTopCandidate("27368", "aren't");
+    checkTopCandidate("96873", "you're");
+    checkTopCandidate("7437", "she's");
+    checkTopCandidate("487", "it's");
+    checkContainsCandidate("487", "its");
+    checkContainsCandidate("2667", "computer");
+    checkContainsCandidate("2775", "application");
+
+    // Indonesian curated homographs, reduplications & prefix completions in OPENT9D2
+    engine.setLexiconData(idBuffer.data(), idBuffer.size());
+    checkTopCandidate("22735", "capek");
+    checkTopCandidate("2273", "cape");
+    checkTopCandidate("625274", "makasi");
+    checkTopCandidate("23637", "bener");
+    checkTopCandidate("5376", "kepo");
+    checkTopCandidate("5252652526", "jalan-jalan");
+    checkContainsCandidate("7352", "selamat");
+    checkContainsCandidate("7363", "pemerintah");
+
+    // Canonical deletion & learning bridge for apostrophe words ("don't" <-> "dont")
+    DynamicStore canonicalStore;
+    engine.setLexiconData(enBuffer.data(), enBuffer.size());
+    engine.setDynamicStore(&canonicalStore);
+    canonicalStore.removeWord("dont");
+    assert(canonicalStore.isDeleted("don't"));
+    engine.reset();
+    for (int d : {3, 6, 6, 8}) engine.pushStroke(d, 0.0f, 0.0f, scorer, g_config);
+    for (uint8_t i = 0; i < engine.getCandidateCount(); ++i) {
+        assert(std::strcmp(engine.getCandidates()[i].word, "don't") != 0);
+    }
+
+    std::cout << "[PASS] Test 15: OPENT9D2 native contractions, Indonesian homographs, hyphenated reduplications, and canonical deletion verified" << std::endl;
+
+    // ------------------------------------------------------------------------
+    // Test 16: OPENT9N1 Next-Word Prediction & Contextual T9 Disambiguation
+    // ------------------------------------------------------------------------
+    std::ifstream enBgFile("app/src/main/assets/dictionaries/en_bigrams.bin", std::ios::binary);
+    assert(enBgFile.is_open() && "Failed to open en_bigrams.bin");
+    enBgFile.seekg(0, std::ios::end);
+    size_t enBgSize = enBgFile.tellg();
+    enBgFile.seekg(0, std::ios::beg);
+    std::vector<uint8_t> enBgBuffer(enBgSize);
+    enBgFile.read(reinterpret_cast<char*>(enBgBuffer.data()), enBgSize);
+    enBgFile.close();
+
+    std::ifstream idBgFile("app/src/main/assets/dictionaries/id_bigrams.bin", std::ios::binary);
+    assert(idBgFile.is_open() && "Failed to open id_bigrams.bin");
+    idBgFile.seekg(0, std::ios::end);
+    size_t idBgSize = idBgFile.tellg();
+    idBgFile.seekg(0, std::ios::beg);
+    std::vector<uint8_t> idBgBuffer(idBgSize);
+    idBgFile.read(reinterpret_cast<char*>(idBgBuffer.data()), idBgSize);
+    idBgFile.close();
+
+    NgramEngine ngram;
+    assert(lexMgr.loadNgramFromBuffer("EN", enBgBuffer.data(), enBgBuffer.size()));
+    assert(lexMgr.loadNgramFromBuffer("ID", idBgBuffer.data(), idBgBuffer.size()));
+
+    // 16A: Idle NWP (EN)
+    assert(lexMgr.switchLanguage("EN"));
+    assert(ngram.setNgramData(lexMgr.getActiveNgramData(), lexMgr.getActiveNgramSize()));
+    engine.setDynamicStore(nullptr);
+    engine.setNgramEngine(&ngram);
+    engine.setLexiconData(lexMgr.getActiveData(), lexMgr.getActiveSize());
+
+    CandidateWord nwpCands[MAX_CANDIDATES];
+    int nwpCount = engine.getNextWordCandidates("thank", g_config, nwpCands, MAX_CANDIDATES);
+    assert(nwpCount > 0 && std::strcmp(nwpCands[0].word, "you") == 0);
+    nwpCount = engine.getNextWordCandidates("good", g_config, nwpCands, MAX_CANDIDATES);
+    assert(nwpCount > 0 && std::strcmp(nwpCands[0].word, "morning") == 0);
+
+    // 16B: Contextual T9 Disambiguation (EN: "yes" + 9373 -> "we're" flips over "were")
+    engine.setContextWord(nullptr);
+    engine.reset();
+    for (int d : {9, 3, 7, 3}) engine.pushStroke(d, 0.0f, 0.0f, scorer, g_config);
+    assert(std::strcmp(engine.getCandidates()[0].word, "were") == 0);
+
+    engine.setContextWord("yes");
+    engine.reset();
+    for (int d : {9, 3, 7, 3}) engine.pushStroke(d, 0.0f, 0.0f, scorer, g_config);
+    assert(std::strcmp(engine.getCandidates()[0].word, "we're") == 0);
+    engine.setContextWord(nullptr);
+
+    // 16C: Idle NWP & Contextual T9 Disambiguation (ID: "selamat" -> "pagi", "terima" -> "kasih")
+    assert(lexMgr.switchLanguage("ID"));
+    assert(ngram.setNgramData(lexMgr.getActiveNgramData(), lexMgr.getActiveNgramSize()));
+    engine.setNgramEngine(&ngram);
+    engine.setLexiconData(lexMgr.getActiveData(), lexMgr.getActiveSize());
+
+    nwpCount = engine.getNextWordCandidates("selamat", g_config, nwpCands, MAX_CANDIDATES);
+    assert(nwpCount > 0 && std::strcmp(nwpCands[0].word, "pagi") == 0);
+    nwpCount = engine.getNextWordCandidates("terima", g_config, nwpCands, MAX_CANDIDATES);
+    assert(nwpCount > 0 && std::strcmp(nwpCands[0].word, "kasih") == 0);
+
+    engine.setContextWord("selamat");
+    engine.reset();
+    for (int d : {7, 2, 4, 4}) engine.pushStroke(d, 0.0f, 0.0f, scorer, g_config);
+    assert(engine.getCandidateCount() > 0 && std::strcmp(engine.getCandidates()[0].word, "pagi") == 0);
+    engine.setContextWord(nullptr);
+
+    // 16D: Personal user bigrams + .bigrams persistence round-trip
+    const char* bgPersistPath = "/tmp/test_opent9_bigrams.dat";
+    std::remove(bgPersistPath);
+    std::remove("/tmp/test_opent9_bigrams.dat.bigrams");
+    {
+        DynamicStore bgStore;
+        assert(bgStore.init(bgPersistPath));
+        assert(bgStore.recordBigram("otw", "ya", usageTime));
+        assert(bgStore.flushIfDirty());
+    }
+    {
+        DynamicStore bgReload;
+        assert(bgReload.init(bgPersistPath));
+        engine.setDynamicStore(&bgReload);
+        nwpCount = engine.getNextWordCandidates("otw", g_config, nwpCands, MAX_CANDIDATES);
+        assert(nwpCount > 0 && std::strcmp(nwpCands[0].word, "ya") == 0);
+        engine.setDynamicStore(nullptr);
+    }
+    std::remove(bgPersistPath);
+    std::remove("/tmp/test_opent9_bigrams.dat.bigrams");
+
+    std::cout << "[PASS] Test 16: OPENT9N1 Idle NWP, contextual disambiguation ('yes we're', 'selamat pagi'), and personal user bigrams verified" << std::endl;
+
+    // ------------------------------------------------------------------------
+    // Test 17: Bilingual Code-Switching (ID + EN Simultaneous Scoring)
+    // ------------------------------------------------------------------------
+    assert(lexMgr.switchLanguage("ID"));
+    NgramEngine primaryNg, secondaryNg;
+    assert(primaryNg.setNgramData(lexMgr.getActiveNgramData(), lexMgr.getActiveNgramSize()));
+    assert(secondaryNg.setNgramData(lexMgr.getInactiveNgramData(), lexMgr.getInactiveNgramSize()));
+
+    engine.setDynamicStore(nullptr);
+    engine.setNgramEngine(&primaryNg);
+    engine.setSecondaryNgramEngine(&secondaryNg);
+    assert(engine.setLexiconData(lexMgr.getActiveData(), lexMgr.getActiveSize()));
+    assert(engine.setSecondaryLexiconData(lexMgr.getInactiveData(), lexMgr.getInactiveSize()));
+
+    NativeConfig biConfig = g_config;
+    biConfig.bilingual_enabled = 1;
+
+    // In ID mode with bilingual ON: "selamat" (ID) -> #1, AND "meeting" (EN) -> #1 without switching!
+    engine.reset();
+    for (int d : {7, 3, 5, 2, 6, 2, 8}) engine.pushStroke(d, 0.0f, 0.0f, scorer, biConfig);
+    assert(engine.getCandidateCount() > 0 && std::strcmp(engine.getCandidates()[0].word, "selamat") == 0);
+
+    engine.reset();
+    for (int d : {6, 3, 3, 8, 4, 6, 4}) engine.pushStroke(d, 0.0f, 0.0f, scorer, biConfig);
+    assert(engine.getCandidateCount() > 0 && std::strcmp(engine.getCandidates()[0].word, "meeting") == 0);
+
+    // Bilingual Idle NWP: "thank" -> "you" while active language is ID
+    nwpCount = engine.getNextWordCandidates("thank", biConfig, nwpCands, MAX_CANDIDATES);
+    assert(nwpCount > 0 && std::strcmp(nwpCands[0].word, "you") == 0);
+
+    // Turning bilingual OFF restores strict single-language isolation ("you're" is EN-only)
+    biConfig.bilingual_enabled = 1;
+    engine.reset();
+    for (int d : {9, 6, 8, 7, 3}) engine.pushStroke(d, 0.0f, 0.0f, scorer, biConfig);
+    assert(engine.getCandidateCount() > 0 && std::strcmp(engine.getCandidates()[0].word, "you're") == 0);
+
+    biConfig.bilingual_enabled = 0;
+    engine.reset();
+    for (int d : {9, 6, 8, 7, 3}) engine.pushStroke(d, 0.0f, 0.0f, scorer, biConfig);
+    for (uint8_t i = 0; i < engine.getCandidateCount(); ++i) {
+        assert(std::strcmp(engine.getCandidates()[i].word, "you're") != 0);
+    }
+
+    std::cout << "[PASS] Test 17: Bilingual ID+EN code-switching and toggle isolation verified" << std::endl;
+
+    // ------------------------------------------------------------------------
+    // Test 18: Sentence-Level Regression & p99 Latency Benchmark (< 500 µs)
+    // ------------------------------------------------------------------------
+    struct SentenceCase {
+        const char* lang;
+        std::vector<std::string> words;
+    };
+    std::vector<SentenceCase> sentences = {
+        {"ID", {"selamat", "pagi", "terima", "kasih", "udah", "bantu", "hari", "ini"}},
+        {"ID", {"aku", "gak", "bisa", "datang", "karena", "lagi", "kerja"}},
+        {"EN", {"good", "morning", "thank", "you", "for", "your", "help"}},
+        {"EN", {"I", "don't", "think", "it's", "going", "to", "work"}}
+    };
+
+    std::vector<double> strokeLatenciesUs;
+    strokeLatenciesUs.reserve(256);
+    int totalTestedWords = 0;
+    int top3Hits = 0;
+
+    for (const auto& sc : sentences) {
+        assert(lexMgr.switchLanguage(sc.lang));
+        assert(primaryNg.setNgramData(lexMgr.getActiveNgramData(), lexMgr.getActiveNgramSize()));
+        engine.setNgramEngine(&primaryNg);
+        engine.setLexiconData(lexMgr.getActiveData(), lexMgr.getActiveSize());
+        engine.setContextWord(nullptr);
+
+        for (size_t wi = 0; wi < sc.words.size(); ++wi) {
+            const std::string& w = sc.words[wi];
+            if (wi > 0) {
+                engine.setContextWord(sc.words[wi - 1].c_str());
+            }
+            engine.reset();
+            for (char ch : w) {
+                char lc = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                if (lc == '\'' || lc == '-') continue;
+                int d = 0;
+                if (lc >= 'a' && lc <= 'c') d = 2;
+                else if (lc <= 'f') d = 3;
+                else if (lc <= 'i') d = 4;
+                else if (lc <= 'l') d = 5;
+                else if (lc <= 'o') d = 6;
+                else if (lc <= 's') d = 7;
+                else if (lc <= 'v') d = 8;
+                else if (lc <= 'z') d = 9;
+                if (d < 2 || d > 9) continue;
+
+                auto ts = std::chrono::high_resolution_clock::now();
+                engine.pushStroke(d, 0.0f, 0.0f, scorer, g_config);
+                auto te = std::chrono::high_resolution_clock::now();
+                strokeLatenciesUs.push_back(std::chrono::duration<double, std::micro>(te - ts).count());
+            }
+
+            totalTestedWords++;
+            for (uint8_t c = 0; c < engine.getCandidateCount() && c < 3; ++c) {
+                if (w == engine.getCandidates()[c].word) {
+                    top3Hits++;
+                    break;
+                }
+            }
+        }
+    }
+
+    std::sort(strokeLatenciesUs.begin(), strokeLatenciesUs.end());
+    double p99Us = strokeLatenciesUs[static_cast<size_t>(strokeLatenciesUs.size() * 0.99)];
+    double top3Acc = (100.0 * top3Hits) / totalTestedWords;
+    std::cout << "  Sentence Regression: Top-3 = " << top3Hits << "/" << totalTestedWords
+              << " (" << top3Acc << "%), p99 stroke latency = " << p99Us << " µs" << std::endl;
+    assert(top3Acc >= 95.0 && "Sentence Top-3 accuracy must be >= 95%");
+    assert(p99Us < 500.0 && "p99 stroke latency must stay < 500 µs (0.5 ms)");
+    std::cout << "[PASS] Test 18: Sentence regression & p99 latency (< 0.5 ms) verified" << std::endl;
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "ALL OPENT9 CORE C++ TESTS PASSED!" << std::endl;

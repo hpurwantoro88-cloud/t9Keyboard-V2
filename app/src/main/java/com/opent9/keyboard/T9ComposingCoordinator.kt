@@ -4,6 +4,7 @@ import android.view.inputmethod.InputConnection
 import com.opent9.keyboard.jni.NativeEngineBridge
 import com.opent9.keyboard.prediction.CandidateResolver
 import com.opent9.keyboard.prediction.LearnedWordsRepository
+import com.opent9.keyboard.prediction.PredictionContextHelper
 import com.opent9.keyboard.prediction.SuggestionGuard
 import com.opent9.keyboard.prediction.WordCorrectionController
 import com.opent9.keyboard.prediction.WordCorrectionHelper
@@ -43,8 +44,37 @@ class T9ComposingCoordinator(
     private val updateAutoCaps: (Boolean) -> Unit,
     private val applyShiftFormatting: (String) -> String,
     private val updateCandidatesFromNative: (InputConnection, String?) -> Unit,
-    private val clearWordCorrection: () -> Unit
+    private val clearWordCorrection: () -> Unit,
+    private val refreshIdleNextWord: (InputConnection?, String?) -> Unit = { _, _ -> }
 ) {
+    private var activeContextPrevWord: String? = null
+
+    fun prepareComposingContext(ic: InputConnection?) {
+        val ctx = PredictionContextHelper.extractContext(ic)
+        activeContextPrevWord = ctx.prevWord
+        NativeEngineBridge.setContextWord(ctx.prevWord)
+    }
+
+    fun commitNextWordCandidate(index: Int) {
+        val ic = getInputConnection() ?: return
+        val candidates = getActiveCandidates()
+        if (index !in candidates.indices) return
+
+        val word = applyShiftFormatting(candidates[index])
+        val ctx = PredictionContextHelper.extractContext(ic)
+        val addSpace = getSettingsObserver().isAutoSpaceEnabled()
+        val needsLeadingSpace = !ctx.hasTrailingSpace && !ctx.isSentenceStart
+
+        val textToCommit = buildString {
+            if (needsLeadingSpace) append(' ')
+            append(word)
+            if (addSpace) append(' ')
+        }
+        ic.commitText(textToCommit, 1)
+
+        setLastSpaceTapTime(if (addSpace) System.currentTimeMillis() else 0L)
+        finishWordCommit(ic, word, ctx.prevWord, addSpace, emptyList())
+    }
 
     fun commitActiveCandidate(addSpace: Boolean) {
         val candidates = getActiveCandidates()
@@ -80,28 +110,31 @@ class T9ComposingCoordinator(
         ic.commitText(textToCommit, 1)
 
         setLastSpaceTapTime(if (addSpace) System.currentTimeMillis() else 0L)
+        finishWordCommit(ic, word, activeContextPrevWord, addSpace, digitsSnapshot)
+    }
 
-        // Record commit for retroactive un-commit
+    private fun finishWordCommit(
+        ic: InputConnection,
+        word: String,
+        prevWord: String?,
+        addSpace: Boolean,
+        digitsSnapshot: List<Int>
+    ) {
         getDeleteController().recordCommit(word, digitsSnapshot)
+        getLearnedWordsRepository().recordWordUsage(word, isIncognito())
+        getLearnedWordsRepository().recordBigramUsage(prevWord, word, isIncognito())
 
-        // Record usage for dynamic dictionary learning if not incognito and not pure numeric
-        val digitsKey = if (digitsSnapshot.isNotEmpty()) {
-            digitsSnapshot.joinToString("")
-        } else {
-            WordCorrectionHelper.wordToDigits(word).joinToString("")
-        }
-        val lang = NativeEngineBridge.getActiveLanguage()
-        getLearnedWordsRepository().recordPickedWord(lang, digitsKey, word, isIncognito())
-
-        // Auto-reset Shift if Titlecase
         val shiftController = getShiftController()
         shiftController.onCharacterCommitted()
         getKeyboardView()?.setShiftState(shiftController.currentMode.stateValue)
 
         resetComposingState()
-        getKeyboardView()?.updateCandidates(emptyList())
-
         updateAutoCaps(false)
+        if (addSpace) {
+            refreshIdleNextWord(ic, word)
+        } else {
+            getKeyboardView()?.updateCandidates(emptyList())
+        }
     }
 
     fun abortComposing(ic: InputConnection?) {
@@ -173,6 +206,8 @@ class T9ComposingCoordinator(
     fun resetComposingState() {
         getMultiTapController().reset()
         NativeEngineBridge.resetT9()
+        NativeEngineBridge.setContextWord(null)
+        activeContextPrevWord = null
         currentComposingDigits.clear()
         currentComposingStrokes.clear()
         setHasActiveComposing(false)
@@ -197,6 +232,7 @@ class T9ComposingCoordinator(
         getDeleteController().clearCommitHistory()
 
         getLearnedWordsRepository().recordWordUsage(word, isIncognito())
+        getLearnedWordsRepository().recordBigramUsage(activeContextPrevWord, word, isIncognito())
 
         val shiftController = getShiftController()
         shiftController.onCharacterCommitted()

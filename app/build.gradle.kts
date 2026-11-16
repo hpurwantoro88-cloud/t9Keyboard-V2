@@ -57,7 +57,7 @@ android {
     }
 
     androidResources {
-        noCompress += listOf("dawg")
+        noCompress += listOf("dawg", "bin")
     }
 
     testOptions {

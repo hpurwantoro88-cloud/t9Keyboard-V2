@@ -137,6 +137,11 @@
             app:defaultValue="ID"
             app:useSimpleSummaryProvider="true" />
         <SwitchPreferenceCompat
+            app:key="bilingual_prediction"
+            app:title="@string/pref_bilingual_prediction"
+            app:summary="@string/pref_bilingual_prediction_summary"
+            app:defaultValue="false" />
+        <SwitchPreferenceCompat
             app:key="slang_boost"
             app:title="@string/pref_slang_boost"
             app:defaultValue="true" />

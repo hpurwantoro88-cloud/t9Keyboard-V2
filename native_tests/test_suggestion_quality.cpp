@@ -121,9 +121,9 @@ int main() {
     // 3. English Informal & Contractions / Abbreviations
     engine.setLexiconData(enBuffer.data(), enBuffer.size());
     std::vector<std::string> enInformalWords = {
-        "dont", "doesnt", "didnt", "wont", "cant", "couldnt", "shouldnt", "wouldnt",
-        "isnt", "arent", "wasnt", "werent", "havent", "hasnt", "hadnt",
-        "im", "youre", "hes", "shes", "theyre", "weve", "youve", "theyve",
+        "don't", "doesn't", "didn't", "won't", "can't", "couldn't", "shouldn't", "wouldn't",
+        "isn't", "aren't", "wasn't", "weren't", "haven't", "hasn't", "hadn't",
+        "I'm", "you're", "he's", "she's", "they're", "we've", "you've", "they've",
         "gonna", "wanna", "gotta", "kinda", "sorta", "lemme", "gimme",
         "yeah", "yep", "nope", "okay", "ok", "hey", "cool", "awesome",
         "pls", "thx", "idk", "tbh", "omg", "lol", "btw", "fyi", "brb", "imo"

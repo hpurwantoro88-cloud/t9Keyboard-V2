@@ -218,10 +218,9 @@ class SimulatedSpeedTypingJvmTest {
             println("  EN raw: '$raw' -> processed: ${processed[0]}")
         }
 
-        // Test English Homograph Promotion (e.g. don't over foot, aren't over brent)
-        val footDontList = listOf("foot", "dont")
-        val promoted = EnglishOrthography.processCandidates(footDontList, "EN")
-        assertEquals("don't must be promoted over foot", "don't", promoted[0])
+        // Test ambiguous pair expansion when raw fallback omits contraction
+        val itsExpanded = EnglishOrthography.processCandidates(listOf("its", "gus"), "EN")
+        assertEquals(listOf("it's", "its", "gus"), itsExpanded)
 
         // 2. SuggestionGuard Phonotactic Fallback Check (Out-of-lexicon words)
         println("\nTesting SuggestionGuard Phonotactic Projections:")

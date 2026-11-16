@@ -48,7 +48,9 @@ class KeyboardActionContext(
     val launchSettings: () -> Unit,
     val pageController: PageController,
     val onInvalidateKeyboard: () -> Unit,
-    val onAbortComposing: (InputConnection) -> Unit
+    val onAbortComposing: (InputConnection) -> Unit,
+    val prepareComposingContext: (InputConnection) -> Unit = {},
+    val refreshIdleNextWord: (InputConnection) -> Unit = {}
 )
 
 /**
@@ -141,8 +143,11 @@ object KeyboardActionDispatcher {
                 if (ctx.isT9Mode && !ctx.isPasswordMode) {
                     ctx.commitMultiTapActive()
                     ctx.flushMultiTapWord()
-                    if (ctx.currentComposingDigits.isEmpty() && ctx.composingAnchorPosition < 0) {
-                        ctx.setComposingAnchorPosition(ctx.lastSelectionStart)
+                    if (ctx.currentComposingDigits.isEmpty()) {
+                        ctx.prepareComposingContext(ic)
+                        if (ctx.composingAnchorPosition < 0) {
+                            ctx.setComposingAnchorPosition(ctx.lastSelectionStart)
+                        }
                     }
                     ctx.currentComposingDigits.add(key.digitValue)
                     ctx.currentComposingStrokes.add(ComposingStroke(key.digitValue, touchX, touchY))
@@ -181,6 +186,7 @@ object KeyboardActionDispatcher {
                         onUpdateAutoCaps = { ctx.updateAutoCaps(false) }
                     )
                     ctx.setLastSpaceTapTime(newLastSpace)
+                    ctx.refreshIdleNextWord(ic)
                 }
             }
 
@@ -254,13 +260,10 @@ object KeyboardActionDispatcher {
                 ctx.commitMultiTapActive()
                 ctx.flushMultiTapWord()
                 ctx.cycleLanguage(ic)
+                if (ic != null && !ctx.hasActiveComposing) {
+                    ctx.refreshIdleNextWord(ic)
+                }
             }
-
-            KeyType.EMOJI_DOT -> {
-                ctx.setLastSpaceTapTime(0L)
-                ctx.switchToPage(KeyboardPage.PAGE_4_EMOJI)
-            }
-
 
             KeyType.DIRECT_SYM -> {
                 ctx.setLastSpaceTapTime(0L)

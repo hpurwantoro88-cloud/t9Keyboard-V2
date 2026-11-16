@@ -33,6 +33,7 @@ object NativeEngineBridge {
         decayDays: Int
     )
     external fun nativeLoadLexiconFd(langCode: String, fd: Int, offset: Long, length: Long): Boolean
+    external fun nativeLoadNgramFd(langCode: String, fd: Int, offset: Long, length: Long): Boolean
     external fun nativeSwitchLanguage(langCode: String): Boolean
     external fun nativeGetActiveLanguage(): String
     external fun nativeUpdateKeyGeometry(digit: Int, cx: Float, cy: Float)
@@ -56,9 +57,15 @@ object NativeEngineBridge {
     external fun nativeRemoveWord(word: String): Boolean
     external fun nativeResetUserDictionary()
     external fun nativeIsWordDeleted(word: String): Boolean
+    external fun nativeFlushDynamicStore(): Boolean
+    external fun nativeSetContextWord(prevWord: String?)
+    external fun nativeRecordBigram(prevWord: String, nextWord: String, nowSec: Long)
+    external fun nativeGetNextWordCandidates(prevWord: String, buffer: ByteBuffer, maxBytes: Int): Int
+    external fun nativeSyncBilingualMode(enabled: Boolean)
 
     private val fallbackDeletedWords = HashSet<String>()
     private val fallbackUsageCounts = HashMap<String, Int>()
+    private val fallbackBigrams = HashMap<String, LinkedHashMap<String, Int>>()
 
     fun initEngine(dbPath: String): Boolean {
         if (!isNativeLoaded) return true
@@ -95,6 +102,11 @@ object NativeEngineBridge {
     fun loadLexiconFd(langCode: String, fd: Int, offset: Long, length: Long): Boolean {
         if (!isNativeLoaded) return true
         return nativeLoadLexiconFd(langCode, fd, offset, length)
+    }
+
+    fun loadNgramFd(langCode: String, fd: Int, offset: Long, length: Long): Boolean {
+        if (!isNativeLoaded) return true
+        return nativeLoadNgramFd(langCode, fd, offset, length)
     }
 
     private var fallbackLanguage = "ID"
@@ -204,14 +216,60 @@ object NativeEngineBridge {
     fun resetUserDictionary() {
         fallbackDeletedWords.clear()
         fallbackUsageCounts.clear()
+        fallbackBigrams.clear()
         if (!isNativeLoaded) return
         nativeResetUserDictionary()
+    }
+
+    fun flushDynamicStore(): Boolean {
+        if (!isNativeLoaded) return true
+        return nativeFlushDynamicStore()
+    }
+
+    fun syncBilingualMode(enabled: Boolean) {
+        if (!isNativeLoaded) return
+        nativeSyncBilingualMode(enabled)
+    }
+
+    fun setContextWord(prevWord: String?) {
+        if (!isNativeLoaded) return
+        nativeSetContextWord(prevWord)
+    }
+
+    fun recordBigram(prevWord: String, nextWord: String, nowSec: Long) {
+        val prevCanon = prevWord.lowercase().replace("'", "").replace("-", "")
+        if (prevCanon.isNotEmpty() && nextWord.isNotEmpty()) {
+            val map = fallbackBigrams.getOrPut(prevCanon) { LinkedHashMap() }
+            map[nextWord] = (map[nextWord] ?: 0) + 1
+        }
+        if (!isNativeLoaded) return
+        nativeRecordBigram(prevWord, nextWord, nowSec)
+    }
+
+    fun getNextWordCandidates(prevWord: String): List<String> {
+        if (prevWord.isBlank()) return emptyList()
+        if (!isNativeLoaded) {
+            val prevCanon = prevWord.lowercase().replace("'", "").replace("-", "")
+            val map = fallbackBigrams[prevCanon] ?: return emptyList()
+            return map.entries
+                .sortedByDescending { it.value }
+                .map { it.key }
+                .filterNot { isWordDeleted(it.lowercase().replace("'", "")) }
+                .take(16)
+        }
+        candidateBuffer.clear()
+        val bytesWritten = nativeGetNextWordCandidates(prevWord, candidateBuffer, candidateBuffer.capacity())
+        return parseCandidatesFromBuffer(bytesWritten)
     }
 
     fun getCandidates(): List<String> {
         if (!isNativeLoaded) return emptyList()
         candidateBuffer.clear()
         val bytesWritten = nativeGetCandidates(candidateBuffer, candidateBuffer.capacity())
+        return parseCandidatesFromBuffer(bytesWritten)
+    }
+
+    private fun parseCandidatesFromBuffer(bytesWritten: Int): List<String> {
         if (bytesWritten <= 0) return emptyList()
 
         candidateBuffer.position(0)

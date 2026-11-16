@@ -99,28 +99,7 @@ class WordCorrectionController(
 
         if (candidates.isEmpty()) return emptyList()
 
-        val lang = NativeEngineBridge.getActiveLanguage()
-        val digitsKey = digits.joinToString("")
-        val preferred = learnedWordsRepository.getPreferredWord(lang, digitsKey)
-        val hasLearned = learnedWordsRepository.hasPreferredWord(lang, digitsKey)
-
-        val sortedCandidates = if (!preferred.isNullOrEmpty()) {
-            val matchIdx = candidates.indexOfFirst { it.equals(preferred, ignoreCase = true) }
-            if (matchIdx > 0) {
-                val mutable = ArrayList(candidates)
-                val m = mutable.removeAt(matchIdx)
-                mutable.add(0, m)
-                mutable
-            } else if (matchIdx < 0 && hasLearned) {
-                listOf(preferred) + candidates
-            } else {
-                candidates
-            }
-        } else {
-            candidates
-        }
-
-        return sortedCandidates.map { WordCorrectionHelper.matchCase(word, it) }
+        return candidates.map { WordCorrectionHelper.matchCase(word, it) }
     }
 
     /**
@@ -147,9 +126,7 @@ class WordCorrectionController(
 
         activeCandidates = emptyList()
 
-        val digitsKey = WordCorrectionHelper.wordToDigits(replacement).joinToString("")
-        val lang = NativeEngineBridge.getActiveLanguage()
-        learnedWordsRepository.recordPickedWord(lang, digitsKey, replacement, isIncognito)
+        learnedWordsRepository.recordWordUsage(replacement, isIncognito)
 
         return replacement
     }

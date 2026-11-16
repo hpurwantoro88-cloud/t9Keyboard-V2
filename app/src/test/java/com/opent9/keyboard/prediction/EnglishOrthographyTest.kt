@@ -77,58 +77,22 @@ class EnglishOrthographyTest {
     }
 
     @Test
-    fun testProcessCandidatesPromotionAndRestoration() {
-        // 3668: foot vs dont -> don't is restored and promoted over foot
-        val cands3668 = listOf("foot", "dont", "font", "doot")
-        val processed3668 = EnglishOrthography.processCandidates(cands3668, "EN")
-        assertEquals("don't", processed3668[0])
-        assertEquals("foot", processed3668[1])
-        assertEquals("font", processed3668[2])
+    fun testProcessCandidatesContractionRestoration() {
+        val processed3668 = EnglishOrthography.processCandidates(listOf("dont", "foot", "font"), "EN")
+        assertEquals(listOf("don't", "foot", "font"), processed3668)
 
-        // 27368: brent vs arent -> aren't promoted over brent
-        val cands27368 = listOf("brent", "arent")
-        val processed27368 = EnglishOrthography.processCandidates(cands27368, "EN")
-        assertEquals("aren't", processed27368[0])
-        assertEquals("brent", processed27368[1])
-
-        // 96873: youse vs youre -> you're promoted over youse
-        val cands96873 = listOf("youse", "youre")
-        val processed96873 = EnglishOrthography.processCandidates(cands96873, "EN")
-        assertEquals("you're", processed96873[0])
-        assertEquals("youse", processed96873[1])
-
-        // 2268: cant restored to can't
-        val cands2268 = listOf("cant", "abou", "banu")
-        val processed2268 = EnglishOrthography.processCandidates(cands2268, "EN")
+        val processed2268 = EnglishOrthography.processCandidates(listOf("cant", "abou", "banu"), "EN")
         assertEquals("can't", processed2268[0])
 
-        // 46: im restored to I'm and promoted to position 1 ahead of 'go'
-        val cands46 = listOf("in", "go", "im")
-        val processed46 = EnglishOrthography.processCandidates(cands46, "EN")
-        assertEquals("in", processed46[0])
-        assertEquals("I'm", processed46[1])
-        assertEquals("go", processed46[2])
+        val processed46 = EnglishOrthography.processCandidates(listOf("in", "im", "go"), "EN")
+        assertEquals(listOf("in", "I'm", "go"), processed46)
 
-        // 437: hes promoted to he's ahead of ifs
-        val cands437 = listOf("her", "ifs", "hes")
-        val processed437 = EnglishOrthography.processCandidates(cands437, "EN")
-        assertEquals("her", processed437[0])
-        assertEquals("he's", processed437[1])
-
-        // 7437: shes promoted to she's ahead of pier
-        val cands7437 = listOf("pier", "pies", "shes")
-        val processed7437 = EnglishOrthography.processCandidates(cands7437, "EN")
-        assertEquals("she's", processed7437[0])
-
-        // 6673: nope promoted over more
-        val cands6673 = listOf("more", "nose", "nope")
-        val processed6673 = EnglishOrthography.processCandidates(cands6673, "EN")
-        assertEquals("nope", processed6673[0])
-
-        // 4: i restored to I
-        val cands4 = listOf("i")
-        val processed4 = EnglishOrthography.processCandidates(cands4, "EN")
+        val processed4 = EnglishOrthography.processCandidates(listOf("i"), "EN")
         assertEquals("I", processed4[0])
+
+        // Native OPENT9D2 candidates already containing contractions preserve native ranking without duplicates
+        val nativeAmbiguous = listOf("were", "we're", "zere")
+        assertEquals(nativeAmbiguous, EnglishOrthography.processCandidates(nativeAmbiguous, "EN"))
     }
 
     @Test

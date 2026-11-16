@@ -22,42 +22,6 @@ class SuggestionStripRenderer(
 ) {
 
     /**
-     * Draws the Page 2 Extended Symbols top category tabs strip.
-     */
-    fun drawPage2Strip(
-        canvas: Canvas,
-        keyAtlas: KeyAtlas,
-        density: Float
-    ) {
-        canvas.drawRect(keyAtlas.stripBounds, stripBackgroundPaint)
-
-        val tabMargin = 3f * density
-        val cornerRadius = 8f * density
-
-        for (i in 0 until 4) {
-            val bounds = keyAtlas.symbolLayerTabBounds[i]
-            scratchRect.set(
-                bounds.left + tabMargin,
-                bounds.top + tabMargin,
-                bounds.right - tabMargin,
-                bounds.bottom - tabMargin
-            )
-
-            val isActive = (i == keyAtlas.activeSymbolLayerIndex)
-            val bgPaint = if (isActive) pillPaint else keyBackgroundPaint
-            canvas.drawRoundRect(scratchRect, cornerRadius, cornerRadius, bgPaint)
-            if (isActive) {
-                canvas.drawRoundRect(scratchRect, cornerRadius, cornerRadius, keyBorderPaint)
-            }
-
-            val textPaint = if (isActive) pillTextPaint else subTextPaint
-            val title = keyAtlas.symbolLayerTabTitles[i]
-            val textY = bounds.centerY() - ((textPaint.descent() + textPaint.ascent()) / 2f)
-            canvas.drawText(title, bounds.centerX(), textY, textPaint)
-        }
-    }
-
-    /**
      * Draws the candidate suggestions strip and mode toggle pill (T9 / ABC).
      */
     fun drawSuggestionStrip(
@@ -69,6 +33,7 @@ class SuggestionStripRenderer(
         candidateItemLeft: FloatArray,
         candidateItemRight: FloatArray,
         density: Float,
+        isIdlePrediction: Boolean = false,
         formatWord: (String) -> String
     ) {
         canvas.drawRect(keyAtlas.stripBounds, stripBackgroundPaint)
@@ -107,8 +72,8 @@ class SuggestionStripRenderer(
             val right = candidateItemRight[i]
             val word = formatWord(candidates[i])
 
-            // Highlight 1st candidate
-            val paint = if (i == 0) candidatePrefixPaint else candidateTextPaint
+            // Highlight 1st candidate only for active composing / word correction, not idle NWP
+            val paint = if (i == 0 && !isIdlePrediction) candidatePrefixPaint else candidateTextPaint
             val textX = left + 12f * density
             canvas.drawText(word, textX, textY, paint)
 

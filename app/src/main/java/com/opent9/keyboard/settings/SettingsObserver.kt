@@ -7,6 +7,9 @@ import com.opent9.keyboard.jni.NativeEngineBridge
 
 class SettingsObserver(
     private val context: Context,
+    private val onBilingualSync: (Boolean) -> Unit = { enabled ->
+        NativeEngineBridge.syncBilingualMode(enabled)
+    },
     private val onConfigSync: (Float, Int, Int, Boolean, Boolean, Int) -> Unit = { sigma, longPress, multiTap, autoSpace, slang, decay ->
         NativeEngineBridge.syncConfig(sigma, longPress, multiTap, autoSpace, slang, decay)
     }
@@ -36,8 +39,14 @@ class SettingsObserver(
         val slangBoost = prefs.getBoolean("slang_boost", true)
         val decayDays = (prefs.getString("decay_half_life", "30") ?: "30").toIntOrNull() ?: 30
 
-        onConfigSync(42.0f, longPressMs, multiTapMs, autoSpace, slangBoost, decayDays)
+        onConfigSync(getTouchVarianceSigmaPx(), longPressMs, multiTapMs, autoSpace, slangBoost, decayDays)
+        onBilingualSync(isBilingualPredictionEnabled())
         NativeEngineBridge.syncAudioConfig(isAudioEnabled(), getAudioVolume(), getAudioStyle())
+    }
+
+    fun getTouchVarianceSigmaPx(): Float {
+        val density = context.resources.displayMetrics.density.coerceAtLeast(1.0f)
+        return DEFAULT_TOUCH_SIGMA_DP * density
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
@@ -69,6 +78,7 @@ class SettingsObserver(
     fun getAudioVolume(): Float = prefs.getInt("audio_volume", 60) / 100f
     fun getAudioStyle(): Int = (prefs.getString("audio_style", "0") ?: "0").toIntOrNull() ?: 0
     fun getStartupLanguage(): String = prefs.getString("startup_language", "ID") ?: "ID"
+    fun isBilingualPredictionEnabled(): Boolean = prefs.getBoolean("bilingual_prediction", false)
     fun isDefaultT9(): Boolean = (prefs.getString("default_input_mode", "0") ?: "0") == "0"
     fun isAutoSpaceEnabled(): Boolean = prefs.getBoolean("auto_space", true)
     fun isDoubleSpacePeriodEnabled(): Boolean = prefs.getBoolean("double_space_period", true)
@@ -85,5 +95,9 @@ class SettingsObserver(
     fun getKeyboardLayoutOrder(): List<RearrangeKeyId> {
         val raw = prefs.getString(KeyboardLayoutConfig.PREF_KEY, null)
         return KeyboardLayoutConfig.deserialize(raw)
+    }
+
+    companion object {
+        const val DEFAULT_TOUCH_SIGMA_DP = 16.0f
     }
 }

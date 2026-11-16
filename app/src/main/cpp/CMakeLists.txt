@@ -10,6 +10,7 @@ include_directories(include)
 
 add_library(opent9 SHARED
     src/dawg_engine.cpp
+    src/ngram_engine.cpp
     src/spatial_scoring.cpp
     src/multi_tap_engine.cpp
     src/lexicon_manager.cpp

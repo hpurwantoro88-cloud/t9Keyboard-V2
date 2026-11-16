@@ -3,8 +3,8 @@ package com.opent9.keyboard.prediction
 import com.opent9.keyboard.jni.NativeEngineBridge
 
 /**
- * Resolves prediction candidates from the C++ DAWG engine, applying language orthography,
- * user dictionary deletion filters, fallback projections via SuggestionGuard, and learned word prioritization.
+ * Resolves prediction candidates from the native engine, applying language orthography,
+ * user dictionary deletion filters, SuggestionGuard fallbacks, and explicit restoration overrides.
  */
 object CandidateResolver {
 
@@ -24,12 +24,11 @@ object CandidateResolver {
      * Resolves the full candidate list for active composing digits, accounting for:
      * 1. Word deletions in user dictionary
      * 2. Suggestion guard history and fallback projection
-     * 3. Learned words preference promotion
+     * 3. Explicit preferredWord promotion (e.g. retroactive un-commit restoration)
      */
     fun resolveCandidates(
         currentComposingDigits: List<Int>,
         suggestionGuard: SuggestionGuard,
-        learnedWordsRepository: LearnedWordsRepository,
         preferredWord: String? = null
     ): List<String> {
         val rawCandidates = getProcessedCandidates(currentComposingDigits).filterNot { candidate ->
@@ -45,26 +44,17 @@ object CandidateResolver {
             emptyList()
         }
 
-        val lang = NativeEngineBridge.getActiveLanguage()
-        val digitsKey = currentComposingDigits.joinToString("")
-        val targetWord = preferredWord ?: learnedWordsRepository.getPreferredWord(lang, digitsKey)
-        val hasLearned = preferredWord != null || learnedWordsRepository.hasPreferredWord(lang, digitsKey)
-
-        return if (!targetWord.isNullOrEmpty()) {
+        return if (!preferredWord.isNullOrEmpty()) {
             if (candidatesList.isNotEmpty()) {
                 val mutable = ArrayList(candidatesList)
-                val matchIdx = mutable.indexOfFirst { it.equals(targetWord, ignoreCase = true) }
+                val matchIdx = mutable.indexOfFirst { it.equals(preferredWord, ignoreCase = true) }
                 if (matchIdx > 0) {
                     val matched = mutable.removeAt(matchIdx)
                     mutable.add(0, matched)
-                } else if (matchIdx < 0 && hasLearned) {
-                    mutable.add(0, targetWord)
                 }
                 mutable
-            } else if (hasLearned) {
-                listOf(targetWord)
             } else {
-                emptyList()
+                listOf(preferredWord)
             }
         } else {
             candidatesList

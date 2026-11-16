@@ -1,7 +1,7 @@
 # Product Requirements Document (PRD): OpenT9 Core Native Keyboard (v3.0)
 
-**Document Identifier:** `prd3.md`  
-**Package Identifier:** `com.opent9.keyboard`  
+**Document Identifier:** `prd.md`  
+**Package Identifier:** `com.opent9.keyboard` (`versionCode = 2`, `versionName = "3.0.1"`)  
 **Architecture Class:** Native Hybrid Systems Architecture (Thin Kotlin IME Wrapper + C++20 Core via NDK + Zero-Allocation Hardware Canvas)  
 **Target Benchmarks:** Microsoft SwiftKey, Gboard (3×4 Mode), Samsung Keyboard (3×4 Mode)
 
@@ -9,18 +9,18 @@
 
 ## 1. Executive Summary & Core Value Proposition
 
-OpenT9 Core delivers an ultra-lightweight, zero-latency Android T9 predictive keyboard that decisively outperforms OEM solutions across memory footprint, cold-start latency, frame rendering consistency, and typing disambiguation speed.
+OpenT9 Core delivers an ultra-lightweight, low-latency Android T9 predictive keyboard that optimizes memory footprint, cold-start latency, frame rendering consistency, and typing disambiguation speed.
 
 ### Core Differentiators
 
-- **Sub-1ms Predictive Disambiguation:** C++20 beam search traversing pre-indexed Directed Acyclic Word Graphs (DAWG) without JVM pauses.
+- **Sub-1ms Predictive Disambiguation:** C++20 T9-digit-indexed minimal DAFSA (`OPENT9D2`) traversal + multi-hypothesis spatial beam search with pre-cached prefix completions and adjacent-key/overtype fallback.
 - **Deterministic Fallback (Multi-Tap ABC Mode):** Instant toggling between predictive T9 and classic lowercase-first multi-tap for unlisted acronyms, passwords, and custom codes.
-- **Spatial-Symmetric Flick Selection:** Dual-symbol keys map physical left/right flick directions directly to on-key visual glyph positions.
-- **Dynamic Auto-Fit Swipeable Suggestion Strip:** Horizontally scrollable 40dp candidate bar eliminating rigid candidate pagination and secondary grid overlays.
-- **Polymorphic System Keys:** State-machine-driven implementations for Key ↵ (ENTER), Key ⇧ (SHIFT), and Key ⌫ (DEL) adapting across EditorInfo configurations.
+- **Retrospective Word Correction & Orthography Post-Processing:** Cursor/selection inspection (`WordCorrectionController`) for post-commit correction, English contraction restoration (`EnglishOrthography`), Indonesian suffix compounding & homograph promotion (`IndonesianOrthography`), and phonotactic fallback (`SuggestionGuard`).
+- **Dynamic Auto-Fit Swipeable Suggestion Strip:** Horizontally scrollable 40dp candidate bar eliminating rigid candidate pagination.
+- **Polymorphic System Keys:** State-machine-driven implementations for Key ↵ (ENTER), Key ⇧ (SHIFT), and Key ⌫ (DEL) adapting across `EditorInfo` configurations.
 - **Single-Tag Language Toggle with Active T9 Glow Bar:** Minimalist visual display showing active language code (`EN` or `ID`) with an illuminated neon indicator bar when T9 prediction is active.
-- **Continuous Spacebar Trackpad Scrubbing:** Horizontal cursor positioning directly from Key 0.
-- **Dedicated Native Settings Architecture:** `SharedPreferences` persistence coupled with zero-allocation C++ memory synchronization.
+- **Continuous Spacebar Trackpad Scrubbing & Customizable Utility Layout:** Horizontal cursor positioning from Key 0 (`SpaceScrubTracker`), plus interactive puzzle-style rearrangement of Row 4 & Column 4 (`RearrangeLayoutActivity`).
+- **Adaptive Ergonomics & Themes:** Follow-System / Light / Dark themes (`KeyboardTheme`), One-Handed mode, landscape height clamping, and tablet centering (`KeyboardDimensionCalculator`).
 - **100% Offline Privacy:** Zero network permissions (`android.permission.INTERNET` strictly omitted).
 
 ---
@@ -29,533 +29,306 @@ OpenT9 Core delivers an ultra-lightweight, zero-latency Android T9 predictive ke
 
 > **Architectural Invariant:** Declarative UI frameworks (Jetpack Compose, Flutter) and nested XML view hierarchies are strictly prohibited in the core typing loop.
 
-| Layer | Technology Selection | Architectural Invariant |
+| Layer | Technology Selection (Current Codebase) | Notes / Evolution Target |
 | :--- | :--- | :--- |
-| **IME Service Wrapper** | Kotlin (`InputMethodService`) | Minimal OS wrapper for window lifecycle, focus handling, and `InputConnection` transactions. Free of dictionary search or parsing logic. |
-| **Prediction & Scoring Core** | C++20 (Android NDK via CMake) | Executes beam search, Gaussian spatial scoring, candidate ranking, and state rollbacks. Zero dynamic heap allocations in hot paths. |
-| **Static Lexicons** | Memory-Mapped Files (`mmap`) + DAWG | English and Indonesian binary DAWGs mapped directly from storage into Linux page cache. |
-| **Dynamic Vocabulary** | Embedded LMDB / Native SQLite | Key-value store for user slang, contact names, and frequency overrides with exponential half-life decay. |
-| **UI & Render Pipeline** | Single Custom View (`Canvas.onDraw`) | Hardware-accelerated canvas backed by pre-allocated primitive arrays (`FloatArray`, `IntArray`). 0 bytes allocated in `onTouchEvent()` and `onDraw()`. |
-| **JNI Bridge** | Direct `ByteBuffer` & Primitives | Touch coordinates and keycodes sent as primitives; candidate offsets returned via direct memory buffers to prevent `java.lang.String` churn. |
-| **Audio Engine** | Google Oboe C++ (AAudio / OpenSL ES) | Direct hardware audio driver access delivering click feedback in $< 10\text{ms}$. |
-| **Configuration Sync** | Direct JNI Primitive Struct | Asynchronous `SharedPreferences` observer synchronizing runtime parameters directly to native C++ global state. |
+| **IME Service Wrapper** | Kotlin (`InputMethodService`) + modular coordinators | Handles window lifecycle, focus, `InputConnection` transactions, and orthography post-processing (`OpenT9InputMethodService`, `T9ComposingCoordinator`, `KeyboardActionDispatcher`). |
+| **Prediction & Scoring Core** | C++20 (Android NDK 26.1 via CMake) | Executes multi-hypothesis spatial beam search, Unified Log-Linear scoring, prefix completion, overtype/typo fallback, and $O(1)$ stroke stack rollback (`DawgEngine`, `SpatialScorer`) with zero heap allocation on hot path. |
+| **Static Lexicons** | Memory-Mapped Files (`mmap`) + T9-Digit Minimal DAFSA (`OPENT9D2`) + Bigram Tables (`OPENT9N1`) | `en_lexicon.dawg` (`9.1 MB`), `id_lexicon.dawg` (`10.9 MB`), `en_bigrams.bin`, and `id_bigrams.bin` mapped read-only directly via `openFd` + `mmap` (`noCompress`), naturally aligned, supporting sub-ms T9 disambiguation and contextual/idle Next-Word Prediction. |
+| **Dynamic Vocabulary** | Flat Binary Store (`opent9_vocab.dat` + `.bigrams` via `DynamicStore`) + `LearnedWordsRepository` | Thread-safe C++ unigram & personal bigram store (max 4096 unigrams + 4096 bigrams) with in-memory T9 prefix index, exponential half-life decay, suppression blacklist, and debounced off-UI-thread `flushIfDirty()` persistence. |
+| **UI & Render Pipeline** | Single Custom View (`Canvas.onDraw`) | Hardware-accelerated canvas backed by pre-allocated `RectF`, `Path`, `Paint`, and primitive arrays in `T9KeyboardView` and dedicated page renderers. |
+| **JNI Bridge** | Direct `ByteBuffer` & Primitives (`NativeEngineBridge`) | Touch coordinates, keycodes, and direct `ByteBuffer` (`2048B` candidates, `16B` multi-tap) with JVM fallback state for unit tests. |
+| **Audio Engine** | Google Oboe `1.9.0` C++ (`AudioEngine`) | Pre-synthesized 48kHz PCM click waveforms (`Mechanical`, `Modern Soft`, `Minimalist Click`) via `LowLatency` shared output stream. |
+| **Configuration Sync** | `PreferenceFragmentCompat` + `SettingsObserver` -> JNI | `SharedPreferences` observer synchronizing `NativeConfig` primitives and audio settings to C++ global state. |
 
 ---
 
 ## 3. UI Layout & Keypad Specifications
 
-The entire keyboard surface is fixed at a **260dp overall height budget** (40dp suggestion strip + 220dp key grid across 4 rows of 55dp each) on standard 1080×2400 displays. Key columns occupy exactly 25% of the screen width (~90–100dp).
+The keyboard height is user-configurable (**220dp–320dp**, default **260dp** in portrait) and dynamically constrained in landscape (`<= 48%` of screen height) and large-screen portrait (`<= 480dp` centered ergonomic width, or 85% width in One-Handed mode).
+
+### 3.0. Page 0: Primary T9 Text & Prediction Layer (Default Layout)
+
+Row 4 & Column 4 keys are customizable via `RearrangeLayoutActivity` (`KeyboardLayoutConfig`). In the default order (`DEL, SHIFT, ENTER, LANG, SPACE, PAGE`), `SPACE` occupies **2 blocks** and Key 15 (`EMOJI_DOT`) is hidden (`bounds` zeroed):
 
 ```text
 +-------------------------------------------------------------------------+
-| [T9] | 1. selamat   | 2. selalu   | 3. selain   | 4. seluler  | 5. ...  |  <-- Swipeable Strip (40dp)
+| [T9] | selamat   | selalu   | selain   | seluler   | ...                |  <-- Swipeable Strip (~40dp)
 +-------------------------------------------------------------------------+
-| [ .,?!'@# ¹ ] | [   ABC ²   ] | [   DEF ³   ] | [   ⌫ DEL   ] |  <-- Row 1 (55dp)
+| [ .,?!'@# ¹ ] | [   ABC ²   ] | [   DEF ³   ] | [   ⌫ DEL   ] |  <-- Row 1
 +---------------+---------------+---------------+---------------+
-| [   GHI ⁴   ] | [   JKL ⁵   ] | [   MNO ⁶   ] | [  ⇧ SHIFT  ] |  <-- Row 2 (55dp)
+| [   GHI ⁴   ] | [   JKL ⁵   ] | [   MNO ⁶   ] | [  ⇧ SHIFT  ] |  <-- Row 2
 +---------------+---------------+---------------+---------------+
-| [  PQRS ⁷   ] | [   TUV ⁸   ] | [  WXYZ ⁹   ] | [  ↵ ENTER  ] |  <-- Row 3 (55dp)
+| [  PQRS ⁷   ] | [   TUV ⁸   ] | [  WXYZ ⁹   ] | [  ↵ ENTER  ] |  <-- Row 3
 +---------------+---------------+---------------+---------------+
-| [   ?123    ] | [    EN     ] | [  ␣ ⁰ SPACE] | [   😊 / .   ] |  <-- Row 4 (55dp)
-|               | [ ========= ] |               |               |
-+-------------------------------------------------------------------------+
+| [   ?123    ] | [      0 ␣ SPACE (2 blk)    ] | [  EN / 😊  ] |  <-- Row 4
+|               |                               | [ ========= ] |
++-----------------------------------------------+---------------+
 ```
 
----
-
-### 3.1. Suggestion & Candidate Strip Layout (40dp)
-
-The suggestion strip replaces rigid slots with a **Horizontally Scrollable Dynamic-Width Canvas Strip**:
-
-- **Fixed Left Pill (12% Width):** Displays active predictive mode: `[ T9 ]` or `[ ABC ]`. Tapping this pill toggles between Predictive T9 and Literal Multi-Tap.
+#### Suggestion & Candidate Strip Layout (~40dp)
+- **Fixed Left Pill (12% Width):** Displays `[ T9 ]` or `[ ABC ]`. Tapping toggles Predictive T9 vs. Literal Multi-Tap.
 - **Scrollable Candidate Viewport (88% Width):**
-  - Renders candidates continuously from left to right.
-  - Candidate item widths are dynamically measured based on word character count via `primaryTextPaint.measureText(candidate) + paddingHorizontal` (minimum width: 64dp).
-  - Smooth finger dragging pans candidates left and right across the entire beam search result list (up to 16 candidates).
-  - Vertical separator bars (`dividerPaint`) are drawn between adjacent candidate words.
-  - Tapping any candidate immediately commits it to the host input field.
+  - Renders up to 16 candidates left-to-right; #1 candidate highlighted with `candidatePrefixPaint`.
+  - Candidate widths measured via `candidateTextPaint.measureText(word) + 24dp` horizontal padding (minimum `64dp`).
+  - Horizontal dragging pans candidates; tapping commits word; long-pressing opens removal/blacklist confirmation dialog (`CandidateDialogHelper`).
 
----
+#### Language & T9 Glow Indicator Specification (`LANG_SWITCH` Key)
+- **Display Text:** Active language code (`EN` or `ID`) with `😊` sub-label in the upper-right corner.
+- **Visual Glow Bar:** Horizontal bar beneath the text (`width = min(28dp, 60% key width)`, `height = 3dp`, `radius = 1.5dp`) drawn with `indicatorGlowPaint` when `isT9Mode == true`, omitted when in `ABC` Multi-Tap mode.
+- **Interactions (Implemented in `PageController` & `KeyboardActionDispatcher`):**
+  - **Primary Tap / Flick Up:** Hot-swaps language (`EN` $\leftrightarrow$ `ID`) and re-evaluates active composing strokes.
+  - **Flick Down:** Opens Emoji Picker (`PAGE_4_EMOJI`).
+  - **Long Press:** Toggles T9 / ABC mode.
 
-### 3.2. Page 0: Primary T9 Text & Prediction Layer
+#### Complete Page 0 Key Interaction & Gesture Matrix (Implemented)
 
-#### Row 4 Key 2: Language & T9 Glow Indicator Specification
-- **Display Text:** Renders only the active language code: `EN` or `ID` (never dual labels like `EN / ID`).
-- **Visual Glow Bar:**
-  - Rendered as an illuminated horizontal indicator bar directly beneath the language text ($y + 14\text{dp}$, height $3\text{dp}$, width $28\text{dp}$, corner radius $1.5\text{dp}$).
-  - **When T9 is Active:** Rendered using `indicatorGlowPaint` (Primary Accent Color, `#00E5FF` or `#4CAF50`, with anti-aliased fill).
-  - **When T9 is Inactive (Multi-Tap ABC Mode):** The indicator bar is completely omitted (or rendered fully transparent), providing instantaneous visual verification of the active typing engine.
-- **Interactions:**
-  - **Primary Tap:** Instant language hot-swap (`EN` $\leftrightarrow$ `ID`). Performs zero-allocation pointer swap in C++ core and re-evaluates current composing buffer.
-  - **Flick Up:** Toggles typing mode between T9 and ABC (instantly turns the indicator glow bar on or off).
-  - **Long Press:** Launches Keyboard Settings Activity.
-
-#### Complete Page 0 Key Interaction & Gesture Matrix
-
-| Key | Primary Tap | Flick Up | Flick Down | Flick Left | Flick Right | Long Press (>350ms) |
+| Key | Primary Tap | Flick Up | Flick Down | Flick Left | Flick Right | Long Press |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **[ 1 .,?!'@# ]** | Multi-tap cycle (`.`, `,`, `?`, `!`, `'`, `@`, `#`, `1`) | Insert literal `1` | Symbol popup bar | Insert `,` | Insert `.` | Lock literal `1` |
-| **[ 2 ABC ] to [ 9 WXYZ ]** | Push digit to T9 / Multi-tap char | Insert literal digit | Diacritic picker | — | — | Lock literal digit |
-| **[ ⌫ DEL ]** | Delete char / DAWG rollback | Delete preceding word | Clear entire field | Delete word | — | Continuous accelerated delete |
-| **[ ⇧ SHIFT ]** | Cycle Lower $\to$ Title $\to$ Upper | Toggle Caps Lock | — | — | — | Lock UPPERCASE |
-| **[ ↵ ENTER ]** | Polymorphic EditorInfo Action | Force submit | Insert Tab (`\t`) | — | — | Insert newline (`\n`) |
-| **[ ?123 ]** | Switch to Page 1 (Symbols) | — | Switch to Page 2 | — | — | Open Settings |
-| **[ EN ] / [ ID ]** | Hot-swap Language Pointer | Toggle T9 / ABC mode | — | — | — | Open Settings |
-| **[ 0 ␣ SPACE ]** | Commit Candidate 1 + Space | Insert literal `0` | Non-breaking space | Scrub Cursor Left | Scrub Cursor Right | Space repeat / Scrub |
-| **[ 😊 / . ]** | Switch to Page 3 (Emoji Canvas) | Commit `. ` + Space | Commit `, ` + Space | Reduplication (`-`) | Insert `.` | Recent emojis bar |
+| **[ 1 .,?!'@# ]** | Multi-tap cycle (`.`, `,`, `?`, `!`, `'`, `@`, `#`, `1`) | — | Switch to Page 1 (`PAGE_1_NUM_SYM`) | Insert `,` | Insert `.` | Insert literal `1` |
+| **[ 2 ABC ] to [ 9 WXYZ ]** | Push digit to T9 / Multi-tap char | — | — *(Diacritic picker planned)* | — | — | Insert literal digit |
+| **[ ⌫ DEL ]** | Delete char / UTF-16 surrogate / pop T9 stroke | Delete preceding word / abort composing | Clear entire field | Delete preceding word / abort composing | — | Continuous repeat delete (whole-word after 1200ms) |
+| **[ ⇧ SHIFT ]** | Cycle Lower $\to$ Title $\to$ Upper (Double-tap $\le 350\text{ms}$ locks Caps) | Lock UPPERCASE (Caps Lock) | — | — | — | Lock UPPERCASE (Caps Lock) |
+| **[ ↵ ENTER ]** | Polymorphic `EditorInfo` action / newline / `KEYCODE_ENTER` | Force submit (`performEditorAction` / `DONE`) | Insert Tab (`\t`) | — | — | Insert newline (`\n`) |
+| **[ ?123 ]** | Switch to Page 2 (`PAGE_2_EXT_SYM`) | — | Switch to Page 2 (`PAGE_2_EXT_SYM`) | — | — | Open Settings (`SettingsActivity`) |
+| **[ EN / ID ]** | Hot-swap Language (`EN` $\leftrightarrow$ `ID`) | Hot-swap Language | Switch to Emoji (`PAGE_4_EMOJI`) | — | — | Toggle T9 / ABC mode |
+| **[ 0 ␣ SPACE ]** | Commit Candidate 1 + Space / Double-space period | — | Non-breaking space (`\u00A0`) | Single DPAD Left / Drag: Trackpad Scrub Left | Single DPAD Right / Drag: Trackpad Scrub Right | Insert literal `0` |
+
+> *Note:* Retroactive Un-Commit is implemented in `DeleteController.kt` behind `enableRetroactiveUncommit: Boolean = false`.
 
 ---
 
-### 3.3. Page 1: Numeric & Direct Symbols (?123)
+### 3.1. Page 1: Numeric & Calculator Numpad (`PAGE_1_NUM_SYM`)
 
-Activated via `[ ?123 ]`. Bypasses T9 predictive traversal; all alphanumeric keys output literal characters.
+Activated via `[ 12 34 ]` on Page 2/3, Flick Down on Key `1` (Page 0), or automatically on `TYPE_CLASS_NUMBER` / `TYPE_CLASS_PHONE` / `TYPE_CLASS_DATETIME` inputs. Bypasses T9 prediction and hides the suggestion strip.
 
 ```text
 +-------------------------------------------------------------------------+
-| [SYM] |   @    |   #    |   _    |   /    |   \    |   &    |   %    |
-+-------------------------------------------------------------------------+
-| [    1      ] | [    2      ] | [    3      ] | [   ⌫ DEL   ] |  <-- Row 1 (55dp)
-+---------------+---------------+---------------+---------------+
-| [    4      ] | [    5      ] | [    6      ] | [   +   -   ] |  <-- Row 2 (55dp)
-+---------------+---------------+---------------+---------------+
-| [    7      ] | [    8      ] | [    9      ] | [  ↵ ENTER  ] |  <-- Row 3 (55dp)
-+---------------+---------------+---------------+---------------+
-| [   ABC     ] | [   =\<     ] | [ 0 ␣ SPACE ] | [   .   ,   ] |  <-- Row 4 (55dp)
-+-------------------------------------------------------------------------+
+| [  +  ] | [     1     ] | [     2     ] | [     3     ] | [     %     ] |  <-- Row 0
+| [  -  ] +---------------+---------------+---------------+---------------+
+| [  *  ] | [     4     ] | [     5     ] | [     6     ] | [     ␣     ] |  <-- Row 1
+| [  /  ] +---------------+---------------+---------------+---------------+
+| [ ( ) ] | [     7     ] | [     8     ] | [     9     ] | [   ⌫ DEL   ] |  <-- Row 2
++---------+-------+-------+---------------+-------+-------+---------------+
+| [ ABC ] | [ , ] | [!?#] | [     0     ] | [ = ] | [ . ] | [  ↵ ENTER  ] |  <-- Row 3
++---------+-------+-------+---------------+-------+-------+---------------+
 ```
 
-#### Dual-Key Flick Mappings (Page 1)
-
-- **`[ +  - ]`:**
-  - **Visual Layout:** `+` on left, `-` on right.
-  - **Tap:** Inserts `+`.
-  - **Flick Left:** Inserts `+`.
-  - **Flick Right:** Inserts `-`.
-  - **Flick Down:** Inserts `_`.
-  - **Long Press:** Inserts `±`.
-- **`[ .  , ]`:**
-  - **Visual Layout:** `.` on left, `,` on right.
-  - **Tap:** Inserts `.`.
-  - **Flick Left:** Inserts `.`.
-  - **Flick Right:** Inserts `,`.
-  - **Flick Down:** Inserts `:`.
-  - **Long Press:** Inserts `;`.
+- **Left Column (14% Width, Rows 0–2):** Vertically scrollable operator container (`+`, `-`, `*`, `/`, `(`, `)` — 4 visible slots at a time).
+- **Center Grid (72% Width):** Standard `1–9` numpad, `0`, and split utility keys (`[` `,` `|` `!?#` `]` and `[` `=` `|` `.` `]`).
+- **Right Column (14% Width):** `%`, `␣`, `⌫ DEL`, `↵ ENTER`.
 
 ---
 
-### 3.4. Page 2: Extended Symbols & Math (=\<)
+### 3.2. Page 2 & Page 3: Primary & Extended Symbols (10-Column Gboard-Style)
 
-Activated via `[ =\< ]` on Page 1. Dual-symbol keys strictly align physical gesture directions with on-screen visual positions.
+Activated via `[ ?123 ]` from Page 0 (`PAGE_2_EXT_SYM`) and toggled with `[ =\< ]` / `[ ?123 ]` to `PAGE_3_EXT_SYM_ALT`:
 
+#### Page 2 (`PAGE_2_EXT_SYM` — Primary Symbols)
 ```text
-+-------------------------------------------------------------------------+
-| [EXT] |   ~    |   `    |   |    |   ^    |   °    |   §    |   =    |
-+-------------------------------------------------------------------------+
-| [   ~   `   ] | [   \   |   ] | [   {   }   ] | [   ⌫ DEL   ] |  <-- Row 1 (55dp)
-+---------------+---------------+---------------+---------------+
-| [   [   ]   ] | [   <   >   ] | [   (   )   ] | [   ×   ÷   ] |  <-- Row 2 (55dp)
-+---------------+---------------+---------------+---------------+
-| [   %   ‰   ] | [  Rp   $   ] | [   €   £   ] | [  ↵ ENTER  ] |  <-- Row 3 (55dp)
-+---------------+---------------+---------------+---------------+
-| [   ABC     ] | [   123     ] | [ 0 ␣ SPACE ] | [   "   '   ] |  <-- Row 4 (55dp)
-+-------------------------------------------------------------------------+
+Row 0:  1   2   3   4   5   6   7   8   9   0
+Row 1:  @   #   $   _   &   -   +   (   )   /
+Row 2: [=\<]  *   "   '   :   ;   !   ?  [⌫ DEL]
+Row 3: [ABC]  ,  [12 34] [     ␣ (Language)    ]  .  [↵ ENTER]
 ```
 
-#### Spatial-Symmetric Flick Mapping Matrix (Page 2)
-
-| Key Display | Primary Tap | Flick Left (Left Glyph) | Flick Right (Right Glyph) | Flick Down (Paired / Secondary) |
-| :--- | :--- | :--- | :--- | :--- |
-| **`[ ~   ` ]`** | Inserts `~` | Inserts `~` | Inserts `` ` `` | Inserts `^` |
-| **`[ \   \| ]`** | Inserts `\` | Inserts `\` | Inserts `\|` | Inserts `/` |
-| **`[ {   } ]`** | Inserts `{` | Inserts `{` | Inserts `}` | Inserts `{}` + cursor inside |
-| **`[ [   ] ]`** | Inserts `[` | Inserts `[` | Inserts `]` | Inserts `[]` + cursor inside |
-| **`[ <   > ]`** | Inserts `<` | Inserts `<` | Inserts `>` | Inserts `<>` + cursor inside |
-| **`[ (   ) ]`** | Inserts `(` | Inserts `(` | Inserts `)` | Inserts `()` + cursor inside |
-| **`[ ×   ÷ ]`** | Inserts `×` | Inserts `×` | Inserts `÷` | Inserts `*` |
-| **`[ %   ‰ ]`** | Inserts `%` | Inserts `%` | Inserts `‰` | Inserts `/` |
-| **`[ Rp  $ ]`** | Inserts active currency | Inserts `Rp ` | Inserts `$` | Inserts `¢` |
-| **`[ €   £ ]`** | Inserts `€` | Inserts `€` | Inserts `£` | Inserts `¥` |
-| **`[ "   ' ]`** | Inserts `"` | Inserts `"` | Inserts `'` | Inserts `""` + cursor inside |
+#### Page 3 (`PAGE_3_EXT_SYM_ALT` — Extended Symbols)
+```text
+Row 0:  ~   `   |   •   √   π   ÷   ×   §   Δ
+Row 1:  £   ¢   €   ¥   ^   °   =   {   }   \
+Row 2: [?123] %   ©   ®   ™   ✓   [   ]  [⌫ DEL]
+Row 3: [ABC]  <  [12 34] [     ␣ (Language)    ]  >  [↵ ENTER]
+```
 
 ---
 
-### 3.5. Page 3: In-Canvas Native Emoji Picker
+### 3.3. Page 4: In-Canvas Native Emoji Picker (`PAGE_4_EMOJI` / alias `PAGE_3_EMOJI`)
 
-Direct in-canvas rendering avoiding Android `RecyclerView` overhead.
+Activated via Flick Down on `[ EN / ID ]`. Direct in-canvas rendering (`EmojiPageRenderer`) avoiding `RecyclerView` overhead.
 
 ```text
 +-------------------------------------------------------------------------+
-| [🕒] | [😀] | [👍] | [🐱] | [🍔] | [⚽] | [🚗] | [💡] | [❤️] |  <-- Category Tabs (40dp)
+| [🕒] | [😀] | [👋] | [🐶] | [🍔] | [⚽] | [🚗] | [💡] | [🔣] | [🚩] |  <-- 10 Tabs
 +-------------------------------------------------------------------------+
-|  😀  |  😃  |  😄  |  😁  |  😆  |  😅  |  😂  |  <-- Row 1 (45dp)
-+------+------+------+------+------+------+------+
-|  🤣  |  🥲  |  🥹  |  😊  |  😇  |  🙂  |  🙃  |  <-- Row 2 (45dp)
-+------+------+------+------+------+------+------+
-|  😉  |  😌  |  😍  |  🥰  |  😘  |  😗  |  😙  |  <-- Row 3 (45dp)
-+------+------+------+------+------+------+------+
-|  😚  |  😋  |  😛  |  😝  |  😜  |  🤪  |  🤨  |  <-- Row 4 (45dp)
-+------+------+------+------+------+------+------+
-| [ ABC ]   | [ 🕒 Recents ]   | [ ␣ Space ]    | [ ⌫ DEL ]     |  <-- Control Row (40dp)
+|  😀  |  😃  |  😄  |  😁  |  😆  |  😅  |  🤣  |  <-- 7-Col Scrollable Grid
+|  ...                                            |
++-----------+------------------+----------------+---------------+
+| [ ABC ]   | [ 🕒 Recents ]   | [ ␣ Space ]    | [ ⌫ DEL ]     |  <-- Control Row
 +-----------+------------------+----------------+---------------+
 ```
 
-- Rendered from a pre-compiled flat table of 32-bit Unicode codepoints using a shared 2-element `CharArray` scratch buffer.
-- Long-press opens an in-canvas Fitzpatrick skin-tone modifier strip.
+- **Categories (10 Tabs):** Recents, Smileys, People, Animals, Food, Activities, Travel, Objects, Symbols, Flags (`EmojiAtlas`).
+- **Interactions:** Vertical scroll inside grid; horizontal swipe left/right switches category tabs; long-press on `⌫ DEL` triggers repeat delete.
+- **Pending Gaps:** `recentEmojis` (28 items) is currently in-memory only (not persisted), Fitzpatrick skin-tone long-press modifier strip is not yet implemented, and `EmojiCompat` / `Paint.hasGlyph()` filtering is not yet applied.
 
 ---
 
 ## 4. Touch Handling, Multi-Touch & Swipeable Strip State Machine
 
-To eliminate event collisions between candidate horizontal scrolling and keypad vertical flicks, touch handling is partitioned by physical $Y$ bounds:
+Touch handling is dispatched by `TouchGestureTracker` into specialized sub-trackers (`CandidateStripGestureTracker`, `EmojiGestureTracker`, `SymbolPagesGestureTracker`, `SpaceScrubTracker`, `RepeatDeleteHandler`).
 
-```text
-                            [MotionEvent.ACTION_DOWN]
-                                        │
-             ┌──────────────────────────┴──────────────────────────┐
-             ▼                                                     ▼
-     Y < 40dp (Candidate Strip)                            Y >= 40dp (Keypad Area)
-             │                                                     │
-    Store startX, startScrollX                            Store (x0, y0), t0
-             │                                            Start Long-Press Timer (350ms)
-    [ACTION_MOVE]                                                  │
-    Compute dx = x - startX                               ┌────────┼────────┐
-    Update strip scrollOffset                             ▼        ▼        ▼
-    Clamp to [maxScroll, 0]                            [MOVE]   [TIMEOUT] [UP]
-    Invalidate strip region                            dx/dy>12dp  >350ms   <350ms
-```
+### 4.1. Gesture Detection Constants (`TouchGestureTracker.kt`)
 
-### 4.1. Gesture Detection Constants
+- `touchSlopPx`: `10f * density` (fallback `30f`)
+- `flickDistanceMinPx`: `12f * density` (fallback `36f`)
+- `FLICK_TIME_WINDOW_MS`: `180L`
+- `LONG_PRESS_TIMEOUT_MS`: `350L` (configurable `200–600ms`)
+- `REPEAT_TICK_INTERVAL_MS`: `50L`
+- `ACCELERATED_DELETE_THRESHOLD_MS`: `1200L`
+- `scrubStepPx`: `(32f / 3f) * density` (fallback `32f`)
+- `spaceScrubActivationPx`: configurable via `space_scrubbing_sensitivity` (`14dp` high, `22dp` normal, `30dp` low), with optional `150ms` hold (`space_scrubbing_hold`) and `1.3f` horizontal aspect-ratio deadband.
 
-```kotlin
-private const val TOUCH_SLOP_PX = 36f           // ~10dp threshold for tap stationary bounds
-private const val FLICK_DISTANCE_MIN_PX = 54f   // Minimum travel to fire a directional flick
-private const val FLICK_TIME_WINDOW_MS = 180L   // Max duration for a high-velocity flick
-private const val LONG_PRESS_TIMEOUT_MS = 350L  // Hold duration for repeat / alternate mode
-private const val REPEAT_TICK_INTERVAL_MS = 50L // Repeat rate for continuous deletion
-private const val SCRUB_STEP_PX = 32f           // Trackpad cursor sensitivity
-```
-
-### 4.2. Flick Vector Evaluation (4-Quadrant Disambiguation)
-
-When $|dx| \ge 	ext{FLICK\_DISTANCE\_MIN\_PX}$ or $|dy| \ge 	ext{FLICK\_DISTANCE\_MIN\_PX}$ within $	ext{FLICK\_TIME\_WINDOW\_MS}$, evaluate gesture angle $	heta = \operatorname{atan2}(-dy, dx)$:
-
-- **Flick Right:** $-45^\circ \le 	heta < 45^\circ$
-- **Flick Up:** $45^\circ \le 	heta < 135^\circ$
-- **Flick Left:** $135^\circ \le 	heta < 225^\circ$ (or $	heta < -135^\circ$)
-- **Flick Down:** $-135^\circ \le 	heta < -45^\circ$
-
-### 4.3. Spacebar Cursor Scrubbing (Trackpad Mode)
-
-- Triggered when `ACTION_MOVE` originates on Key 0 (`[ 0 ␣ SPACE ]`) and $|dx| \ge 	ext{TOUCH\_SLOP\_PX}$.
-- Dispatches `KEYCODE_DPAD_RIGHT` ($dx > 0$) or `KEYCODE_DPAD_LEFT` ($dx < 0$) for every accumulated $\pm 	ext{SCRUB\_STEP\_PX}$.
-- Fires native low-latency mechanical audio/haptic click for every text position traversed.
+### 4.2. Flick Vector Evaluation (4-Quadrant Disambiguation — `FlickDisambiguator.kt`)
+Evaluates $\theta = \operatorname{atan2}(-dy, dx)$ in degrees:
+- **Flick Right:** $[-45^\circ, 45^\circ]$
+- **Flick Up:** $(45^\circ, 135^\circ]$
+- **Flick Down:** $[-135^\circ, -45^\circ)$
+- **Flick Left:** Remaining angles ($> 135^\circ$ or $< -135^\circ$)
 
 ---
 
 ## 5. Core System Button State Machines
 
-### 5.1. Key ↵ (ENTER): Polymorphic Action Dispatcher
-
-```text
-                            [Tap Key ↵ ENTER]
-                                    │
-                    Is Composing Buffer Active (> 0)?
-                                    │
-                    ┌───────────────┴───────────────┐
-                   Yes                              No
-                    ▼                               ▼
-      Commit active Candidate 1            Read EditorInfo.imeOptions
-      Call finishComposingText()                    │
-                    │                   ┌───────────┴───────────┐
-                    └──────────────────►▼                       ▼
-                                Has Action Flag?        Multi-Line / No Action
-                                        │                       │
-                                        ▼                       ▼
-                           ic.performEditorAction()       ic.commitText("
-", 1)
-```
-
-#### Icon Rendering
-Canvas dynamically draws vector path based on `EditorInfo.imeOptions`:
-- `IME_ACTION_SEARCH` $	o$ Magnifying Glass.
-- `IME_ACTION_GO` / `IME_ACTION_SEND` $	o$ Rightward Arrow / Paper Plane.
-- `IME_ACTION_NEXT` $	o$ Tab Right Arrow.
-- `IME_ACTION_DONE` $	o$ Checkmark.
-- Default / Multi-line $	o$ Return Carriage Arrow.
-
----
-
-### 5.2. Key ⇧ (SHIFT): 3-State Cycling Machine
-
-```text
-              ┌───────── Tap Key ⇧ [SHIFT] ─────────┐
-              ▼                                     │
-      [STATE: LOWERCASE]                            │
-              │ (Single Tap)                        │
-              ▼                                     │
-      [STATE: TITLECASE] ──(Auto-resets to Lower)   │ (Double-Tap or Flick-Up)
-              │ (Single Tap)                        │
-              ▼                                     ▼
-      [STATE: UPPERCASE] <────────────────── [CAPS LOCK ACTIVE]
-```
-
-- **LOWERCASE:** Standard lowercase candidate generation and multi-tap output. Key glyph: Hollow upward arrow outline (`⇧`).
-- **TITLECASE:** First letter capitalized; automatically reverts to `LOWERCASE` following the first character commit. Key glyph: Solid filled arrow (`⬆`).
-- **UPPERCASE / CAPS LOCK:** All characters capitalized. Key glyph: Solid filled arrow with horizontal base bar (`⇪`). Remains locked until `[ ⇧ SHIFT ]` is tapped again.
-
----
-
-### 5.3. Key ⌫ (DEL): Unified Deletion Engine
-
-```text
-                      ┌─────────── [ Press ⌫ DEL ] ───────────┐
-                      │                                       │
-            [Composing Buffer > 0]                 [Composing Buffer == 0]
-                      │                                       │
-            Pop last digit from stack              Inspect getTextBeforeCursor(2, 0)
-            C++ Engine pop_stroke()                           │
-                      │                        ┌──────────────┴──────────────┐
-            Re-score candidates & update       ▼                             ▼
-            Direct ByteBuffer buffer     UTF-16 Surrogate?            Standard Character
-                      │                        │                             │
-            ic.setComposingText()        deleteSurroundingText(2, 0)   deleteSurroundingText(1, 0)
-```
-
-- **Retroactive Un-Commit:** If `⌫ DEL` is pressed immediately following a word commit via `[ SPACE ]`, the trailing space and word are removed, and the raw digit sequence is re-hydrated into the active composing buffer.
-- **Continuous Accelerated Delete:**
-  - $0–350	ext{ms}$: Single character deletion.
-  - $350–1200	ext{ms}$: Repeating deletion (every $50	ext{ms}$).
-  - $>1200	ext{ms}$: High-speed tokenized whole-word deletion.
+- **Key ↵ (ENTER) (`EnterKeyHandler.kt`):** If composing, commits Candidate 1 and calls `finishComposingText()`. Resolves effective action respecting `IME_FLAG_NO_ENTER_ACTION` and custom `actionId`; executes `performEditorAction()`, commits `"\n"` if multi-line, or dispatches `KEYCODE_ENTER` down/up on single-line fields without explicit action.
+- **Key ⇧ (SHIFT) (`ShiftController.kt` + `AutoCapsController.kt`):** Cycles `LOWERCASE` $\to$ `TITLECASE` $\to$ `UPPERCASE` $\to$ `LOWERCASE`. Double-tap ($\le 350\text{ms}$), Flick Up, or Long Press locks Caps Lock. `TITLECASE` auto-resets to `LOWERCASE` upon character/word commit. `AutoCapsController` inspects `InputConnection.getCursorCapsMode()` unless excluded (passwords, email, URI, filter).
+- **Key ⌫ (DEL) (`DeleteController.kt`):** Deletes active selection first; if composing, pops last stroke from `DawgEngine` in $O(1)$; otherwise deletes UTF-16 surrogate pair (`Character.isSurrogatePair`) or single char (with `KEYCODE_DEL` fallback when buffer is empty). *(Retroactive Un-Commit logic is implemented in `DeleteController` behind `enableRetroactiveUncommit = false`).*
 
 ---
 
 ## 6. Typing Engines & Predictive Pipelines
 
-### 6.1. Multi-Tap (ABC) Cycling Engine (No-Caps Cycle)
+### 6.1. Multi-Tap (ABC) Cycling Engine (`MultiTapEngine` + `MultiTapController`)
+Lowercase-first cycling decoupled from Shift state:
+- **`[ 1 ]`**: `.` $\to$ `,` $\to$ `?` $\to$ `!` $\to$ `'` $\to$ `@` $\to$ `#` $\to$ `1`
+- **`[ 2 ]`–`[ 9 ]`**: `abc2`, `def3`, `ghi4`, `jkl5`, `mno6`, `pqrs7`, `tuv8`, `wxyz9`
+- **`[ 0 ]`**: `' '` $\to$ `'0'` $\to$ `'\n'`
+- **Timeout:** Configurable (`400–1000ms`, default `600ms`). Flushes completed letters (`len >= 2`) to `LearnedWordsRepository`.
 
-When T9 prediction is toggled off, keys cycle strictly through lowercase characters and numbers. Capitalization is governed exclusively by the Shift Key State.
-
-#### Deterministic Multi-Tap Mapping Matrix
-
-| Key | Primary Cycle Sequence (Shift: Lowercase) | Capitalized Cycle Sequence (Shift: Title/Upper) |
-| :--- | :--- | :--- |
-| **[ 1 ]** | `. ` $	o$ `, ` $	o$ `? ` $	o$ `! ` $	o$ `' ` $	o$ `- ` $	o$ `@ ` $	o$ `1` | `. ` $	o$ `, ` $	o$ `? ` $	o$ `! ` $	o$ `' ` $	o$ `- ` $	o$ `@ ` $	o$ `1` |
-| **[ 2 ]** | `a` $	o$ `b` $	o$ `c` $	o$ `2` | `A` $	o$ `B` $	o$ `C` $	o$ `2` |
-| **[ 3 ]** | `d` $	o$ `e` $	o$ `f` $	o$ `3` | `D` $	o$ `E` $	o$ `F` $	o$ `3` |
-| **[ 4 ]** | `g` $	o$ `h` $	o$ `i` $	o$ `4` | `G` $	o$ `H` $	o$ `I` $	o$ `4` |
-| **[ 5 ]** | `j` $	o$ `k` $	o$ `l` $	o$ `5` | `J` $	o$ `K` $	o$ `L` $	o$ `5` |
-| **[ 6 ]** | `m` $	o$ `n` $	o$ `o` $	o$ `6` | `M` $	o$ `N` $	o$ `O` $	o$ `6` |
-| **[ 7 ]** | `p` $	o$ `q` $	o$ `r` $	o$ `s` $	o$ `7` | `P` $	o$ `Q` $	o$ `R` $	o$ `S` $	o$ `7` |
-| **[ 8 ]** | `t` $	o$ `u` $	o$ `v` $	o$ `8` | `T` $	o$ `U` $	o$ `V` $	o$ `8` |
-| **[ 9 ]** | `w` $	o$ `x` $	o$ `y` $	o$ `z` $	o$ `9` | `W` $	o$ `X` $	o$ `Y` $	o$ `Z` $	o$ `9` |
-| **[ 0 ]** | ` ` (space) $	o$ `0` $	o$ `
-` | ` ` (space) $	o$ `0` $	o$ `
-` |
-
-- **Cycle Expiration:** $600	ext{ms}$ timeout or tapping a different key commits the active character.
-- **Auto-Reset:** If Shift is `TITLECASE`, committing the first character automatically resets Shift to `LOWERCASE`.
+### 6.2. Predictive T9 & Post-Processing Pipeline
+1. **Native C++ T9 Engine (`DawgEngine::pushStroke`):**
+   - Traverses `OPENT9D2` T9-digit-indexed minimal DAFSA (`MAX_BEAM_SIZE = 32`, `MAX_CANDIDATES = 16`, `MAX_SPATIAL_EDITS = 1`).
+   - Evaluates touched digit plus spatially nearby neighbor hypotheses (`SpatialScorer`, `sigma = 16.0f * density`) with Unified Log-Linear scoring (corpus `log_freq` + `LEX_FLAG_SLANG` boost + decayed user hits + spatial likelihood - edit penalty).
+   - Merges matching canonical words from `DynamicStore` (in-memory T9 prefix index, exponential half-life decay) and filters `isDeleted()` blacklisted words before `MAX_CANDIDATES` truncation.
+   - Reads O(1) pre-cached top-16 subtree completions (`depth <= 6`) or runs fixed-stack best-first completion (`collectBestCompletions`) for deeper prefixes.
+   - Runs `findClosestWords()` (overtype retention + 1-digit adjacent-key substitution) when `candCount == 0`.
+2. **Kotlin Prediction Layer (`prediction/`):**
+   - `EnglishOrthography`: Restores fallback contractions (`dont` $\to$ `don't`, `im` $\to$ `I'm`), standalone `i` $\to$ `I`, and expands ambiguous pairs (`its`/`it's`) when not already supplied by `OPENT9D2`.
+   - `IndonesianOrthography`: Synthesizes productive suffixes (`-nya`, `-kan`, `-lah`, `-kah`, `-pun`, `-ku`, `-mu`) when typing beyond a known root word.
+   - `LearnedWordsRepository`: Delegates usage and removal calls to native `DynamicStore` with debounced background `flushIfDirty()` persistence.
+   - `SuggestionGuard`: Holds last valid candidate/prefix state or projects OOV fallback words using language-specific character-bigram transition tables (`EN` and `ID`).
+   - `WordCorrectionController`: Scans word under cursor or selection during `onUpdateSelection` and displays T9 replacement candidates in the suggestion strip.
+   - `PredictionContextHelper`: Extracts preceding word tokens from `InputConnection` (respecting sentence boundaries and password/numeric exclusions) to power **Idle NWP** (non-highlighted chips after space/commit) and **Contextual T9 Disambiguation** (`OPENT9N1` + personal bigrams).
 
 ---
 
-### 6.2. Predictive T9 Engine (Beam Search & DAWG)
+## 7. EditorInfo & InputType Dynamic Routing (`EditorContextHelper.kt`)
 
-Traverses pre-compiled binary DAWG nodes in C++20.
-
-#### 2D Gaussian Touch Scoring:
-$$P(\text{key}_k \mid x, y) = \exp\left( - \frac{(x - x_k)^2 + (y - y_k)^2}{2\sigma^2} \right)$$
-
-Candidate strings are decoded into a Direct `ByteBuffer` with zero JVM object allocation.
-
----
-
-## 7. EditorInfo & InputType Dynamic Routing Engine
-
-Evaluated in `InputMethodService.onStartInputView(info: EditorInfo, restarting: Boolean)`:
-
-- **Password Fields (`TYPE_TEXT_VARIATION_PASSWORD`, `TYPE_NUMBER_VARIATION_PASSWORD`):**
-  - Beam search engine: **DISABLED**.
-  - Suggestion Strip: **Hidden**.
-  - LMDB learning: **DISABLED** (zero writes).
-  - Switches automatically to literal Multi-Tap or numeric layout.
-- **Numeric Fields (`TYPE_CLASS_NUMBER`, `TYPE_CLASS_PHONE`):**
-  - Displays Page 1 (Numeric) by default.
-- **Incognito Mode (`IME_FLAG_NO_PERSONALIZED_LEARNING`):**
-  - Bypasses user dictionary logging and frequency updates.
+Evaluated in `OpenT9InputMethodService.onStartInputView(info, restarting)`:
+- **Password Fields (`TYPE_TEXT_VARIATION_PASSWORD`, `VISIBLE_PASSWORD`, `WEB_PASSWORD`, `NUMBER_VARIATION_PASSWORD`):** Forces `PAGE_0_TEXT` with `isT9Mode = false` (Multi-Tap ABC), disables word correction & learning writes.
+- **Numeric / Phone / Datetime Fields (`TYPE_CLASS_NUMBER`, `TYPE_CLASS_PHONE`, `TYPE_CLASS_DATETIME`):** Opens `PAGE_1_NUM_SYM` with `isT9Mode = false`.
+- **Incognito Mode (`IME_FLAG_NO_PERSONALIZED_LEARNING` or password):** Suppresses all `LearnedWordsRepository` / `DynamicStore` recording.
 
 ---
 
 ## 8. Keyboard Settings Architecture & Dynamic Config Sync
 
-### 8.1. SettingsActivity Hierarchy & Preferences
+### 8.1. `SettingsActivity` (`preferences.xml`)
+- **Appearance & Theme:** `app_theme` (`system`, `light`, `dark`).
+- **Audio & Haptics:** `haptic_enabled`, `vibration_intensity` (`5–100ms`, default `25ms`, manual input dialog), `audio_enabled`, `audio_volume` (`0–100%`, default `60%`), `audio_style` (`Mechanical Classic`, `Modern Soft`, `Minimalist Click`).
+- **Layout & Display:** `keyboard_height` (`220–320dp`, default `260dp`), `candidate_font_size` (`14–22sp`, default `16sp`), `one_handed_mode` (`Disabled`, `Left-Handed`, `Right-Handed`), `rearrange_keyboard_layout` (launches `RearrangeLayoutActivity`).
+- **Typing Behaviors:** `default_input_mode` (`T9` / `ABC`), `long_press_delay` (`200–600ms`, default `350ms`), `multi_tap_timeout` (`400–1000ms`, default `600ms`), `auto_caps`, `auto_space`, `double_space_period`, `space_scrubbing`, `space_scrubbing_sensitivity` (`normal`, `low`, `high`), `space_scrubbing_hold` (`150ms` hold toggle).
+- **Dictionary & Language:** `startup_language` (`ID` / `EN`), `bilingual_prediction` (default `false`), `slang_boost`, `decay_half_life` (`14 Days`, `30 Days`, `Disabled`), `reset_user_dictionary`. *(Pending: Individual User Dictionary Editor UI).*
 
-A native Android settings interface structured via `PreferenceFragmentCompat`:
-
-- **Haptics & Audio Feedback:**
-  - **Haptic Feedback:** Toggle (On/Off).
-  - **Vibration Intensity:** Slider ($0\text{ms}$ to $100\text{ms}$, default: $25\text{ms}$).
-  - **Audio Click Feedback:** Toggle (On/Off).
-  - **Sound Volume:** Slider ($0\%$ to $100\%$, default: $60\%$).
-  - **Sound Style:** Dropdown (Mechanical Classic, Modern Soft, Minimalist Click).
-- **Layout & Display:**
-  - **Keyboard Overall Height:** Slider ($220\text{dp}$ to $320\text{dp}$, default: $260\text{dp}$).
-  - **Candidate Font Size:** Slider ($12\text{sp}$ to $18\text{sp}$, default: $14\text{sp}$).
-  - **One-Handed Mode:** Dropdown (Disabled, Left-Handed, Right-Handed).
-- **Typing Behaviors:**
-  - **Default Input Mode:** Dropdown (Predictive T9, Multi-Tap ABC).
-  - **Long-Press Delay:** Slider ($200\text{ms}$ to $600\text{ms}$, default: $350\text{ms}$).
-  - **Multi-Tap Commit Timeout:** Slider ($400\text{ms}$ to $1000\text{ms}$, default: $600\text{ms}$).
-  - **Auto-Capitalization:** Toggle (On/Off).
-  - **Auto-Space After Commit:** Toggle (On/Off).
-  - **Double-Space Period:** Toggle (On/Off).
-  - **Spacebar Cursor Scrubbing:** Toggle (On/Off).
-- **Dictionary & Language Management:**
-  - **Primary Startup Language:** Dropdown (Indonesian, English).
-  - **Slang / Bahasa Gaul Priority:** Toggle (On/Off).
-  - **Dynamic Decay Half-Life:** Dropdown (14 Days, 30 Days, Disabled).
-  - **User Dictionary Editor:** Search, add, or purge learned custom words.
-  - **Reset User Dictionary:** Hard reset clearing the dynamic LMDB database.
-
----
-
-### 8.2. Zero-Allocation C++ Configuration Synchronization
-
-Whenever preferences are updated, `SettingsObserver` flushes a flat C primitive struct across JNI into the native core:
-
+### 8.2. C++ `NativeConfig` Synchronization (`native_config.hpp`)
 ```cpp
-// native_config.hpp
 struct NativeConfig {
-    float touch_variance_sigma;     // Default: 42.0f
-    uint32_t long_press_timeout_ms; // Default: 350
-    uint32_t multi_tap_timeout_ms;  // Default: 600
-    uint8_t auto_space_enabled;     // 0 or 1
-    uint8_t slang_boost_enabled;    // 0 or 1
-    uint32_t decay_half_life_days;  // Default: 30
+    float touch_variance_sigma = 42.0f;
+    uint32_t long_press_timeout_ms = 350;
+    uint32_t multi_tap_timeout_ms = 600;
+    uint8_t auto_space_enabled = 1;
+    uint8_t slang_boost_enabled = 1;
+    uint32_t decay_half_life_days = 30;
+    uint8_t audio_enabled = 1;
+    float audio_volume = 0.6f;
+    uint32_t audio_style = 0; // 0=Classic, 1=Soft, 2=Click
+    uint8_t bilingual_enabled = 0; // 0 or 1
 };
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeSyncConfig(
-    JNIEnv* env, jobject thiz,
-    jfloat sigma, jint longPressMs, jint multiTapMs,
-    jboolean autoSpace, jboolean slangBoost, jint decayDays) {
-    g_config.touch_variance_sigma = sigma;
-    g_config.long_press_timeout_ms = longPressMs;
-    g_config.multi_tap_timeout_ms = multiTapMs;
-    g_config.auto_space_enabled = autoSpace ? 1 : 0;
-    g_config.slang_boost_enabled = slangBoost ? 1 : 0;
-    g_config.decay_half_life_days = decayDays;
-}
 ```
 
 ---
 
-## 9. Performance Benchmarks & Non-Functional Verification
+## 9. Performance Targets & Current Reality
 
-| Target Metric | Benchmark (SwiftKey / Gboard) | OpenT9 Target Spec | Verification Harness |
-| :--- | :--- | :--- | :--- |
-| **Disambiguation Latency** | 10–25ms | < 0.5ms (C++20 Beam Search) | Google Benchmark / NDK CI |
-| **Rollback Execution Time** | Full re-traversal | < 0.01ms ($O(1)$ Stack Pop) | Nanosecond Timing Test |
-| **Cold-Start Launch Time** | 200–400ms | < 30ms | Android Macrobenchmark |
-| **RAM Footprint (Resident)** | 85 MB – 190 MB | < 25 MB (`mmap` page cache) | Android Profiler Memory Track |
-| **Frame Render Latency** | Janks on GC cycles | 8.3ms (Locked 120 FPS) | `dumpsys gfxinfo framestats` |
-| **Garbage Collector Churn** | Variable allocations | 0 bytes / frame | ART Allocation Tracker |
-| **Audio Feedback Latency** | 35–60ms (`SoundPool`) | < 10ms (Oboe / AAudio) | Low-Latency Mic Trace |
-| **APK Binary Size** | 45 MB – 80 MB | < 10 MB (Lexicons included) | `apkanalyzer` CLI |
+| Metric | Target Spec | Current Codebase Status |
+| :--- | :--- | :--- |
+| **Disambiguation Latency** | `< 0.5 ms` | Verified in `native_tests/test_native_core.cpp` (`< 200 µs` target for `4663`). |
+| **Rollback Execution Time** | `< 0.01 ms` | $O(1)$ stack index decrement in `DawgEngine::popStroke()`. |
+| **Lexicon Pointer Swap** | `< 0.05 ms` | Verified in `test_native_core.cpp` via `LexiconManager::switchLanguage()`. |
+| **Audio Feedback Latency** | `< 10 ms` | Google Oboe `LowLatency` shared float stream (`AudioEngine`). |
+| **Lexicon Loading & Working Set** | Zero-copy `mmap` (`noCompress`), no strict MB cap | `en_lexicon.dawg` (`9.1 MB`) + `id_lexicon.dawg` (`10.9 MB`) = `20.0 MB` (`OPENT9D2`) mapped via `openFd` (`noCompress` in `app/build.gradle.kts`); strict `< 10 MB` APK cap lifted so lexicon richness, cached completions, and N-gram tables are prioritized while keeping active working-set RSS compact. |
+| **Hot-Path Allocation / I/O** | 0 alloc / 0 disk I/O | **Done (Phase 1):** `DawgEngine::pushStroke` uses fixed stack pools (`terminalPool`/`candidatesPool`), `DynamicStore` uses in-memory T9 prefix index + debounced background `flushIfDirty()`. |
 
 ---
 
-## 10. Repository Layout
+## 10. Repository Layout (Actual)
 
 ```text
-opent9-android/
+t9Keyboard-V2/
 ├── app/
 │   ├── build.gradle.kts
-│   └── src/main/
-│       ├── AndroidManifest.xml             # No INTERNET permission
-│       ├── java/com/opent9/keyboard/
-│       │   ├── OpenT9InputMethodService.kt # Thin IME lifecycle wrapper
-│       │   ├── settings/
-│       │   │   ├── SettingsActivity.kt     # Preferences Activity
-│       │   │   └── SettingsFragment.kt     # PreferenceFragmentCompat bindings
-│       │   ├── ui/
-│       │   │   ├── T9KeyboardView.kt       # Zero-allocation custom Canvas View
-│       │   │   ├── TouchGestureTracker.kt  # Keypad & swipeable strip state machine
-│       │   │   ├── KeyAtlas.kt             # Pre-computed key bounds & glyph coordinates
-│       │   │   └── EmojiAtlas.kt           # UTF-32 emoji codepoint tables
-│       │   └── jni/
-│       │       └── NativeEngineBridge.kt   # Direct ByteBuffer JNI wrappers
-│       ├── cpp/
-│       │   ├── CMakeLists.txt
-│       │   ├── include/
-│       │   │   ├── dawg_engine.hpp         # DAWG parser & O(1) history stack
-│       │   │   ├── spatial_scoring.hpp     # 2D Gaussian touch scoring
-│       │   │   ├── multi_tap_engine.hpp    # Deterministic lowercase multi-tap
-│       │   │   ├── lexicon_manager.hpp     # Dual mmap pointer hot-swapper
-│       │   │   ├── audio_engine.hpp        # Google Oboe AAudio sound driver
-│       │   │   ├── dynamic_store.hpp       # LMDB decay storage
-│       │   │   └── native_config.hpp       # Flat config sync struct
-│       │   └── src/
-│       │       ├── dawg_engine.cpp
-│       │       ├── spatial_scoring.cpp
-│       │       ├── multi_tap_engine.cpp
-│       │       ├── lexicon_manager.cpp
-│       │       ├── audio_engine.cpp
-│       │       └── jni_bridge.cpp
-│       └── assets/dictionaries/
-│           ├── en_lexicon.dawg             # Static binary DAWG (~4.1MB)
-│           └── id_lexicon.dawg             # Static binary DAWG (~3.8MB)
+│   └── src/
+│       ├── main/
+│       │   ├── AndroidManifest.xml                   # No INTERNET permission
+│       │   ├── assets/dictionaries/
+│       │   │   ├── en_lexicon.dawg                   # 9.1 MB OPENT9D2 T9-digit DAFSA
+│       │   │   ├── id_lexicon.dawg                   # 10.9 MB OPENT9D2 T9-digit DAFSA
+│       │   │   ├── en_bigrams.bin                    # OPENT9N1 mmap bigram table (EN)
+│       │   │   └── id_bigrams.bin                    # OPENT9N1 mmap bigram table (ID)
+│       │   ├── cpp/
+│       │   │   ├── CMakeLists.txt
+│       │   │   ├── include/                          # dawg_engine, dynamic_store, lexicon_manager, spatial_scoring, multi_tap_engine, audio_engine, native_config
+│       │   │   └── src/                              # Implementations + jni_bridge.cpp
+│       │   ├── java/com/opent9/keyboard/
+│       │   │   ├── OpenT9InputMethodService.kt       # Slim IME lifecycle wrapper
+│       │   │   ├── T9ComposingCoordinator.kt         # Composing, commit, pop/rehydrate state
+│       │   │   ├── KeyboardActionDispatcher.kt       # Tap/flick/long-press routing
+│       │   │   ├── CursorSelectionCoordinator.kt     # onUpdateSelection disambiguation
+│       │   │   ├── LanguageCycleHelper.kt
+│       │   │   ├── CandidateRemovalHelper.kt
+│       │   │   ├── EmojiActionDispatcher.kt
+│       │   │   ├── ImeLifecycleConfigurator.kt
+│       │   │   ├── ComposingStroke.kt
+│       │   │   ├── jni/NativeEngineBridge.kt
+│       │   │   ├── lexicon/LexiconLoader.kt
+│       │   │   ├── prediction/                       # CandidateResolver, EnglishOrthography, IndonesianOrthography, LearnedWordsRepository, SuggestionGuard, WordCorrectionController, WordCorrectionHelper
+│       │   │   ├── settings/                         # SettingsActivity (+SettingsFragment), SettingsObserver, RearrangeLayoutActivity, RearrangeKeyboardView, KeyboardLayoutConfig, ManualInputSeekBarPreference
+│       │   │   └── ui/                               # T9KeyboardView, KeyAtlas, EmojiAtlas, TouchGestureTracker + sub-trackers, Page0/1/23/Emoji/Strip renderers, controllers, themes, icons
+│       │   └── res/                                  # xml/preferences.xml, xml/method.xml, values/, values-in/, layout/, drawable/
+│       └── test/java/com/opent9/keyboard/            # 19 JVM / Robolectric unit, integration & contract test suites
+├── native_tests/                                     # C++ tests & profiling harnesses
+└── tools/
+    ├── check_doc_sync.sh                             # Contract & prd.md sync verification script
+    └── dawg_compiler/                                # dawg_builder.cpp, lexicon_extractor.cpp, en_curated.tsv, id_curated.tsv
 ```
 
 ---
 
-## 11. Phased TDD Implementation Roadmap
+## 11. Implementation Status & Remaining Gaps
 
-```text
-Phase 1: Native Core & DAWG Engine (C++20)
-    └──> Phase 2: Touch Tracker & Swipeable Suggestion Strip
-        └──> Phase 3: System Buttons (ENTER, SHIFT, DEL) & Multi-Tap
-            └──> Phase 4: Settings Activity & Native Config Sync
-                └──> Phase 5: Audio Engine, Haptics & Packaging
-```
+### Completed (Beyond Original PRD Scope)
+- Modularized IME architecture (`T9ComposingCoordinator`, `KeyboardActionDispatcher`, `CursorSelectionCoordinator`, dedicated renderers & gesture sub-trackers).
+- Retrospective word correction (`WordCorrectionController`) & language-specific orthography (`EnglishOrthography`, `IndonesianOrthography`, `SuggestionGuard`).
+- Interactive Row 4 & Column 4 key rearrangement (`RearrangeLayoutActivity`, `RearrangeKeyboardView`).
+- 5-column calculator-style Page 1 with scrollable operator column & 10-column Gboard-style Page 2/3 symbols.
+- Light / Dark / System theme support (`KeyboardTheme`), One-Handed mode, landscape height clamping, tablet ergonomic centering, and `ManualInputSeekBarPreference`.
+- Configurable Spacebar scrubbing sensitivity & 150ms hold option (`SpaceScrubTracker`).
+- Legacy Page 0 Key 15 (`EMOJI_DOT`), old Page 1 flick IDs, and 3×3 `symbolLayers` dead code removed; `ContractConsistencyTest` + `tools/check_doc_sync.sh` added.
+- **Prediction Phase 1:** Unified Log-Linear scoring (removing absolute `last_used_timestamp` & `opent9_last_picked` recency hijacking), multi-key `SpatialScorer` border hypotheses, DPI-normalized `touch_variance_sigma` (`16dp * density`), `DynamicStore` in-memory T9 prefix indexing + debounced async `flushIfDirty()`, fixed-stack `DawgEngine::pushStroke` pools, `LexiconManager` `is_mmap` safety, `std::shared_mutex` JNI guard, and complete `reset_user_dictionary` cleanup (`LearnedWordsRepository.clearAll()`).
+- **Prediction Phase 2:** T9-digit-indexed minimal DAFSA (`OPENT9D2`, naturally 48-byte/16-byte aligned, quantized `log_freq`, `LEX_FLAG_SLANG`, cached depth `<= 6` prefix completions, `Word` display forms with apostrophes/hyphens), `DynamicStore` canonical normalization, removal of Kotlin hardcoded homograph promotions (`homographPromotions` / `promoteCandidate`), and character-bigram fallback tables in `SuggestionGuard`.
+- **Prediction Phase 3:** Next-Word Prediction (`OPENT9N1` `mmap` bigram tables + `DynamicStore` personal user bigrams), `NgramEngine`, `PredictionContextHelper`, Idle NWP suggestion strip (`isIdlePrediction` non-highlighted chips; Spacebar preserved for normal spacing), and contextual T9 disambiguation (`setContextWord`).
+- **Prediction Phase 4:** Bilingual code-switching (`bilingual_prediction` preference + `DawgEngine` `primary`/`secondary` coordinator with `SECONDARY_LANG_PENALTY`) and sentence-level regression + p99 latency benchmark (`test_native_core`).
 
-### Phase 1: Native Core & DAWG Engine (C++20)
-- Unit tests verifying sequence `4663` yields `["good", "home", "gone", "hood"]` in $< 0.2\text{ms}$.
-- Unit tests confirming `pop_stroke()` restores prior depth in $< 0.01\text{ms}$.
-- Pointer swap benchmarking confirming $< 0.05\text{ms}$ lexicon switching.
-
-### Phase 2: Touch Tracker & Swipeable Suggestion Strip
-- Implement `TouchGestureTracker.kt` with partitioned $Y < 40\text{dp}$ candidate strip scrolling.
-- Unit tests verifying spatial flick evaluation (left, right, up, down) matching dual-symbol layout.
-- Implement horizontal scroll and auto-fit width measurement in `T9KeyboardView.kt`.
-
-### Phase 3: System Keys & Multi-Tap Engine
-- Implement `ENTER` polymorphic action mapping for all `EditorInfo` action flags.
-- Implement `SHIFT` 3-state cycling machine (`LOWER`, `TITLE`, `UPPER`).
-- Implement `multi_tap_engine.hpp` executing lowercase-first cycling without capital letter phases.
-
-### Phase 4: Settings Activity & Native Config Sync
-- Implement `SettingsActivity.kt` and `SettingsFragment.kt`.
-- Connect asynchronous preference observer flushing `NativeConfig` primitives across JNI.
-- Implement user dictionary management and half-life decay timers.
-
-### Phase 5: Audio Engine, Haptics & Packaging
-- Connect Google Oboe C++ sound driver to key events ($< 10\text{ms}$ latency).
-- Connect Android `Vibrator` / `VibrationEffect` pipeline.
-- Inspect APK ensuring `android.permission.INTERNET` is omitted and package size $< 10\text{MB}$.
-
----
-
-## Audit & Comparison: Gaps Closed from prd2.md
-
-1. **Language Button & Visual Indicator:**
-   - Fixed ambiguous dual-text label (`EN / ID`) to display solely the active language code (`EN` or `ID`).
-   - Added the illuminated neon indicator bar under the text to clearly verify T9 predictive state versus Multi-Tap ABC mode.
-2. **Spatial-Symmetric Flick Selection:**
-   - Standardized all dual-symbol keys (e.g., `[ Rp  $ ]`, `[ +  - ]`, `[ {  } ]`). Gesturing left selects the left glyph; gesturing right selects the right glyph.
-3. **Suggestion Strip Evolution:**
-   - Eliminated the unnecessary Page 4 full-keyboard overlay.
-   - Transformed the 40dp strip into an auto-fitting, horizontally swipeable candidate bar supporting up to 16 beam search candidates without layout distortion.
-4. **Streamlined Multi-Tap Cycling:**
-   - Removed uppercase characters from the multi-tap loop, cutting rotation depth in half (`a` $	o$ `b` $	o$ `c` $	o$ `2`). Capitalization is decoupled and handled by the Shift key state machine.
-5. **System Buttons & Settings Activity:**
-   - Formally detailed the state machines for `ENTER` (polymorphic `EditorInfo` actions), `SHIFT` (3-state cycle with glyph feedback), and `DEL` (surrogate-aware deletion and un-commit).
-   - Fully designed the `SettingsActivity` hierarchy, persistence model, and zero-allocation C++ synchronization bridge.
+### Pending / Known Gaps
+1. **User Dictionary Editor:** C++ `serializeAllWords()` / `addWord()` lack JNI bindings and Settings UI.
+2. **Emoji Picker Completeness:** Persist `recentEmojis` (frecency), implement long-press Fitzpatrick skin-tone strip, remove duplicate emojis in `EmojiAtlas`, add `Paint.hasGlyph()` / `EmojiCompat` filtering, bitmap glyph caching, and `OverScroller` fling physics.
+4. **Settings Exposure:** Expose `Retroactive Un-Commit` (`DeleteController`) in `preferences.xml`.
+5. **Audio, Accessibility & Localization:** Check `AudioManager.ringerMode` and auto-idle Oboe stream; add `ExploreByTouchHelper` for TalkBack; complete `values-in/strings.xml` translations and add `in_ID` subtype in `method.xml`; configure proper release signing in `app/build.gradle.kts`.

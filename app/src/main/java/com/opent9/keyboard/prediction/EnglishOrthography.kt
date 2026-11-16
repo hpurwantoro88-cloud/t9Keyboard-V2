@@ -3,7 +3,6 @@ package com.opent9.keyboard.prediction
 object EnglishOrthography {
 
     private val unambiguousContractions = mapOf(
-        // Negations (-n't)
         "dont" to "don't",
         "doesnt" to "doesn't",
         "didnt" to "didn't",
@@ -26,32 +25,22 @@ object EnglishOrthography {
         "shant" to "shan't",
         "mightnt" to "mightn't",
         "oughtnt" to "oughtn't",
-
-        // I-forms
         "im" to "I'm",
         "ive" to "I've",
-
-        // You-forms
         "youre" to "you're",
         "youve" to "you've",
         "youll" to "you'll",
         "youd" to "you'd",
-
-        // They-forms
         "theyre" to "they're",
         "theyve" to "they've",
         "theyll" to "they'll",
         "theyd" to "they'd",
-
-        // We/He/She/It forms
         "weve" to "we've",
         "hes" to "he's",
         "shes" to "she's",
         "hed" to "he'd",
         "itll" to "it'll",
         "itd" to "it'd",
-
-        // Demonstrative / Wh- forms
         "thats" to "that's",
         "thatll" to "that'll",
         "thatd" to "that'd",
@@ -73,15 +62,11 @@ object EnglishOrthography {
         "howd" to "how'd",
         "whens" to "when's",
         "whys" to "why's",
-
-        // Modal + 've
         "couldve" to "could've",
         "shouldve" to "should've",
         "wouldve" to "would've",
         "mightve" to "might've",
         "mustve" to "must've",
-
-        // Special English words
         "oclock" to "o'clock",
         "maam" to "ma'am",
         "neer" to "ne'er",
@@ -121,11 +106,8 @@ object EnglishOrthography {
     }
 
     /**
-     * Transforms and expands a candidate list from the T9 engine for English.
-     * - Restores unambiguous contractions (dont -> don't, im -> I'm, etc.)
-     * - Restores standalone pronoun i -> I
-     * - Expands ambiguous words so both the base word and contraction are available (its -> it's & its)
-     * - Promotes high-frequency contractions over rare homographs (don't over foot, aren't over brent, you're over youse)
+     * Transforms English candidates by restoring contractions (when coming from fallback sources)
+     * and expanding ambiguous base/contraction pairs when not already supplied by OPENT9D2.
      */
     fun processCandidates(rawCandidates: List<String>, lang: String): List<String> {
         if (lang != "EN" || rawCandidates.isEmpty()) {
@@ -147,7 +129,10 @@ object EnglishOrthography {
                 }
                 ambiguousContractions.containsKey(lower) -> {
                     val contraction = ambiguousContractions[lower]!!
-                    if (lower == "lets" || lower == "its" || lower == "ill" || lower == "hell" || lower == "wed") {
+                    val alreadyHasContraction = rawCandidates.any { it.equals(contraction, ignoreCase = true) }
+                    if (alreadyHasContraction) {
+                        if (seen.add(raw)) result.add(raw)
+                    } else if (lower == "lets" || lower == "its" || lower == "ill" || lower == "hell" || lower == "wed") {
                         if (seen.add(contraction)) result.add(contraction)
                         if (seen.add(raw)) result.add(raw)
                     } else {
@@ -161,36 +146,6 @@ object EnglishOrthography {
             }
         }
 
-        // Promote very common contractions over rare homographs from the corpus
-        promoteCandidate(result, "don't", "foot")
-        promoteCandidate(result, "aren't", "brent")
-        promoteCandidate(result, "you're", "youse")
-        promoteCandidateToTop2(result, "I'm", "go")
-        promoteCandidateToTop2(result, "he's", "ifs")
-        promoteCandidate(result, "she's", "pier")
-        promoteCandidate(result, "she's", "pies")
-        promoteCandidate(result, "nope", "more")
-        promoteCandidate(result, "nope", "nose")
-
         return if (result.size > 16) result.subList(0, 16) else result
-    }
-
-    private fun promoteCandidate(list: ArrayList<String>, target: String, demoted: String) {
-        val targetIdx = list.indexOf(target)
-        if (targetIdx > 0 && (list[0] == demoted || targetIdx <= 3)) {
-            list.removeAt(targetIdx)
-            list.add(0, target)
-        }
-    }
-
-    private fun promoteCandidateToTop2(list: ArrayList<String>, target: String, demoted: String) {
-        val targetIdx = list.indexOf(target)
-        if (targetIdx > 1) {
-            val demotedIdx = list.indexOf(demoted)
-            if (demotedIdx in 0..1) {
-                list.removeAt(targetIdx)
-                list.add(1, target)
-            }
-        }
     }
 }

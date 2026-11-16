@@ -110,7 +110,8 @@ class OpenT9InputMethodService : InputMethodService() {
             updateAutoCaps = { clearManual -> updateAutoCaps(clearManual) },
             applyShiftFormatting = { applyShiftFormatting(it) },
             updateCandidatesFromNative = { ic, prefWord -> updateCandidatesFromNative(ic, prefWord) },
-            clearWordCorrection = { clearWordCorrection() }
+            clearWordCorrection = { clearWordCorrection() },
+            refreshIdleNextWord = { ic, prevWord -> refreshIdleNextWordSuggestions(ic, prevWord) }
         )
 
         val dbFile = File(filesDir, "opent9_vocab.dat")
@@ -170,6 +171,8 @@ class OpenT9InputMethodService : InputMethodService() {
         keyboardView.onCandidateTapAction = { index ->
             if (activeWordCorrectionContext != null) {
                 commitWordCorrectionCandidate(index)
+            } else if (keyboardView.isIdlePrediction && !hasActiveComposing) {
+                composingCoordinator.commitNextWordCandidate(index)
             } else {
                 commitCandidateIndex(index)
             }
@@ -259,6 +262,7 @@ class OpenT9InputMethodService : InputMethodService() {
             updateAutoCaps(clearManualOverride = true)
         }
         keyboardView.setShiftState(shiftController.currentMode.stateValue)
+        refreshIdleNextWordSuggestions(currentInputConnection, null)
     }
 
     override fun onWindowShown() {
@@ -271,6 +275,9 @@ class OpenT9InputMethodService : InputMethodService() {
     override fun onWindowHidden() {
         super.onWindowHidden()
         NativeEngineBridge.stopAudio()
+        if (::learnedWordsRepository.isInitialized) {
+            learnedWordsRepository.flushAsync()
+        }
         if (::keyboardView.isInitialized) {
             keyboardView.cancelAllGestures()
         }
@@ -284,6 +291,9 @@ class OpenT9InputMethodService : InputMethodService() {
         }
         super.onFinishInputView(finishingInput)
         NativeEngineBridge.stopAudio()
+        if (::learnedWordsRepository.isInitialized) {
+            learnedWordsRepository.flushAsync()
+        }
         if (::keyboardView.isInitialized) {
             keyboardView.cancelAllGestures()
             keyboardView.updateCandidates(emptyList())
@@ -437,7 +447,9 @@ class OpenT9InputMethodService : InputMethodService() {
             launchSettings = { launchSettings() },
             pageController = activePageController,
             onInvalidateKeyboard = { if (::keyboardView.isInitialized) keyboardView.invalidate() },
-            onAbortComposing = { ic -> abortComposing(ic) }
+            onAbortComposing = { ic -> abortComposing(ic) },
+            prepareComposingContext = { ic -> composingCoordinator.prepareComposingContext(ic) },
+            refreshIdleNextWord = { ic -> refreshIdleNextWordSuggestions(ic, null) }
         )
     }
 
@@ -455,6 +467,9 @@ class OpenT9InputMethodService : InputMethodService() {
             onLanguageChanged = { newLang ->
                 if (::keyboardView.isInitialized) {
                     keyboardView.setLanguage(newLang)
+                }
+                if (!hasActiveComposing) {
+                    refreshIdleNextWordSuggestions(ic, null)
                 }
             },
             updateCandidatesFromNative = { inputConn ->
@@ -499,7 +514,6 @@ class OpenT9InputMethodService : InputMethodService() {
         activeCandidates = CandidateResolver.resolveCandidates(
             currentComposingDigits = currentComposingDigits,
             suggestionGuard = suggestionGuard,
-            learnedWordsRepository = learnedWordsRepository,
             preferredWord = preferredWord
         )
 
@@ -636,11 +650,39 @@ class OpenT9InputMethodService : InputMethodService() {
             keyboardView.isWordCorrectionActive = false
         }
         if (!hasActiveComposing) {
-            activeCandidates = emptyList()
-            if (::keyboardView.isInitialized) {
-                keyboardView.updateCandidates(emptyList())
-            }
+            refreshIdleNextWordSuggestions(currentInputConnection, null)
         }
+    }
+
+    private fun refreshIdleNextWordSuggestions(ic: InputConnection?, overridePrevWord: String?) {
+        if (!::keyboardView.isInitialized) return
+        if (hasActiveComposing || activeWordCorrectionContext != null) return
+
+        val canPredict = !isPasswordMode &&
+            keyboardView.isT9Mode &&
+            keyboardView.keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT
+        if (!canPredict) {
+            activeCandidates = emptyList()
+            keyboardView.updateCandidates(emptyList(), isIdlePrediction = false)
+            return
+        }
+
+        val prevWord = if (!overridePrevWord.isNullOrBlank()) {
+            overridePrevWord
+        } else {
+            val ctx = PredictionContextHelper.extractContext(ic)
+            if (ctx.hasTrailingSpace) ctx.prevWord else null
+        }
+
+        if (prevWord.isNullOrBlank()) {
+            activeCandidates = emptyList()
+            keyboardView.updateCandidates(emptyList(), isIdlePrediction = false)
+            return
+        }
+
+        val nwp = NativeEngineBridge.getNextWordCandidates(prevWord)
+        activeCandidates = nwp
+        keyboardView.updateCandidates(nwp, isIdlePrediction = nwp.isNotEmpty())
     }
 
     private fun launchSettings() {

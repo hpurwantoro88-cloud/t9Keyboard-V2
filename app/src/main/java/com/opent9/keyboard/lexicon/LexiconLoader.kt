@@ -18,14 +18,32 @@ class LexiconLoader(
     fun loadLexicons(startupLang: String) {
         loadLexiconForLanguage("EN", "dictionaries/en_lexicon.dawg")
         loadLexiconForLanguage("ID", "dictionaries/id_lexicon.dawg")
+        loadNgramForLanguage("EN", "dictionaries/en_bigrams.bin")
+        loadNgramForLanguage("ID", "dictionaries/id_bigrams.bin")
         NativeEngineBridge.switchLanguage(startupLang)
     }
 
     fun loadLexiconForLanguage(langCode: String, assetPath: String): Boolean {
+        return loadAssetViaMmap(langCode, assetPath) { code, fd, offset, length ->
+            NativeEngineBridge.loadLexiconFd(code, fd, offset, length)
+        }
+    }
+
+    fun loadNgramForLanguage(langCode: String, assetPath: String): Boolean {
+        return loadAssetViaMmap(langCode, assetPath) { code, fd, offset, length ->
+            NativeEngineBridge.loadNgramFd(code, fd, offset, length)
+        }
+    }
+
+    private inline fun loadAssetViaMmap(
+        langCode: String,
+        assetPath: String,
+        crossinline nativeLoader: (String, Int, Long, Long) -> Boolean
+    ): Boolean {
         var loaded = false
         try {
             assetManager.openFd(assetPath).use { afd ->
-                loaded = NativeEngineBridge.loadLexiconFd(
+                loaded = nativeLoader(
                     langCode,
                     afd.parcelFileDescriptor.fd,
                     afd.startOffset,
@@ -48,16 +66,16 @@ class LexiconLoader(
                     }
                 }
                 ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
-                    loaded = NativeEngineBridge.loadLexiconFd(
+                    loaded = nativeLoader(
                         langCode,
                         pfd.fd,
                         0L,
                         outFile.length()
                     )
                 }
-                Log.i(TAG, "Loaded $langCode lexicon via fallback file ($outFile): $loaded")
+                Log.i(TAG, "Loaded $langCode asset via fallback file ($outFile): $loaded")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to load $langCode lexicon via fallback: ${e.message}", e)
+                Log.e(TAG, "Failed to load $langCode asset via fallback: ${e.message}", e)
             }
         }
         return loaded

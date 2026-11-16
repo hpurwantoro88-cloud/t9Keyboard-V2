@@ -191,7 +191,7 @@ class TouchGestureTracker(
         val prevKey = activeKey
         if (prevKey != null && !longPressTriggered && !flickTriggered && !isScrubbing &&
             !candidateStripTracker.isCandidateStripTouch && !emojiGestureTracker.isEmojiPageTouch &&
-            !symbolPagesTracker.isPage1ColumnTouch && !symbolPagesTracker.isPage2TabTouch
+            !symbolPagesTracker.isPage1ColumnTouch
         ) {
             repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
             listener.onKeyTap(prevKey, touchDownX, touchDownY)
@@ -287,15 +287,7 @@ class TouchGestureTracker(
             } else if (distSq >= touchSlopPx * touchSlopPx) {
                 repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
 
-                val handledPage2 = symbolPagesTracker.checkPage2GridSwipeOnMove(
-                    dx = dx, dy = dy, touchDownX = touchDownX, touchDownY = touchDownY,
-                    flickDistanceMinPx = flickDistanceMinPx, keyAtlas = keyAtlas,
-                    flickTriggered = flickTriggered, onFlickTriggered = {
-                        flickTriggered = true
-                        longPressTriggered = false
-                    }
-                )
-                if (!handledPage2 && !flickTriggered && !isScrubbing && key != null && distSq >= flickDistanceMinPx * flickDistanceMinPx) {
+                if (!flickTriggered && !isScrubbing && key != null && distSq >= flickDistanceMinPx * flickDistanceMinPx) {
                     val direction = disambiguateFlick(dx, dy)
                     if (isFlickSupported(key, direction)) {
                         flickTriggered = true
@@ -335,11 +327,6 @@ class TouchGestureTracker(
             return true
         }
 
-        if (symbolPagesTracker.onUpPage2Tab(curX, distSq, touchSlopPx, flickDistanceMinPx, keyAtlas)) {
-            resetTouchState()
-            return true
-        }
-
         if (candidateStripTracker.isCandidateStripTouch) {
             candidateStripTracker.onUp(curX, distSq, touchSlopPx, keyAtlas, candidateHitTest)
         } else {
@@ -367,21 +354,15 @@ class TouchGestureTracker(
                 listener.onKeyTap(key, curX, curY)
             }
         } else if (!isScrubbing && !flickTriggered) {
-            val handledGrid = symbolPagesTracker.checkPage2GridSwipeOnUp(
-                dx = dx, dy = dy, touchDownX = touchDownX, touchDownY = touchDownY,
-                touchSlopPx = touchSlopPx, keyAtlas = keyAtlas
-            )
-            if (!handledGrid) {
-                if (distSq >= flickDistanceMinPx * flickDistanceMinPx) {
-                    val direction = disambiguateFlick(dx, dy)
-                    if (isFlickSupported(key, direction)) {
-                        listener.onKeyFlick(key, direction)
-                    } else if (!longPressTriggered) {
-                        listener.onKeyTap(key, curX, curY)
-                    }
+            if (distSq >= flickDistanceMinPx * flickDistanceMinPx) {
+                val direction = disambiguateFlick(dx, dy)
+                if (isFlickSupported(key, direction)) {
+                    listener.onKeyFlick(key, direction)
                 } else if (!longPressTriggered) {
                     listener.onKeyTap(key, curX, curY)
                 }
+            } else if (!longPressTriggered) {
+                listener.onKeyTap(key, curX, curY)
             }
         }
     }

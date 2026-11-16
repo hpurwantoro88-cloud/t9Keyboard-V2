@@ -9,7 +9,7 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
 import com.opent9.keyboard.R
-import com.opent9.keyboard.jni.NativeEngineBridge
+import com.opent9.keyboard.prediction.LearnedWordsRepository
 
 class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,7 +66,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
                     .setTitle("Reset User Dictionary")
                     .setMessage("Are you sure you want to clear all learned custom words and personal frequencies?")
                     .setPositiveButton("Reset") { _, _ ->
-                        NativeEngineBridge.resetUserDictionary()
+                        LearnedWordsRepository(ctx).clearAll()
                         Toast.makeText(ctx, "User dictionary cleared", Toast.LENGTH_SHORT).show()
                     }
                     .setNegativeButton("Cancel", null)
