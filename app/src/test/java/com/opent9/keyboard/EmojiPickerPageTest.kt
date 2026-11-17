@@ -243,4 +243,76 @@ class EmojiPickerPageTest {
         assertNotNull(committedText)
         verify { ic.commitText(committedText!!, 1) }
     }
+
+    @Test
+    fun testEmojiDelHoldAcceleratesToWordDeleteAndSupportsVerticalFlick() {
+        val keyAtlas = KeyAtlas()
+        keyAtlas.computeGeometry(1080f, 780f, 3f)
+        keyAtlas.updatePageLayout(KeyboardPage.PAGE_4_EMOJI)
+
+        val repeatDeletes = ArrayList<Boolean>()
+        var delFlickDirection: FlickDirection? = null
+        val listener = object : TouchGestureListener {
+            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {}
+            override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) {}
+            override fun onKeyLongPress(key: KeyInfo) {}
+            override fun onKeyDeleteRepeat(isWordDelete: Boolean) { repeatDeletes.add(isWordDelete) }
+            override fun onSpaceScrub(steps: Int) {}
+            override fun onPillTap() {}
+            override fun onCandidateTap(index: Int) {}
+            override fun onStripScroll(newScrollOffset: Float) {}
+            override fun onTouchStateChanged(activeKeyId: Int?) {}
+            override fun onEmojiDelFlick(direction: FlickDirection) { delFlickDirection = direction }
+        }
+        val tracker = TouchGestureTracker(keyAtlas, listener)
+        val delBounds = keyAtlas.emojiAtlas.controlRowBounds[3]
+
+        // 1. Hold DEL > 350ms triggers onKeyDeleteRepeat(false)
+        val t0 = System.currentTimeMillis()
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, delBounds.centerX(), delBounds.centerY(), 0)) { null }
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(400, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertTrue(repeatDeletes.isNotEmpty())
+        assertFalse(repeatDeletes[0])
+
+        // Simulate elapsed > 1200ms and run tick
+        val touchDownField = EmojiGestureTracker::class.java.getDeclaredField("touchDownTime").apply { isAccessible = true }
+        touchDownField.setLong(tracker.emojiGestureTracker, System.currentTimeMillis() - 1300L)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(60, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertTrue("Holding DEL on Emoji page >1200ms must accelerate to word delete", repeatDeletes.any { it })
+
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 1400, MotionEvent.ACTION_UP, delBounds.centerX(), delBounds.centerY(), 0)) { null }
+
+        // 2. Flick UP on Emoji DEL triggers onEmojiDelFlick(UP)
+        val t1 = t0 + 2000L
+        tracker.onTouchEvent(MotionEvent.obtain(t1, t1, MotionEvent.ACTION_DOWN, delBounds.centerX(), delBounds.centerY(), 0)) { null }
+        tracker.onTouchEvent(MotionEvent.obtain(t1, t1 + 40, MotionEvent.ACTION_UP, delBounds.centerX(), delBounds.centerY() - 60f, 0)) { null }
+        assertEquals(FlickDirection.UP, delFlickDirection)
+    }
+
+    @Test
+    fun testEmojiSpaceTapSupportsDoubleSpacePeriod() {
+        val controller = org.robolectric.Robolectric.buildService(OpenT9InputMethodService::class.java)
+        val service = controller.create().get()
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+        val info = android.view.inputmethod.EditorInfo()
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+
+        val inputView = service.onCreateInputView() as T9KeyboardView
+        service.onStartInputView(info, false)
+        editText.setText("halo")
+        editText.setSelection(4)
+
+        inputView.keyAtlas.updatePageLayout(KeyboardPage.PAGE_4_EMOJI)
+        inputView.onEmojiControlAction?.invoke(2) // Space
+        inputView.onEmojiControlAction?.invoke(2) // Rapid 2nd Space
+
+        assertEquals("halo. ", editText.text.toString())
+    }
 }

@@ -18,7 +18,8 @@ class MultiTapController(
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
     var onShiftUpdate: (() -> Unit)? = null,
     var onAutoCapsUpdate: (() -> Unit)? = null,
-    var getInputConnection: (() -> InputConnection?)? = null
+    var getInputConnection: (() -> InputConnection?)? = null,
+    private val isIncognito: () -> Boolean = { false }
 ) {
     var isMultiTapActive: Boolean = false
         private set
@@ -45,7 +46,7 @@ class MultiTapController(
             if (res.committedChar.isLetter()) {
                 multiTapWordBuffer.append(res.committedChar)
             } else {
-                flushMultiTapWord(isIncognito = false)
+                flushMultiTapWord(isIncognito = isIncognito())
             }
             ic.commitText(res.committedChar.toString(), 1)
             shiftController.onCharacterCommitted()

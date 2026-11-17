@@ -23,6 +23,7 @@ class TouchGestureTracker(
 
     var longPressTimeoutMs: Long = LONG_PRESS_TIMEOUT_MS
 
+    var isSpaceScrubEnabled: Boolean = true
     var scrubActivationDistanceDp: Float = 22f
     var spaceScrubRequireHold: Boolean = false
     var spaceScrubHoldDelayMs: Long = 150L
@@ -109,6 +110,9 @@ class TouchGestureTracker(
     private val longPressRunnable = object : Runnable {
         override fun run() {
             activeKey?.let { key ->
+                if (!FlickDisambiguator.isLongPressSupported(key, keyAtlas.currentPage)) {
+                    return
+                }
                 longPressTriggered = true
                 if (key.type == KeyType.DEL) {
                     repeatDeleteHandler.onLongPressDel(repeatDeleteRunnable)
@@ -136,11 +140,11 @@ class TouchGestureTracker(
         val now = System.currentTimeMillis()
 
         return when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> handleActionDown(x, y, now, candidateHitTest)
+            MotionEvent.ACTION_DOWN -> handleActionDown(event, x, y, now, candidateHitTest)
             MotionEvent.ACTION_POINTER_DOWN -> handleActionPointerDown(event, candidateHitTest, now)
             MotionEvent.ACTION_POINTER_UP -> handleActionPointerUp(event)
             MotionEvent.ACTION_MOVE -> handleActionMove(event, x, y, now)
-            MotionEvent.ACTION_UP -> handleActionUp(event, x, y, now, candidateHitTest)
+            MotionEvent.ACTION_UP -> handleActionUp(event, x, y, candidateHitTest)
             MotionEvent.ACTION_CANCEL -> {
                 cancelAllGestures()
                 true
@@ -149,8 +153,8 @@ class TouchGestureTracker(
         }
     }
 
-    private fun handleActionDown(x: Float, y: Float, now: Long, candidateHitTest: (Float) -> Int?): Boolean {
-        activePointerId = 0
+    private fun handleActionDown(event: MotionEvent, x: Float, y: Float, now: Long, candidateHitTest: (Float) -> Int?): Boolean {
+        activePointerId = event.getPointerId(0)
         touchDownX = x
         touchDownY = y
         touchDownTime = now
@@ -162,7 +166,7 @@ class TouchGestureTracker(
             symbolPagesTracker.reset()
             activeKey = null
             listener.onTouchStateChanged(null)
-            emojiGestureTracker.onDown(x, y, keyAtlas.emojiAtlas, longPressTimeoutMs)
+            emojiGestureTracker.onDown(x, y, keyAtlas.emojiAtlas, longPressTimeoutMs, now)
             return true
         }
 
@@ -175,24 +179,35 @@ class TouchGestureTracker(
             activeKey = null
             candidateStripTracker.onDown(x, keyAtlas, longPressTimeoutMs, candidateHitTest)
         } else {
-            activeKey = keyAtlas.findKeyAt(x, y)
-            listener.onTouchStateChanged(activeKey?.id)
+            val foundKey = keyAtlas.findKeyAt(x, y)
+            activeKey = foundKey
+            listener.onTouchStateChanged(foundKey?.id)
             repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
-            actualHandler.postDelayed(longPressRunnable, longPressTimeoutMs)
+            if (foundKey != null && FlickDisambiguator.isLongPressSupported(foundKey, keyAtlas.currentPage)) {
+                actualHandler.postDelayed(longPressRunnable, longPressTimeoutMs)
+            }
         }
         return true
     }
 
     private fun handleActionPointerDown(event: MotionEvent, candidateHitTest: (Float) -> Int?, now: Long): Boolean {
+        if (emojiGestureTracker.isEmojiPageTouch || symbolPagesTracker.isPage1ColumnTouch) {
+            return true
+        }
+
         val actionIdx = event.actionIndex
         val px = event.getX(actionIdx)
         val py = event.getY(actionIdx)
 
+        if (candidateStripTracker.isCandidateStripTouch) {
+            if (py < keyAtlas.stripHeight && keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT) {
+                return true
+            }
+            candidateStripTracker.cancel()
+        }
+
         val prevKey = activeKey
-        if (prevKey != null && !longPressTriggered && !flickTriggered && !isScrubbing &&
-            !candidateStripTracker.isCandidateStripTouch && !emojiGestureTracker.isEmojiPageTouch &&
-            !symbolPagesTracker.isPage1ColumnTouch
-        ) {
+        if (prevKey != null && !longPressTriggered && !flickTriggered && !isScrubbing) {
             repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
             listener.onKeyTap(prevKey, touchDownX, touchDownY)
         }
@@ -205,14 +220,29 @@ class TouchGestureTracker(
         flickTriggered = false
         spaceScrubTracker.reset()
 
+        if (keyAtlas.currentPage == KeyboardPage.PAGE_4_EMOJI) {
+            activeKey = null
+            listener.onTouchStateChanged(null)
+            emojiGestureTracker.onDown(px, py, keyAtlas.emojiAtlas, longPressTimeoutMs, now)
+            return true
+        }
+
+        if (symbolPagesTracker.onDown(px, py, keyAtlas)) {
+            activeKey = null
+            return true
+        }
+
         if (py < keyAtlas.stripHeight && keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT) {
             activeKey = null
             candidateStripTracker.onDown(px, keyAtlas, longPressTimeoutMs, candidateHitTest)
         } else {
-            activeKey = keyAtlas.findKeyAt(px, py)
-            listener.onTouchStateChanged(activeKey?.id)
-            actualHandler.removeCallbacks(longPressRunnable)
-            actualHandler.postDelayed(longPressRunnable, longPressTimeoutMs)
+            val foundKey = keyAtlas.findKeyAt(px, py)
+            activeKey = foundKey
+            listener.onTouchStateChanged(foundKey?.id)
+            repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
+            if (foundKey != null && FlickDisambiguator.isLongPressSupported(foundKey, keyAtlas.currentPage)) {
+                actualHandler.postDelayed(longPressRunnable, longPressTimeoutMs)
+            }
         }
         return true
     }
@@ -224,25 +254,16 @@ class TouchGestureTracker(
         if (pointerId == activePointerId) {
             val px = event.getX(actionIdx)
             val py = event.getY(actionIdx)
-            val liftedKey = activeKey ?: keyAtlas.findKeyAt(px, py)
+            val liftedKey = activeKey
 
-            if (liftedKey != null && !longPressTriggered && !flickTriggered && !isScrubbing) {
-                val distSq = (px - touchDownX) * (px - touchDownX) + (py - touchDownY) * (py - touchDownY)
-                if (distSq >= flickDistanceMinPx * flickDistanceMinPx) {
-                    val direction = disambiguateFlick(px - touchDownX, py - touchDownY)
-                    if (isFlickSupported(liftedKey, direction)) {
-                        listener.onKeyFlick(liftedKey, direction)
-                    } else if (!longPressTriggered) {
-                        listener.onKeyTap(liftedKey, px, py)
-                    }
-                } else if (!longPressTriggered) {
-                    listener.onKeyTap(liftedKey, px, py)
-                }
+            if (liftedKey != null) {
+                val dx = px - touchDownX
+                val dy = py - touchDownY
+                handleKeypadUp(liftedKey, px, py, dx, dy, dx * dx + dy * dy)
             }
             repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
-            activeKey = null
+            resetTouchState()
             listener.onTouchStateChanged(null)
-            activePointerId = MotionEvent.INVALID_POINTER_ID
         }
         return true
     }
@@ -277,21 +298,40 @@ class TouchGestureTracker(
         } else {
             val key = activeKey
             if (key != null && key.type == KeyType.SPACE_0) {
-                spaceScrubTracker.onMove(
-                    dx = dx, dy = dy, elapsed = elapsed, aspectRatio = spaceScrubAspectRatio,
-                    requireHold = spaceScrubRequireHold, holdDelayMs = spaceScrubHoldDelayMs,
-                    activationDistancePx = spaceScrubActivationPx, stepPx = scrubStepPx,
-                    onScrubStart = { actualHandler.removeCallbacks(longPressRunnable) },
-                    onStep = { steps -> listener.onSpaceScrub(steps) }
-                )
+                val absDx = abs(dx)
+                val absDy = abs(dy)
+                if (distSq >= touchSlopPx * touchSlopPx) {
+                    val mayNeedHoldForScrub = isSpaceScrubEnabled && spaceScrubRequireHold && absDx >= absDy * spaceScrubAspectRatio
+                    if (!mayNeedHoldForScrub || absDy > absDx) {
+                        repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
+                    }
+                }
+
+                if (isSpaceScrubEnabled) {
+                    spaceScrubTracker.onMove(
+                        dx = dx, dy = dy, elapsed = elapsed, aspectRatio = spaceScrubAspectRatio,
+                        requireHold = spaceScrubRequireHold, holdDelayMs = spaceScrubHoldDelayMs,
+                        activationDistancePx = spaceScrubActivationPx, stepPx = scrubStepPx,
+                        onScrubStart = { actualHandler.removeCallbacks(longPressRunnable) },
+                        onStep = { steps -> listener.onSpaceScrub(steps) }
+                    )
+                }
+
+                if (!longPressTriggered && !flickTriggered && !isScrubbing && distSq >= flickDistanceMinPx * flickDistanceMinPx) {
+                    val direction = disambiguateFlick(dx, dy)
+                    if (isFlickSupported(key, direction)) {
+                        repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
+                        flickTriggered = true
+                        listener.onKeyFlick(key, direction)
+                    }
+                }
             } else if (distSq >= touchSlopPx * touchSlopPx) {
                 repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
 
-                if (!flickTriggered && !isScrubbing && key != null && distSq >= flickDistanceMinPx * flickDistanceMinPx) {
+                if (!longPressTriggered && !flickTriggered && !isScrubbing && key != null && distSq >= flickDistanceMinPx * flickDistanceMinPx) {
                     val direction = disambiguateFlick(dx, dy)
                     if (isFlickSupported(key, direction)) {
                         flickTriggered = true
-                        longPressTriggered = false
                         listener.onKeyFlick(key, direction)
                     }
                 }
@@ -300,14 +340,13 @@ class TouchGestureTracker(
         return true
     }
 
-    private fun handleActionUp(event: MotionEvent, x: Float, y: Float, now: Long, candidateHitTest: (Float) -> Int?): Boolean {
+    private fun handleActionUp(event: MotionEvent, x: Float, y: Float, candidateHitTest: (Float) -> Int?): Boolean {
         repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
         val pointerIdx = if (activePointerId != MotionEvent.INVALID_POINTER_ID) {
             event.findPointerIndex(activePointerId)
         } else -1
         val curX = if (pointerIdx >= 0) event.getX(pointerIdx) else x
         val curY = if (pointerIdx >= 0) event.getY(pointerIdx) else y
-        val elapsed = maxOf(now - touchDownTime, if (event.downTime > 0) event.eventTime - event.downTime else 0L)
         val dx = curX - touchDownX
         val dy = curY - touchDownY
         val distSq = dx * dx + dy * dy
@@ -322,7 +361,7 @@ class TouchGestureTracker(
             return true
         }
 
-        if (symbolPagesTracker.onUpPage1(curX, curY, dy, distSq, elapsed, touchSlopPx, flickDistanceMinPx, longPressTimeoutMs, keyAtlas)) {
+        if (symbolPagesTracker.onUpPage1(curX, curY, dy, distSq, touchSlopPx, flickDistanceMinPx, keyAtlas)) {
             resetTouchState()
             return true
         }
@@ -342,29 +381,17 @@ class TouchGestureTracker(
     }
 
     private fun handleKeypadUp(key: KeyInfo, curX: Float, curY: Float, dx: Float, dy: Float, distSq: Float) {
-        if (key.type == KeyType.SPACE_0) {
-            if (distSq >= flickDistanceMinPx * flickDistanceMinPx && !isScrubbing) {
-                val direction = disambiguateFlick(dx, dy)
-                if (isFlickSupported(key, direction)) {
-                    listener.onKeyFlick(key, direction)
-                } else if (!longPressTriggered) {
-                    listener.onKeyTap(key, curX, curY)
-                }
-            } else if (scrubStepsDispatched == 0 && !longPressTriggered) {
-                listener.onKeyTap(key, curX, curY)
-            }
-        } else if (!isScrubbing && !flickTriggered) {
-            if (distSq >= flickDistanceMinPx * flickDistanceMinPx) {
-                val direction = disambiguateFlick(dx, dy)
-                if (isFlickSupported(key, direction)) {
-                    listener.onKeyFlick(key, direction)
-                } else if (!longPressTriggered) {
-                    listener.onKeyTap(key, curX, curY)
-                }
-            } else if (!longPressTriggered) {
-                listener.onKeyTap(key, curX, curY)
+        if (longPressTriggered || flickTriggered || isScrubbing) return
+        if (key.type == KeyType.SPACE_0 && scrubStepsDispatched > 0) return
+
+        if (distSq >= flickDistanceMinPx * flickDistanceMinPx) {
+            val direction = disambiguateFlick(dx, dy)
+            if (isFlickSupported(key, direction)) {
+                listener.onKeyFlick(key, direction)
+                return
             }
         }
+        listener.onKeyTap(key, curX, curY)
     }
 
     private fun resetTouchState() {

@@ -209,4 +209,88 @@ class TypingSettingsBehaviorTest {
         val observer = observerField.get(service) as SettingsObserver
         assertEquals(900L, observer.getMultiTapTimeout())
     }
+
+    @Test
+    fun testPasswordModeStaysAbcAfterPageSwitchAndPillTap() {
+        PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putString("default_input_mode", "0") // Default T9
+            .commit()
+
+        editText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        val passwordInfo = EditorInfo().apply {
+            inputType = editText.inputType
+        }
+        bindInputConnection(passwordInfo)
+        assertFalse("Password mode must start with isT9Mode = false", inputView.isT9Mode)
+
+        // Attempt to toggle via pill tap -> must stay false
+        inputView.onPillTapAction?.invoke()
+        assertFalse("Pill tap must not enable T9 mode in password field", inputView.isT9Mode)
+
+        // Switch to Page 2 (?123) and return via ABC -> must still stay false
+        val page2Key = inputView.keyAtlas.keys[12]
+        invokeHandleKeyTap(page2Key)
+        assertEquals(com.opent9.keyboard.ui.KeyboardPage.PAGE_2_EXT_SYM, inputView.keyAtlas.currentPage)
+
+        val abcKey = inputView.keyAtlas.page2Keys.first { it.primaryLabel == "ABC" }
+        invokeHandleKeyTap(abcKey)
+        assertEquals(com.opent9.keyboard.ui.KeyboardPage.PAGE_0_TEXT, inputView.keyAtlas.currentPage)
+        assertFalse("Returning to Page 0 in password field must keep isT9Mode = false", inputView.isT9Mode)
+    }
+
+    @Test
+    fun testMultiTapInPasswordModeDoesNotRecordToLearnedWords() {
+        com.opent9.keyboard.jni.NativeEngineBridge.resetUserDictionary()
+        editText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        val passwordInfo = EditorInfo().apply {
+            inputType = editText.inputType
+        }
+        bindInputConnection(passwordInfo)
+
+        val key2 = inputView.keyAtlas.keys[1] // abc
+        val key7 = inputView.keyAtlas.keys[8] // pqrs
+        val key1 = inputView.keyAtlas.keys[0] // punctuation
+
+        // Type 'p' -> 'a' -> '.' in password field (switching from letters to punct triggers buffer flush)
+        invokeHandleKeyTap(key7)
+        invokeHandleKeyTap(key2)
+        invokeHandleKeyTap(key1)
+        invokeHandleKeyTap(key2)
+
+        assertEquals(0, com.opent9.keyboard.jni.NativeEngineBridge.getWordUsageCount("pa"))
+    }
+
+    @Test
+    fun testSpaceScrubbingDisabledAllowsSpaceTapAndSkipsScrub() {
+        PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putBoolean("space_scrubbing", false)
+            .commit()
+
+        bindInputConnection()
+        inputView.layout(0, 0, 1080, 780)
+        inputView.reloadLayoutConfiguration()
+
+        editText.setText("hello")
+        editText.setSelection(5)
+
+        val spaceKey = inputView.keyAtlas.keys.first { it.type == KeyType.SPACE_0 }
+        val t0 = 1000L
+        inputView.onTouchEvent(android.view.MotionEvent.obtain(t0, t0, android.view.MotionEvent.ACTION_DOWN, spaceKey.centerX, spaceKey.centerY, 0))
+        inputView.onTouchEvent(android.view.MotionEvent.obtain(t0, t0 + 30, android.view.MotionEvent.ACTION_MOVE, spaceKey.centerX + 90f, spaceKey.centerY, 0))
+        assertFalse("Scrubbing must remain inactive when space_scrubbing is false", inputView.gestureTracker.isScrubbing)
+
+        inputView.onTouchEvent(android.view.MotionEvent.obtain(t0, t0 + 60, android.view.MotionEvent.ACTION_UP, spaceKey.centerX + 90f, spaceKey.centerY, 0))
+        assertEquals("hello ", editText.text.toString())
+    }
+
+    @Test
+    fun testToggleT9ModeClearsIdlePredictionsWhenSwitchingToAbc() {
+        bindInputConnection()
+        inputView.updateCandidates(listOf("kamu", "saya"), isIdlePrediction = true)
+        assertTrue(inputView.isIdlePrediction)
+
+        inputView.onPillTapAction?.invoke()
+        assertFalse(inputView.isT9Mode)
+        assertFalse("Idle predictions must be cleared when switching to ABC mode", inputView.isIdlePrediction)
+    }
 }

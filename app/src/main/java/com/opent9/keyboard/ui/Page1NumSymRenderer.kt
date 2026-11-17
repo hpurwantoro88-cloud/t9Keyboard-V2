@@ -81,7 +81,9 @@ class Page1NumSymRenderer(
         canvas.restore()
 
         // 3. Draw Page 1 Keys
-        val minDim = minOf(keyAtlas.rowHeight, keyAtlas.colWidth)
+        val p1RowHeight = if (opContainer.height() > 0f) opContainer.height() / 3f else keyAtlas.rowHeight
+        val p1SideColWidth = if (opContainer.width() > 0f) opContainer.width() else keyAtlas.colWidth
+        val minDim = minOf(p1RowHeight, p1SideColWidth)
         for (key in keyAtlas.page1Keys) {
             val isPressed = (key.id == activeKeyId)
             val bgPaint = if (key.isActionKey) {

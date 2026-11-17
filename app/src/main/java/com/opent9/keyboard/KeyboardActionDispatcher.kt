@@ -310,6 +310,8 @@ object KeyboardActionDispatcher {
             if (ctx.hasActiveComposing) {
                 ctx.commitActiveCandidate(false)
             }
+            ctx.commitMultiTapActive()
+            ctx.flushMultiTapWord()
         }
 
         ctx.pageController.handleKeyFlick(
@@ -351,7 +353,9 @@ object KeyboardActionDispatcher {
                 ctx.toggleT9Mode()
             }
             KeyType.PAGE_SWITCH -> {
-                ctx.launchSettings()
+                if (key.id == 12) {
+                    ctx.launchSettings()
+                }
             }
             KeyType.DEL -> {
                 // Continuous accelerated delete handled via onKeyDeleteRepeatAction
@@ -364,6 +368,8 @@ object KeyboardActionDispatcher {
                 }
             }
             KeyType.DIGIT_T9, KeyType.PUNCT_1, KeyType.SPACE_0 -> {
+                ctx.commitMultiTapActive()
+                ctx.flushMultiTapWord()
                 handleDigitLongPress(
                     key = key,
                     ic = ic,
@@ -381,6 +387,8 @@ object KeyboardActionDispatcher {
                     if (ctx.hasActiveComposing) {
                         ctx.commitActiveCandidate(false)
                     }
+                    ctx.commitMultiTapActive()
+                    ctx.flushMultiTapWord()
                     ic.commitText("\n", 1)
                     ctx.updateAutoCaps(false)
                 }

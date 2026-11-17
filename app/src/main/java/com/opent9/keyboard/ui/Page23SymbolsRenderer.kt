@@ -39,7 +39,8 @@ class Page23SymbolsRenderer(
         density: Float
     ) {
         val cornerRadius = 8f * density
-        val minDim = minOf(keyAtlas.rowHeight, keyAtlas.colWidth)
+        val actionKeyWidth = (keyAtlas.colWidth * 4f / 10f) * 1.5f
+        val minDim = minOf(keyAtlas.rowHeight, actionKeyWidth)
 
         // 1. Draw keyboard background matching active theme
         canvas.drawRect(0f, 0f, width, height, backgroundPaint)
@@ -97,8 +98,11 @@ class Page23SymbolsRenderer(
                         "EN" -> "English"
                         else -> activeLanguage
                     }
+                    val oldSize = subTextPaint.textSize
+                    subTextPaint.textSize = maxOf(oldSize, 12.5f * density)
                     val textY = key.centerY - ((subTextPaint.descent() + subTextPaint.ascent()) / 2f)
                     canvas.drawText(spaceLabel, key.centerX, textY, subTextPaint)
+                    subTextPaint.textSize = oldSize
                 }
                 else -> {
                     // Regular symbols

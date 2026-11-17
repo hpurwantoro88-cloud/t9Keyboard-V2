@@ -50,6 +50,7 @@ class OpenT9InputMethodService : InputMethodService() {
     private var hasActiveComposing = false
     private var isIncognito = false
     private var isPasswordMode = false
+    private var sessionTextT9Mode = true
     private var ignoreSelectionUpdateCount = 0
     private val suggestionGuard = SuggestionGuard()
     private var activeCandidates: List<String> = emptyList()
@@ -76,7 +77,8 @@ class OpenT9InputMethodService : InputMethodService() {
                 }
             },
             onAutoCapsUpdate = { updateAutoCaps() },
-            getInputConnection = { currentInputConnection }
+            getInputConnection = { currentInputConnection },
+            isIncognito = { isIncognito }
         )
         wordCorrectionController = WordCorrectionController(
             suggestionGuard = suggestionGuard,
@@ -120,6 +122,7 @@ class OpenT9InputMethodService : InputMethodService() {
 
         val lexiconLoader = LexiconLoader(assets, filesDir)
         lexiconLoader.loadLexicons(settingsObserver.getStartupLanguage())
+        sessionTextT9Mode = settingsObserver.isDefaultT9()
     }
 
     override fun onConfigureWindow(win: Window, isFullscreen: Boolean, isCandidatesOnly: Boolean) {
@@ -133,16 +136,18 @@ class OpenT9InputMethodService : InputMethodService() {
         keyboardView.settingsObserver = settingsObserver
         pageController = PageController(keyboardView.keyAtlas)
 
-        val defaultLang = settingsObserver.getStartupLanguage()
-        keyboardView.setLanguage(defaultLang)
-        keyboardView.setT9Mode(settingsObserver.isDefaultT9())
+        val activeLang = NativeEngineBridge.getActiveLanguage().ifEmpty { settingsObserver.getStartupLanguage() }
+        keyboardView.setLanguage(activeLang)
+        sessionTextT9Mode = settingsObserver.isDefaultT9()
+        keyboardView.setT9Mode(sessionTextT9Mode)
 
         ImeLifecycleConfigurator.setupObserverCallbacks(
             settingsObserver = settingsObserver,
             getKeyboardView = { if (::keyboardView.isInitialized) keyboardView else null },
             isPasswordMode = { isPasswordMode },
             getCurrentEditorInfo = { currentEditorInfo },
-            onAutoCapsChanged = { updateAutoCaps(clearManualOverride = true) }
+            onAutoCapsChanged = { updateAutoCaps(clearManualOverride = true) },
+            onInputModeChanged = { isT9 -> sessionTextT9Mode = isT9 }
         )
 
         setupKeyboardViewListeners()
@@ -185,7 +190,9 @@ class OpenT9InputMethodService : InputMethodService() {
                 emoji = emoji,
                 ic = currentInputConnection,
                 hasActiveComposing = hasActiveComposing,
-                onCommitActiveCandidate = { addSpace -> commitActiveCandidate(addSpace) }
+                onCommitActiveCandidate = { addSpace -> commitActiveCandidate(addSpace) },
+                onResetLastSpaceTime = { lastSpaceTapTime = 0L },
+                onUpdateAutoCaps = { updateAutoCaps(false) }
             )
         }
 
@@ -198,6 +205,9 @@ class OpenT9InputMethodService : InputMethodService() {
                 onSwitchToPage = { targetPage -> switchToPage(targetPage) },
                 onCommitActiveCandidate = { addSpace -> commitActiveCandidate(addSpace) },
                 onDeleteTap = { ic ->
+                    isBackspaceAction = true
+                    lastSpaceTapTime = 0L
+                    clearWordCorrection()
                     deleteController.handleDeleteTap(
                         ic = ic,
                         hasActiveComposing = hasActiveComposing,
@@ -211,8 +221,57 @@ class OpenT9InputMethodService : InputMethodService() {
                             rehydrateComposingDigits(digits, wordToRestore, ic)
                         }
                     )
+                    if (!hasActiveComposing && currentComposingDigits.isEmpty()) {
+                        updateAutoCaps(true)
+                    }
+                },
+                onSpaceTap = { ic ->
+                    val now = System.currentTimeMillis()
+                    if (hasActiveComposing) {
+                        commitActiveCandidate(true)
+                        lastSpaceTapTime = now
+                    } else {
+                        commitMultiTapActive()
+                        flushMultiTapWord()
+                        lastSpaceTapTime = DoubleSpacePeriodHelper.handleSpaceTap(
+                            ic = ic,
+                            now = now,
+                            lastSpaceTapTime = lastSpaceTapTime,
+                            isDoubleSpaceEnabled = settingsObserver.isDoubleSpacePeriodEnabled(),
+                            isPasswordMode = isPasswordMode,
+                            onUpdateAutoCaps = { updateAutoCaps(false) }
+                        )
+                        refreshIdleNextWordSuggestions(ic, null)
+                    }
                 }
             )
+        }
+
+        keyboardView.onEmojiDelFlickAction = { direction ->
+            val ic = currentInputConnection
+            if (ic != null) {
+                isBackspaceAction = true
+                lastSpaceTapTime = 0L
+                clearWordCorrection()
+                when (direction) {
+                    FlickDirection.UP, FlickDirection.LEFT -> {
+                        if (hasActiveComposing || currentComposingDigits.isNotEmpty()) {
+                            abortComposing(ic)
+                        } else {
+                            deleteController.deletePrecedingWord(ic)
+                        }
+                        updateAutoCaps(true)
+                    }
+                    FlickDirection.DOWN -> {
+                        if (hasActiveComposing || currentComposingDigits.isNotEmpty()) {
+                            abortComposing(ic)
+                        }
+                        deleteController.clearEntireField(ic)
+                        updateAutoCaps(true)
+                    }
+                    FlickDirection.RIGHT -> {}
+                }
+            }
         }
     }
 
@@ -229,6 +288,8 @@ class OpenT9InputMethodService : InputMethodService() {
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         if (::keyboardView.isInitialized) {
+            keyboardView.gestureTracker.resetPage1Scroll()
+            keyboardView.gestureTracker.resetEmojiScroll()
             keyboardView.updateThemeFromConfiguration(resources.configuration)
             keyboardView.reloadLayoutConfiguration()
         }
@@ -241,6 +302,7 @@ class OpenT9InputMethodService : InputMethodService() {
         isPasswordMode = EditorContextHelper.isPassword(info)
         isIncognito = EditorContextHelper.isIncognito(info)
         val isNumeric = EditorContextHelper.isNumeric(info)
+        sessionTextT9Mode = if (isNumeric || isPasswordMode) false else settingsObserver.isDefaultT9()
 
         if (isNumeric) {
             keyboardView.keyAtlas.updatePageLayout(KeyboardPage.PAGE_1_NUM_SYM)
@@ -250,7 +312,7 @@ class OpenT9InputMethodService : InputMethodService() {
             keyboardView.setT9Mode(false)
         } else {
             keyboardView.keyAtlas.updatePageLayout(KeyboardPage.PAGE_0_TEXT)
-            keyboardView.setT9Mode(settingsObserver.isDefaultT9())
+            keyboardView.setT9Mode(sessionTextT9Mode)
         }
 
         val imeAction = enterKeyHandler.resolveEffectiveAction(info)
@@ -399,11 +461,14 @@ class OpenT9InputMethodService : InputMethodService() {
                 keyboardView.updateCandidates(emptyList())
             }
             KeyboardPage.PAGE_0_TEXT -> {
-                keyboardView.setT9Mode(settingsObserver.isDefaultT9())
+                val isNumeric = EditorContextHelper.isNumeric(currentEditorInfo)
+                keyboardView.setT9Mode(!isPasswordMode && !isNumeric && sessionTextT9Mode)
             }
-
         }
         keyboardView.keyAtlas.updatePageLayout(targetPage)
+        if (targetPage == KeyboardPage.PAGE_0_TEXT && !hasActiveComposing) {
+            refreshIdleNextWordSuggestions(ic, null)
+        }
         keyboardView.invalidate()
     }
 
@@ -571,13 +636,19 @@ class OpenT9InputMethodService : InputMethodService() {
     }
 
     private fun toggleT9Mode() {
+        if (isPasswordMode || EditorContextHelper.isNumeric(currentEditorInfo)) {
+            keyboardView.setT9Mode(false)
+            return
+        }
         val nextMode = !keyboardView.isT9Mode
         if (hasActiveComposing) {
             commitActiveCandidate(addSpace = false)
         }
         commitMultiTapActive()
         flushMultiTapWord()
+        sessionTextT9Mode = nextMode
         keyboardView.setT9Mode(nextMode)
+        clearWordCorrection()
     }
 
     private fun resetComposingState() {

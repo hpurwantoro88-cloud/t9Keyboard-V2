@@ -476,7 +476,12 @@ class KeyAtlas {
         currentPage = page
         when (page) {
             KeyboardPage.PAGE_0_TEXT -> configurePage0()
-            KeyboardPage.PAGE_1_NUM_SYM -> configurePage1()
+            KeyboardPage.PAGE_1_NUM_SYM -> {
+                // Keep Page 0 keys[0..15] digitValue metadata intact for SpatialScorer geometry sync
+                if (keys[1].digitValue < 0) {
+                    configurePage0()
+                }
+            }
             KeyboardPage.PAGE_2_EXT_SYM, KeyboardPage.PAGE_3_EXT_SYM_ALT -> {}
             KeyboardPage.PAGE_4_EMOJI -> configureEmoji()
         }
@@ -511,33 +516,6 @@ class KeyAtlas {
         setupKey(14, KeyType.SPACE_0, "␣", "0", digit = 0)
         setupKey(15, KeyType.DIRECT_SYM, "", "")
         applyPage0RearrangedLayout(layoutOrder, lastOffsetX)
-    }
-
-
-    private fun configurePage1() {
-        // Row 1: [ 1 ] [ 2 ] [ 3 ] [ ⌫ DEL ]
-        setupKey(0, KeyType.DIRECT_SYM, "1", "")
-        setupKey(1, KeyType.DIRECT_SYM, "2", "")
-        setupKey(2, KeyType.DIRECT_SYM, "3", "")
-        setupKey(3, KeyType.DEL, "⌫", "")
-
-        // Row 2: [ 4 ] [ 5 ] [ 6 ] [ + - ]
-        setupKey(4, KeyType.DIRECT_SYM, "4", "")
-        setupKey(5, KeyType.DIRECT_SYM, "5", "")
-        setupKey(6, KeyType.DIRECT_SYM, "6", "")
-        setupKey(7, KeyType.DUAL_SYM, "+ -", "", left = "+", right = "-")
-
-        // Row 3: [ 7 ] [ 8 ] [ 9 ] [ ↵ ENTER ]
-        setupKey(8, KeyType.DIRECT_SYM, "7", "")
-        setupKey(9, KeyType.DIRECT_SYM, "8", "")
-        setupKey(10, KeyType.DIRECT_SYM, "9", "")
-        setupKey(11, KeyType.ENTER, "↵", "")
-
-        // Row 4: [ ABC ] [ =\\< ] [ 0 ␣ SPACE ] [ . , ]
-        setupKey(12, KeyType.PAGE_SWITCH, "ABC", "")
-        setupKey(13, KeyType.PAGE_SWITCH, "=\\<", "")
-        setupKey(14, KeyType.SPACE_0, "0", "␣", digit = 0)
-        setupKey(15, KeyType.DUAL_SYM, ". ,", "", left = ".", right = ",")
     }
 
     private fun setupKey(
@@ -638,6 +616,11 @@ class KeyAtlas {
         }
 
         if (y < stripHeight) return null
+        if (rowHeight <= 0f || colWidth <= 0f) return null
+        val marginTol = 8f * density
+        if (x < lastOffsetX - marginTol || x > lastOffsetX + (4f * colWidth) + marginTol) {
+            return null
+        }
         val r = ((y - stripHeight) / rowHeight).toInt().coerceIn(0, 3)
         val c = ((x - lastOffsetX) / colWidth).toInt().coerceIn(0, 3)
         val candidateKey = grid[r][c]

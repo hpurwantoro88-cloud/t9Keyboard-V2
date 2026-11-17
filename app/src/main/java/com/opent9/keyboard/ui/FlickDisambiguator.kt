@@ -56,5 +56,24 @@ object FlickDisambiguator {
             KeyboardPage.PAGE_4_EMOJI -> false
         }
     }
+
+    /**
+     * Determines whether a given key has a defined long-press action on the current page.
+     * Prevents phantom haptic/audio feedback and swallowed taps on keys without long-press actions.
+     */
+    fun isLongPressSupported(key: KeyInfo, currentPage: KeyboardPage): Boolean {
+        return when (key.type) {
+            KeyType.DEL,
+            KeyType.SHIFT,
+            KeyType.LANG_SWITCH,
+            KeyType.ENTER -> true
+            KeyType.DIGIT_T9,
+            KeyType.PUNCT_1,
+            KeyType.SPACE_0 -> key.digitValue >= 0
+            KeyType.PAGE_SWITCH -> currentPage == KeyboardPage.PAGE_0_TEXT && key.id == 12
+            KeyType.DIRECT_SYM,
+            KeyType.DUAL_SYM -> false
+        }
+    }
 }
 

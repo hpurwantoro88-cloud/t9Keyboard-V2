@@ -486,7 +486,13 @@ class RearrangeKeyboardView @JvmOverloads constructor(
             }
             KeyType.LANG_SWITCH -> {
                 val langY = key.centerY - (2f * density)
-                canvas.drawText("ID", key.centerX, langY, primaryTextPaint)
+                val startupLang = try {
+                    androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+                        .getString("startup_language", "ID") ?: "ID"
+                } catch (_: Exception) {
+                    "ID"
+                }
+                canvas.drawText(startupLang, key.centerX, langY, primaryTextPaint)
 
                 // SubLabel 😊
                 val subX = rect.right - (7f * density)

@@ -12,10 +12,11 @@ interface TouchGestureListener {
     fun onStripScroll(newScrollOffset: Float)
     fun onTouchStateChanged(activeKeyId: Int?)
 
-    // Page 3 Emoji callbacks
+    // Page 4 Emoji callbacks
     fun onEmojiCategoryTap(categoryIndex: Int) {}
     fun onEmojiTap(emoji: String) {}
     fun onEmojiControlTap(controlIndex: Int) {}
     fun onEmojiPageSwipe(direction: FlickDirection) {}
+    fun onEmojiDelFlick(direction: FlickDirection) {}
     fun onEmojiTouchStateChanged(tabIndex: Int?, gridIndex: Int?, controlIndex: Int?) {}
 }

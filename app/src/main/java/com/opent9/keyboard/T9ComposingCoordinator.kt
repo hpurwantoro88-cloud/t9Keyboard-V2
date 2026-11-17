@@ -152,6 +152,12 @@ class T9ComposingCoordinator(
         if (hasActiveCorrection) {
             clearWordCorrection()
         }
+        if (getMultiTapController().handleBackspaceDuringMultiTap()) {
+            ic.setComposingText("", 0)
+            ic.finishComposingText()
+            updateAutoCaps(true)
+            return
+        }
         if (getHasActiveComposing() || currentComposingDigits.isNotEmpty()) {
             if (isWordDelete) {
                 abortComposing(ic)
@@ -160,8 +166,10 @@ class T9ComposingCoordinator(
             }
         } else {
             if (isWordDelete) {
+                getMultiTapController().multiTapWordBuffer.clear()
                 getDeleteController().deletePrecedingWord(ic)
             } else {
+                getMultiTapController().deleteBufferCharAtEnd()
                 getDeleteController().deleteSingleOrSurrogate(ic)
             }
             updateAutoCaps(true)

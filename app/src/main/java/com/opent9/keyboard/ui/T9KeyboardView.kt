@@ -148,6 +148,7 @@ open class T9KeyboardView @JvmOverloads constructor(
     var onOpenSettingsAction: (() -> Unit)? = null
     var onEmojiSelectedAction: ((String) -> Unit)? = null
     var onEmojiControlAction: ((Int) -> Unit)? = null
+    var onEmojiDelFlickAction: ((FlickDirection) -> Unit)? = null
 
     var isDarkMode: Boolean = true
         private set
@@ -167,6 +168,7 @@ open class T9KeyboardView @JvmOverloads constructor(
     }
 
     fun applyScrubSettings(observer: SettingsObserver) {
+        gestureTracker.isSpaceScrubEnabled = observer.isSpaceScrubbingEnabled()
         gestureTracker.spaceScrubRequireHold = observer.isSpaceScrubbingHoldRequired()
         gestureTracker.scrubActivationDistanceDp = when (observer.getSpaceScrubbingSensitivity()) {
             "low" -> 30f
@@ -348,12 +350,12 @@ open class T9KeyboardView @JvmOverloads constructor(
     val isUppercase: Boolean
         get() = when (shiftState) {
             2 -> true
-            1 -> candidates.isEmpty()
+            1 -> candidates.isEmpty() || isIdlePrediction
             else -> false
         }
 
     fun getDisplayLabel(key: KeyInfo): String {
-        return CandidateMeasurementHelper.getDisplayLabel(key, shiftState, candidates.isEmpty())
+        return CandidateMeasurementHelper.getDisplayLabel(key, shiftState, candidates.isEmpty(), isIdlePrediction)
     }
 
     private fun recomputeCandidateLayout() {
@@ -553,6 +555,11 @@ open class T9KeyboardView @JvmOverloads constructor(
     override fun onEmojiPageSwipe(direction: FlickDirection) {
         playClickFeedback()
         EmojiInteractionCoordinator.onPageSwipe(direction, emojiAtlas, { gestureTracker.resetEmojiScroll() }, { invalidate() })
+    }
+
+    override fun onEmojiDelFlick(direction: FlickDirection) {
+        playClickFeedback()
+        onEmojiDelFlickAction?.invoke(direction)
     }
 
     override fun onEmojiTouchStateChanged(tabIndex: Int?, gridIndex: Int?, controlIndex: Int?) {

@@ -25,15 +25,23 @@ class EmojiGestureTracker(
     var activeEmojiControlIndex: Int? = null
         private set
 
+    private var touchDownControlIndex: Int? = null
+    private var touchDownTime: Long = 0L
     private var repeatDeleteFired = false
+    private val repeatDeleteHandler = RepeatDeleteHandler(listener, handler)
 
-    private val emojiRepeatDeleteRunnable = object : Runnable {
+    private val emojiRepeatTickRunnable = object : Runnable {
         override fun run() {
             if (isEmojiPageTouch && activeEmojiControlIndex == 3) {
-                repeatDeleteFired = true
-                listener.onEmojiControlTap(3)
-                handler.postDelayed(this, TouchGestureTracker.REPEAT_TICK_INTERVAL_MS)
+                repeatDeleteHandler.onRepeatTick(touchDownTime, this)
             }
+        }
+    }
+
+    private val emojiLongPressDelRunnable = Runnable {
+        if (isEmojiPageTouch && activeEmojiControlIndex == 3) {
+            repeatDeleteFired = true
+            repeatDeleteHandler.onLongPressDel(emojiRepeatTickRunnable)
         }
     }
 
@@ -41,23 +49,26 @@ class EmojiGestureTracker(
         x: Float,
         y: Float,
         emojiAtlas: EmojiAtlas,
-        longPressTimeoutMs: Long
+        longPressTimeoutMs: Long,
+        downTimeMs: Long = System.currentTimeMillis()
     ) {
         isEmojiPageTouch = true
         isEmojiScrolling = false
         repeatDeleteFired = false
+        touchDownTime = downTimeMs
         emojiStartScrollY = emojiScrollOffset
         val tabIdx = emojiAtlas.findCategoryTabAt(x, y)
         val gridIdx = emojiAtlas.findEmojiIndexAt(x, y, emojiScrollOffset)
         val ctrlIdx = emojiAtlas.findControlIndexAt(x, y)
+        touchDownControlIndex = ctrlIdx
         activeEmojiTabIndex = tabIdx
         activeEmojiGridIndex = gridIdx
         activeEmojiControlIndex = ctrlIdx
         listener.onEmojiTouchStateChanged(tabIdx, gridIdx, ctrlIdx)
 
         if (ctrlIdx == 3) { // DEL button on emoji page
-            handler.removeCallbacks(emojiRepeatDeleteRunnable)
-            handler.postDelayed(emojiRepeatDeleteRunnable, longPressTimeoutMs)
+            repeatDeleteHandler.cancel(emojiLongPressDelRunnable, emojiRepeatTickRunnable)
+            handler.postDelayed(emojiLongPressDelRunnable, longPressTimeoutMs)
         }
     }
 
@@ -77,11 +88,22 @@ class EmojiGestureTracker(
         val absDy = abs(dy)
 
         if (distSq >= touchSlopPx * touchSlopPx) {
-            handler.removeCallbacks(emojiRepeatDeleteRunnable)
+            repeatDeleteHandler.cancel(emojiLongPressDelRunnable, emojiRepeatTickRunnable)
             activeEmojiTabIndex = null
             activeEmojiGridIndex = null
             activeEmojiControlIndex = null
             listener.onEmojiTouchStateChanged(null, null, null)
+
+            if (touchDownControlIndex == 3) {
+                if (!repeatDeleteFired && !flickTriggered && distSq >= flickDistanceMinPx * flickDistanceMinPx) {
+                    val direction = FlickDisambiguator.disambiguateFlick(dx, dy)
+                    if (direction != FlickDirection.RIGHT) {
+                        onFlickTriggered(true)
+                        listener.onEmojiDelFlick(direction)
+                    }
+                }
+                return
+            }
 
             val inGridArea = touchDownY >= emojiAtlas.gridTop && touchDownY < emojiAtlas.gridBottom
             if (inGridArea && (isEmojiScrolling || absDy > absDx * 0.8f)) {
@@ -108,13 +130,15 @@ class EmojiGestureTracker(
         emojiAtlas: EmojiAtlas
     ) {
         if (!isEmojiPageTouch) return
-        handler.removeCallbacks(emojiRepeatDeleteRunnable)
+        repeatDeleteHandler.cancel(emojiLongPressDelRunnable, emojiRepeatTickRunnable)
         val tabIdx = activeEmojiTabIndex
         val gridIdx = activeEmojiGridIndex
         val ctrlIdx = activeEmojiControlIndex
+        val downCtrlIdx = touchDownControlIndex
         val wasScrolling = isEmojiScrolling
         isEmojiPageTouch = false
         isEmojiScrolling = false
+        touchDownControlIndex = null
         activeEmojiTabIndex = null
         activeEmojiGridIndex = null
         activeEmojiControlIndex = null
@@ -134,6 +158,13 @@ class EmojiGestureTracker(
                 } else if (ctrlIdx != null) {
                     listener.onEmojiControlTap(ctrlIdx)
                 }
+            } else if (downCtrlIdx == 3 && distSq >= flickDistanceMinPx * flickDistanceMinPx) {
+                val direction = FlickDisambiguator.disambiguateFlick(dx, dy)
+                if (direction != FlickDirection.RIGHT) {
+                    listener.onEmojiDelFlick(direction)
+                } else {
+                    listener.onEmojiControlTap(3)
+                }
             } else if (distSq >= flickDistanceMinPx * flickDistanceMinPx && abs(dx) > abs(dy) * 1.2f) {
                 val direction = if (dx < 0) FlickDirection.LEFT else FlickDirection.RIGHT
                 listener.onEmojiPageSwipe(direction)
@@ -148,9 +179,10 @@ class EmojiGestureTracker(
     }
 
     fun cancel() {
-        handler.removeCallbacks(emojiRepeatDeleteRunnable)
+        repeatDeleteHandler.cancel(emojiLongPressDelRunnable, emojiRepeatTickRunnable)
         isEmojiPageTouch = false
         isEmojiScrolling = false
+        touchDownControlIndex = null
         activeEmojiTabIndex = null
         activeEmojiGridIndex = null
         activeEmojiControlIndex = null

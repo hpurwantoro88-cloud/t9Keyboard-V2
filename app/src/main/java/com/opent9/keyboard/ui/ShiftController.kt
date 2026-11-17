@@ -39,10 +39,10 @@ class ShiftController {
     fun onShiftTap(nowMs: Long): ShiftMode {
         isManualOverride = true
         if (isCapsLockLocked) {
-            // Unlocking caps lock always returns to lowercase
+            // Unlocking caps lock always returns to lowercase and clears double-tap timer
             isCapsLockLocked = false
             currentMode = ShiftMode.LOWERCASE
-            lastShiftTapTime = nowMs
+            lastShiftTapTime = 0L
             return currentMode
         }
 

@@ -61,10 +61,15 @@ object CandidateMeasurementHelper {
         }
     }
 
-    fun getDisplayLabel(key: KeyInfo, shiftState: Int, isCandidatesEmpty: Boolean): String {
+    fun getDisplayLabel(
+        key: KeyInfo,
+        shiftState: Int,
+        isCandidatesEmpty: Boolean,
+        isIdlePrediction: Boolean = false
+    ): String {
         val isUppercase = when (shiftState) {
             2 -> true
-            1 -> isCandidatesEmpty
+            1 -> isCandidatesEmpty || isIdlePrediction
             else -> false
         }
         return if (key.type == KeyType.DIGIT_T9) {

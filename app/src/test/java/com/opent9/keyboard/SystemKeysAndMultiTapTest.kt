@@ -668,4 +668,106 @@ class SystemKeysAndMultiTapTest {
         service.onStartInputView(info, true)
         assertEquals(textDuringComposing, editText.text.toString())
     }
+
+    @Test
+    fun testMultiTapActiveCommittedBeforeFlickAndDigitLongPress() {
+        val controller = Robolectric.buildService(OpenT9InputMethodService::class.java)
+        val service = controller.create().get()
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val editText = android.widget.EditText(context).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+        val info = EditorInfo()
+        val ic = editText.onCreateInputConnection(info)
+        val icField = OpenT9InputMethodService::class.java.superclass.getDeclaredField("mInputConnection").apply {
+            isAccessible = true
+        }
+        icField.set(service, ic)
+
+        val inputView = service.onCreateInputView() as T9KeyboardView
+        service.onStartInputView(info, false)
+        inputView.setT9Mode(false)
+
+        val key2 = inputView.keyAtlas.keys[1]
+        val key1 = inputView.keyAtlas.keys[0]
+        val key3 = inputView.keyAtlas.keys[2]
+
+        // Tap key 2 -> 'A' (AutoCaps TITLECASE) actively composing (before timeout)
+        inputView.onKeyTapAction?.invoke(key2, key2.centerX, key2.centerY)
+        assertEquals("A", editText.text.toString())
+
+        // Flick left on key 1 (comma) -> must commit 'A' then ',' (not overwrite 'A')
+        inputView.onKeyFlickAction?.invoke(key1, FlickDirection.LEFT)
+        assertEquals("A,", editText.text.toString())
+
+        // Tap key 2 again -> 'a' actively composing
+        inputView.onKeyTapAction?.invoke(key2, key2.centerX, key2.centerY)
+        assertEquals("A,a", editText.text.toString())
+
+        // Long-press key 3 -> must commit 'a' then insert '3' (not drop 'a')
+        inputView.onKeyLongPressAction?.invoke(key3)
+        assertEquals("A,a3", editText.text.toString())
+    }
+
+    @Test
+    fun testDisplayLabelStaysUppercaseDuringTitlecaseWithIdlePrediction() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val keyboardView = T9KeyboardView(context, null)
+        keyboardView.keyAtlas.computeGeometry(1080f, 800f, 1f, 0f, 1080f)
+
+        val key2 = keyboardView.keyAtlas.keys[1]
+        keyboardView.setShiftState(1) // TITLECASE
+        keyboardView.updateCandidates(listOf("saya", "kamu"), isIdlePrediction = true)
+
+        assertTrue(keyboardView.isUppercase)
+        assertEquals("ABC", keyboardView.getDisplayLabel(key2))
+    }
+
+    @Test
+    fun testCapsLockUnlockClearsDoubleTapTimer() {
+        val shift = ShiftController()
+        shift.onShiftFlickUp()
+        assertTrue(shift.isCapsLocked())
+        assertEquals(ShiftMode.UPPERCASE, shift.currentMode)
+
+        // Unlock -> LOWERCASE
+        assertEquals(ShiftMode.LOWERCASE, shift.onShiftTap(1000L))
+        assertFalse(shift.isCapsLocked())
+
+        // Rapid follow-up tap (150ms later) must enter TITLECASE, not re-lock Caps Lock
+        assertEquals(ShiftMode.TITLECASE, shift.onShiftTap(1150L))
+        assertFalse(shift.isCapsLocked())
+    }
+
+    @Test
+    fun testPage1ReloadPreservesPage0DigitValuesForSpatialScorer() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val keyboardView = T9KeyboardView(context, null)
+        keyboardView.layout(0, 0, 1080, 780)
+        keyboardView.keyAtlas.updatePageLayout(KeyboardPage.PAGE_1_NUM_SYM)
+        keyboardView.reloadLayoutConfiguration()
+
+        assertEquals(1, keyboardView.keyAtlas.keys[0].digitValue)
+        assertEquals(2, keyboardView.keyAtlas.keys[1].digitValue)
+        assertEquals(9, keyboardView.keyAtlas.keys[10].digitValue)
+        assertEquals(0, keyboardView.keyAtlas.keys[14].digitValue)
+    }
+
+    @Test
+    fun testNonPage0PageSwitchLongPressDoesNotLaunchSettings() {
+        val controller = Robolectric.buildService(OpenT9InputMethodService::class.java).create()
+        val service = controller.get()
+        val view = service.onCreateInputView() as T9KeyboardView
+        view.layout(0, 0, 1080, 780)
+        view.keyAtlas.updatePageLayout(KeyboardPage.PAGE_2_EXT_SYM)
+
+        val page2Abc = view.keyAtlas.page2Keys.first { it.primaryLabel == "ABC" }
+        val handleLongPressMethod = OpenT9InputMethodService::class.java.getDeclaredMethod("handleKeyLongPress", KeyInfo::class.java).apply {
+            isAccessible = true
+        }
+        handleLongPressMethod.invoke(service, page2Abc)
+
+        val nextIntent = org.robolectric.shadows.ShadowApplication.getInstance().nextStartedActivity
+        assertNull("Long-press on Page 2 ABC must not launch SettingsActivity", nextIntent)
+    }
 }

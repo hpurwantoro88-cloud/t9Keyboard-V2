@@ -13,13 +13,17 @@ object EmojiActionDispatcher {
         emoji: String,
         ic: InputConnection?,
         hasActiveComposing: Boolean,
-        onCommitActiveCandidate: (Boolean) -> Unit
+        onCommitActiveCandidate: (Boolean) -> Unit,
+        onResetLastSpaceTime: () -> Unit = {},
+        onUpdateAutoCaps: () -> Unit = {}
     ) {
         if (ic != null) {
             if (hasActiveComposing) {
                 onCommitActiveCandidate(false)
             }
             ic.commitText(emoji, 1)
+            onResetLastSpaceTime()
+            onUpdateAutoCaps()
         }
     }
 
@@ -30,7 +34,14 @@ object EmojiActionDispatcher {
         hasActiveComposing: Boolean,
         onSwitchToPage: (KeyboardPage) -> Unit,
         onCommitActiveCandidate: (Boolean) -> Unit,
-        onDeleteTap: (InputConnection) -> Unit
+        onDeleteTap: (InputConnection) -> Unit,
+        onSpaceTap: (InputConnection) -> Unit = { inputConn ->
+            if (hasActiveComposing) {
+                onCommitActiveCandidate(true)
+            } else {
+                inputConn.commitText(" ", 1)
+            }
+        }
     ) {
         when (controlIndex) {
             0 -> {
@@ -43,11 +54,7 @@ object EmojiActionDispatcher {
             }
             2 -> {
                 if (ic != null) {
-                    if (hasActiveComposing) {
-                        onCommitActiveCandidate(true)
-                    } else {
-                        ic.commitText(" ", 1)
-                    }
+                    onSpaceTap(ic)
                 }
             }
             3 -> {

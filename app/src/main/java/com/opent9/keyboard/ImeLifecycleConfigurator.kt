@@ -19,7 +19,8 @@ object ImeLifecycleConfigurator {
         getKeyboardView: () -> T9KeyboardView?,
         isPasswordMode: () -> Boolean,
         getCurrentEditorInfo: () -> EditorInfo?,
-        onAutoCapsChanged: () -> Unit
+        onAutoCapsChanged: () -> Unit,
+        onInputModeChanged: (Boolean) -> Unit = {}
     ) {
         settingsObserver.onLayoutConfigChanged = {
             val view = getKeyboardView()
@@ -41,6 +42,7 @@ object ImeLifecycleConfigurator {
         }
 
         settingsObserver.onInputModeConfigChanged = { isT9 ->
+            onInputModeChanged(isT9)
             val view = getKeyboardView()
             if (view != null && !isPasswordMode()) {
                 view.post {

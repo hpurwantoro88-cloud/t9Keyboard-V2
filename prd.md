@@ -157,7 +157,7 @@ Activated via Flick Down on `[ EN / ID ]`. Direct in-canvas rendering (`EmojiPag
 ```
 
 - **Categories (10 Tabs):** Recents, Smileys, People, Animals, Food, Activities, Travel, Objects, Symbols, Flags (`EmojiAtlas`).
-- **Interactions:** Vertical scroll inside grid; horizontal swipe left/right switches category tabs; long-press on `⌫ DEL` triggers repeat delete.
+- **Interactions:** Vertical scroll inside grid; horizontal swipe left/right switches category tabs; long-press on `⌫ DEL` triggers accelerated repeat delete (whole-word after 1200ms) with `UP`/`LEFT`/`DOWN` flick support; `␣ Space` tap supports double-space period & auto-caps.
 - **Pending Gaps:** `recentEmojis` (28 items) is currently in-memory only (not persisted), Fitzpatrick skin-tone long-press modifier strip is not yet implemented, and `EmojiCompat` / `Paint.hasGlyph()` filtering is not yet applied.
 
 ---
@@ -326,6 +326,7 @@ t9Keyboard-V2/
 - **Prediction Phase 2:** T9-digit-indexed minimal DAFSA (`OPENT9D2`, naturally 48-byte/16-byte aligned, quantized `log_freq`, `LEX_FLAG_SLANG`, cached depth `<= 6` prefix completions, `Word` display forms with apostrophes/hyphens), `DynamicStore` canonical normalization, removal of Kotlin hardcoded homograph promotions (`homographPromotions` / `promoteCandidate`), and character-bigram fallback tables in `SuggestionGuard`.
 - **Prediction Phase 3:** Next-Word Prediction (`OPENT9N1` `mmap` bigram tables + `DynamicStore` personal user bigrams), `NgramEngine`, `PredictionContextHelper`, Idle NWP suggestion strip (`isIdlePrediction` non-highlighted chips; Spacebar preserved for normal spacing), and contextual T9 disambiguation (`setContextWord`).
 - **Prediction Phase 4:** Bilingual code-switching (`bilingual_prediction` preference + `DawgEngine` `primary`/`secondary` coordinator with `SECONDARY_LANG_PENALTY`) and sentence-level regression + p99 latency benchmark (`test_native_core`).
+- **Button & Gesture Consistency Hardening:** Incognito/password isolation in `MultiTapController`, preserved session `isT9Mode` and password/numeric guards across page switches, `FlickDisambiguator.isLongPressSupported` scoping (settings long-press restricted to Page 0 Key 12 `?123`), long-press vs flick & space-scrubbing guards in `TouchGestureTracker`, multi-tap commit unification on flick/long-press/repeat-delete, Emoji `DEL`/`SPACE` behavioural parity, Idle NWP `TITLECASE` key label fix, One-Handed Page 0 gutter hit-testing guard, and preserved Page 0 `digitValue` metadata on Page 1 reload.
 
 ### Pending / Known Gaps
 1. **User Dictionary Editor:** C++ `serializeAllWords()` / `addWord()` lack JNI bindings and Settings UI.

@@ -661,4 +661,153 @@ class TouchGestureTrackerTest {
         assertEquals(KeyType.SPACE_0, flickedKey?.type)
         assertEquals(FlickDirection.DOWN, flickedDirection)
     }
+
+    @Test
+    fun testKeysWithoutLongPressDoNotFireLongPressAndStillTap() {
+        val atlas = KeyAtlas()
+        atlas.computeGeometry(1080f, 780f, 3.0f)
+        atlas.updatePageLayout(KeyboardPage.PAGE_2_EXT_SYM)
+
+        var longPressedKey: KeyInfo? = null
+        var tappedKey: KeyInfo? = null
+        val listener = object : TouchGestureListener {
+            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) { tappedKey = key }
+            override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) {}
+            override fun onKeyLongPress(key: KeyInfo) { longPressedKey = key }
+            override fun onSpaceScrub(steps: Int) {}
+            override fun onPillTap() {}
+            override fun onCandidateTap(index: Int) {}
+            override fun onStripScroll(newScrollOffset: Float) {}
+            override fun onTouchStateChanged(activeKeyId: Int?) {}
+        }
+        val tracker = TouchGestureTracker(atlas, listener)
+
+        val atKey = atlas.page2Keys.first { it.primaryLabel == "@" }
+        val t0 = 1000L
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, atKey.centerX, atKey.centerY, 0)) { null }
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertNull("DIRECT_SYM key must not trigger onKeyLongPress", longPressedKey)
+
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 500, MotionEvent.ACTION_UP, atKey.centerX, atKey.centerY, 0)) { null }
+        assertEquals(atKey.id, tappedKey?.id)
+    }
+
+    @Test
+    fun testLongPressFollowedByDriftDoesNotTriggerFlick() {
+        val atlas = KeyAtlas()
+        atlas.computeGeometry(1080f, 780f, 3.0f)
+
+        var longPressedKey: KeyInfo? = null
+        var flickedKey: KeyInfo? = null
+        val listener = object : TouchGestureListener {
+            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {}
+            override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) { flickedKey = key }
+            override fun onKeyLongPress(key: KeyInfo) { longPressedKey = key }
+            override fun onSpaceScrub(steps: Int) {}
+            override fun onPillTap() {}
+            override fun onCandidateTap(index: Int) {}
+            override fun onStripScroll(newScrollOffset: Float) {}
+            override fun onTouchStateChanged(activeKeyId: Int?) {}
+        }
+        val tracker = TouchGestureTracker(atlas, listener)
+
+        // Key 0 (PUNCT_1) supports both long-press ('1') and flick (LEFT/RIGHT/DOWN)
+        val key0 = atlas.keys[0]
+        val t0 = 1000L
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, key0.centerX, key0.centerY, 0)) { null }
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(450, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(0, longPressedKey?.id)
+
+        // Drift right past flick threshold after long press -> must NOT also trigger flick
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 460, MotionEvent.ACTION_MOVE, key0.centerX + 60f, key0.centerY, 0)) { null }
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 480, MotionEvent.ACTION_UP, key0.centerX + 60f, key0.centerY, 0)) { null }
+        assertNull("Flick must not fire after long-press already triggered", flickedKey)
+    }
+
+    @Test
+    fun testPage1OperatorHoldStillTriggersTap() {
+        val atlas = KeyAtlas()
+        atlas.computeGeometry(1080f, 780f, 3.0f)
+        atlas.updatePageLayout(KeyboardPage.PAGE_1_NUM_SYM)
+
+        var tappedKey: KeyInfo? = null
+        val listener = object : TouchGestureListener {
+            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) { tappedKey = key }
+            override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) {}
+            override fun onKeyLongPress(key: KeyInfo) {}
+            override fun onSpaceScrub(steps: Int) {}
+            override fun onPillTap() {}
+            override fun onCandidateTap(index: Int) {}
+            override fun onStripScroll(newScrollOffset: Float) {}
+            override fun onTouchStateChanged(activeKeyId: Int?) {}
+        }
+        val tracker = TouchGestureTracker(atlas, listener)
+
+        val opX = atlas.page1ScrollContainerBounds.centerX()
+        val opY = atlas.page1ScrollContainerBounds.top + 20f
+        val t0 = 1000L
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, opX, opY, 0)) { null }
+        // Hold > 350ms without dragging
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 500, MotionEvent.ACTION_UP, opX, opY, 0)) { null }
+        assertEquals("+", tappedKey?.primaryLabel)
+    }
+
+    @Test
+    fun testOneHandedModeGutterTouchReturnsNullOnPage0() {
+        val atlas = KeyAtlas()
+        // Left-handed mode: 85% width (0..918px), gutter is 918..1080px
+        atlas.computeGeometry(1080f, 780f, 3.0f, offsetX = 0f, contentWidth = 918f)
+        assertNull("Touch in empty one-handed gutter must return null", atlas.findKeyAt(1040f, 300f))
+        assertNotNull("Touch inside content area must still hit key", atlas.findKeyAt(850f, 300f))
+    }
+
+    @Test
+    fun testMultiTouchStripThenKeypadDoesNotDropKeypadTap() {
+        val atlas = KeyAtlas()
+        atlas.computeGeometry(1080f, 780f, 3.0f)
+
+        var tappedKey: KeyInfo? = null
+        val listener = object : TouchGestureListener {
+            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) { tappedKey = key }
+            override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) {}
+            override fun onKeyLongPress(key: KeyInfo) {}
+            override fun onSpaceScrub(steps: Int) {}
+            override fun onPillTap() {}
+            override fun onCandidateTap(index: Int) {}
+            override fun onStripScroll(newScrollOffset: Float) {}
+            override fun onTouchStateChanged(activeKeyId: Int?) {}
+        }
+        val tracker = TouchGestureTracker(atlas, listener)
+
+        val key2 = atlas.keys[1]
+        val t0 = 1000L
+        // Pointer 0 touches strip
+        val downStrip = MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, 300f, 50f, 0)
+        tracker.onTouchEvent(downStrip) { 0 }
+
+        // Pointer 1 touches key 2 on keypad
+        val props = arrayOf(
+            MotionEvent.PointerProperties().apply { id = 0 },
+            MotionEvent.PointerProperties().apply { id = 1 }
+        )
+        val coords = arrayOf(
+            MotionEvent.PointerCoords().apply { x = 300f; y = 50f },
+            MotionEvent.PointerCoords().apply { x = key2.centerX; y = key2.centerY }
+        )
+        val pointerDown = MotionEvent.obtain(
+            t0, t0 + 20,
+            MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            2, props, coords, 0, 0, 1f, 1f, 0, 0, 0, 0
+        )
+        tracker.onTouchEvent(pointerDown) { null }
+
+        val pointerUp = MotionEvent.obtain(
+            t0, t0 + 40,
+            MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            2, props, coords, 0, 0, 1f, 1f, 0, 0, 0, 0
+        )
+        tracker.onTouchEvent(pointerUp) { null }
+
+        assertEquals(key2.id, tappedKey?.id)
+    }
 }

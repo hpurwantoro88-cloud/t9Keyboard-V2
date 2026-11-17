@@ -56,14 +56,12 @@ class SymbolPagesGestureTracker(
         curY: Float,
         dy: Float,
         distSq: Float,
-        elapsed: Long,
         touchSlopPx: Float,
         flickDistanceMinPx: Float,
-        longPressTimeoutMs: Long,
         keyAtlas: KeyAtlas
     ): Boolean {
         if (!isPage1ColumnTouch) return false
-        if (distSq < touchSlopPx * touchSlopPx && elapsed < longPressTimeoutMs) {
+        if (distSq < touchSlopPx * touchSlopPx) {
             val opIdx = keyAtlas.findPage1OperatorIndex(curY, page1ColumnScrollOffset)
             if (opIdx != null && opIdx in keyAtlas.page1OperatorKeys.indices) {
                 listener.onKeyTap(keyAtlas.page1OperatorKeys[opIdx], curX, curY)
