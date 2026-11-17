@@ -1,7 +1,7 @@
 # Product Requirements Document (PRD): OpenT9 Core Native Keyboard (v3.0)
 
 **Document Identifier:** `prd.md`  
-**Package Identifier:** `com.opent9.keyboard` (`versionCode = 2`, `versionName = "3.0.1"`)  
+**Package Identifier:** `com.opent9.keyboard` (`versionCode = 2`, `versionName = "3.0.2"`)  
 **Architecture Class:** Native Hybrid Systems Architecture (Thin Kotlin IME Wrapper + C++20 Core via NDK + Zero-Allocation Hardware Canvas)  
 **Target Benchmarks:** Microsoft SwiftKey, Gboard (3×4 Mode), Samsung Keyboard (3×4 Mode)
 
