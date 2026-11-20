@@ -1214,14 +1214,14 @@ class TypingEngineIntegrationTest {
             isAccessible = true
         }
 
-        // User selects candidate 1 ("home") from suggestion list 3 times
+        // User explicitly selects candidate 1 ("home") from suggestion list 3 times (each explicit pick records weight=3)
         for (i in 1..3) {
             digitsField.set(service, arrayListOf(4, 6, 6, 3))
             candidatesField.set(service, listOf("good", "home", "gone"))
             commitIndexMethod.invoke(service, 1)
         }
 
-        assertEquals("home must have usage count 3", 3, com.opent9.keyboard.jni.NativeEngineBridge.getWordUsageCount("home"))
+        assertEquals("home must have weighted usage count 9 after 3 explicit picks", 9, com.opent9.keyboard.jni.NativeEngineBridge.getWordUsageCount("home"))
 
         val updateMethod = OpenT9InputMethodService::class.java.getDeclaredMethod("updateCandidatesFromNative", InputConnection::class.java, String::class.java).apply {
             isAccessible = true
@@ -1275,14 +1275,14 @@ class TypingEngineIntegrationTest {
             isAccessible = true
         }
 
-        // User selects candidate 1 ("sama") from suggestion list 3 times
+        // User explicitly selects candidate 1 ("sama") from suggestion list 3 times (each explicit pick records weight=3)
         for (i in 1..3) {
             digitsField.set(service, arrayListOf(7, 2, 6, 2))
             candidatesField.set(service, listOf("sana", "sama", "rama"))
             commitIndexMethod.invoke(service, 1)
         }
 
-        assertEquals("sama must have usage count 3", 3, com.opent9.keyboard.jni.NativeEngineBridge.getWordUsageCount("sama"))
+        assertEquals("sama must have weighted usage count 9 after 3 explicit picks", 9, com.opent9.keyboard.jni.NativeEngineBridge.getWordUsageCount("sama"))
 
         val updateMethod = OpenT9InputMethodService::class.java.getDeclaredMethod("updateCandidatesFromNative", InputConnection::class.java, String::class.java).apply {
             isAccessible = true
@@ -1339,12 +1339,12 @@ class TypingEngineIntegrationTest {
         }
         val guard = guardField.get(service) as com.opent9.keyboard.prediction.SuggestionGuard
 
-        // 1. Picking "sama" once increments native usage count without Kotlin SharedPreferences override
+        // 1. Explicitly picking candidate index 1 ("sama") records weighted usage (weight=3) without Kotlin SharedPreferences override
         com.opent9.keyboard.jni.NativeEngineBridge.switchLanguage("ID")
         digitsField.set(service, arrayListOf(7, 2, 6, 2))
         candidatesField.set(service, listOf("sana", "sama", "rama"))
         commitIndexMethod.invoke(service, 1)
-        assertEquals(1, com.opent9.keyboard.jni.NativeEngineBridge.getWordUsageCount("sama"))
+        assertEquals(3, com.opent9.keyboard.jni.NativeEngineBridge.getWordUsageCount("sama"))
 
         digitsField.set(service, arrayListOf(7, 2, 6, 2))
         guard.recordValidCandidates(listOf("sana", "sama", "rama"), listOf(7, 2, 6, 2))

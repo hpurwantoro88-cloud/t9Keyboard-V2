@@ -97,11 +97,12 @@ class T9ComposingCoordinator(
         if (index in candidates.indices) {
             val word = applyShiftFormatting(candidates[index])
             val addSpace = getSettingsObserver().isAutoSpaceEnabled()
-            commitWord(word, addSpace = addSpace)
+            val usageWeight = if (index > 0) 3 else 1
+            commitWord(word, addSpace = addSpace, usageWeight = usageWeight)
         }
     }
 
-    fun commitWord(word: String, addSpace: Boolean) {
+    fun commitWord(word: String, addSpace: Boolean, usageWeight: Int = 1) {
         val ic = getInputConnection() ?: return
         val digitsSnapshot = ArrayList(currentComposingDigits)
 
@@ -110,7 +111,7 @@ class T9ComposingCoordinator(
         ic.commitText(textToCommit, 1)
 
         setLastSpaceTapTime(if (addSpace) System.currentTimeMillis() else 0L)
-        finishWordCommit(ic, word, activeContextPrevWord, addSpace, digitsSnapshot)
+        finishWordCommit(ic, word, activeContextPrevWord, addSpace, digitsSnapshot, usageWeight)
     }
 
     private fun finishWordCommit(
@@ -118,10 +119,11 @@ class T9ComposingCoordinator(
         word: String,
         prevWord: String?,
         addSpace: Boolean,
-        digitsSnapshot: List<Int>
+        digitsSnapshot: List<Int>,
+        usageWeight: Int = 1
     ) {
         getDeleteController().recordCommit(word, digitsSnapshot)
-        getLearnedWordsRepository().recordWordUsage(word, isIncognito())
+        getLearnedWordsRepository().recordWordUsage(word, isIncognito(), usageWeight)
         getLearnedWordsRepository().recordBigramUsage(prevWord, word, isIncognito())
 
         val shiftController = getShiftController()

@@ -4,6 +4,8 @@
 #include <chrono>
 #include <cassert>
 #include <cstring>
+#include <algorithm>
+#include <ctime>
 #include "../app/src/main/cpp/include/dawg_engine.hpp"
 #include "../app/src/main/cpp/include/spatial_scoring.hpp"
 #include "../app/src/main/cpp/include/lexicon_manager.hpp"
@@ -787,6 +789,65 @@ int main() {
     assert(top3Acc >= 95.0 && "Sentence Top-3 accuracy must be >= 95%");
     assert(p99Us < 500.0 && "p99 stroke latency must stay < 500 µs (0.5 ms)");
     std::cout << "[PASS] Test 18: Sentence regression & p99 latency (< 0.5 ms) verified" << std::endl;
+
+    // ------------------------------------------------------------------------
+    // Test 19: Short-Prefix Length Guard, Non-Terminal Dynamic Isolation & Soft Recency
+    // ------------------------------------------------------------------------
+    // 19A: Short-Prefix Length Guard (pressing 2 or 3 digits must not surface 8-12 char words)
+    assert(lexMgr.switchLanguage("ID"));
+    engine.setDynamicStore(nullptr);
+    engine.setNgramEngine(nullptr);
+    engine.setLexiconData(lexMgr.getActiveData(), lexMgr.getActiveSize());
+    engine.setContextWord(nullptr);
+
+    engine.reset();
+    engine.pushStroke(7, 0.0f, 0.0f, scorer, g_config);
+    engine.pushStroke(3, 0.0f, 0.0f, scorer, g_config);
+    engine.pushStroke(6, 0.0f, 0.0f, scorer, g_config); // 3 digits (7-3-6)
+    assert(engine.getCandidateCount() > 0);
+    for (uint8_t i = 0; i < engine.getCandidateCount(); ++i) {
+        assert(engine.getCandidates()[i].length <= 7 && "3-digit prefix must bound completions to <= 7 chars");
+    }
+    assert(engine.getCandidates()[0].length == 3 && "Top candidate for 3-digit prefix must be exact 3-char word");
+
+    // 19B: Non-Terminal DynamicStore Isolation (long learned word must not hijack 3-digit prefix)
+    DynamicStore test19Store;
+    engine.setDynamicStore(&test19Store);
+    test19Store.recordUsage("pembelajaran", usageTime, 5); // 12-char word starting with 7-3-6
+    engine.reset();
+    engine.pushStroke(7, 0.0f, 0.0f, scorer, g_config);
+    engine.pushStroke(3, 0.0f, 0.0f, scorer, g_config);
+    engine.pushStroke(6, 0.0f, 0.0f, scorer, g_config);
+    assert(engine.getCandidates()[0].length == 3 && "Long learned word must not hijack 3-digit exact terminal");
+    for (uint8_t i = 0; i < engine.getCandidateCount(); ++i) {
+        assert(std::strcmp(engine.getCandidates()[i].word, "pembelajaran") != 0 &&
+               "12-char learned word must not leak into 3-digit prefix candidates");
+    }
+
+    // 19C: Soft Session Recency vs Bigram Context Override + Weighted Explicit Pick
+    assert(lexMgr.switchLanguage("EN"));
+    assert(primaryNg.setNgramData(lexMgr.getActiveNgramData(), lexMgr.getActiveNgramSize()));
+    engine.setNgramEngine(&primaryNg);
+    engine.setLexiconData(lexMgr.getActiveData(), lexMgr.getActiveSize());
+    test19Store.reset();
+
+    // Explicit pick of "were" (weight = 3) promotes "were" on 9-3-7-3 without context
+    test19Store.recordUsage("were", usageTime, 3);
+    assert(test19Store.getHitCount("were") == 3);
+    engine.setContextWord(nullptr);
+    engine.reset();
+    for (int d : {9, 3, 7, 3}) engine.pushStroke(d, 0.0f, 0.0f, scorer, g_config);
+    assert(std::strcmp(engine.getCandidates()[0].word, "were") == 0);
+
+    // Strong bigram context ("yes" -> "we're") still overrides soft recency + user hits
+    engine.setContextWord("yes");
+    engine.reset();
+    for (int d : {9, 3, 7, 3}) engine.pushStroke(d, 0.0f, 0.0f, scorer, g_config);
+    assert(std::strcmp(engine.getCandidates()[0].word, "we're") == 0 &&
+           "Bigram context 'yes we're' must override soft recency of 'were'");
+    engine.setContextWord(nullptr);
+
+    std::cout << "[PASS] Test 19: Short-prefix length guard, non-terminal DynamicStore isolation, weighted explicit pick, and context vs soft-recency balance verified" << std::endl;
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "ALL OPENT9 CORE C++ TESTS PASSED!" << std::endl;

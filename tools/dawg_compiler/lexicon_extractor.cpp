@@ -1,9 +1,11 @@
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
+#include "../../app/src/main/cpp/include/dawg_engine.hpp"
 
 #pragma pack(push, 1)
 struct LegacyDawgHeader {
@@ -51,7 +53,7 @@ static void dumpDfs(
 
 int main(int argc, char** argv) {
     if (argc != 3) {
-        std::cerr << "Usage: lexicon_extractor <input_v1.dawg> <output.tsv>\n";
+        std::cerr << "Usage: lexicon_extractor <input.dawg> <output.tsv>\n";
         return 1;
     }
 
@@ -61,10 +63,52 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    char magic[8];
+    in.read(magic, 8);
+    in.seekg(0, std::ios::beg);
+
+    std::ofstream out(argv[2], std::ios::trunc);
+    if (!out.is_open()) {
+        std::cerr << "Failed to open output: " << argv[2] << "\n";
+        return 1;
+    }
+
+    if (std::memcmp(magic, "OPENT9D2", 8) == 0) {
+        in.seekg(0, std::ios::end);
+        size_t sz = static_cast<size_t>(in.tellg());
+        in.seekg(0, std::ios::beg);
+        std::vector<uint8_t> buf(sz);
+        in.read(reinterpret_cast<char*>(buf.data()), static_cast<std::streamsize>(sz));
+        const auto* hdr = reinterpret_cast<const DawgHeaderV2*>(buf.data());
+        size_t wordsOffset = sizeof(DawgHeaderV2)
+            + static_cast<size_t>(hdr->node_count) * sizeof(DigitNodeV2)
+            + static_cast<size_t>(hdr->edge_count) * sizeof(DigitEdgeV2);
+        const auto* words = reinterpret_cast<const LexiconWordV2*>(buf.data() + wordsOffset);
+        size_t strOffset = wordsOffset
+            + static_cast<size_t>(hdr->word_count) * sizeof(LexiconWordV2)
+            + static_cast<size_t>(hdr->bucket_count) * sizeof(uint32_t);
+        const char* strPool = reinterpret_cast<const char*>(buf.data() + strOffset);
+
+        for (uint32_t wid = 0; wid < hdr->word_count; ++wid) {
+            const LexiconWordV2& lw = words[wid];
+            const char* w = strPool + lw.str_offset;
+            double lf = static_cast<double>(lw.log_freq) / static_cast<double>(LOG_FREQ_SCALE);
+            uint64_t approxFreq = static_cast<uint64_t>(std::max<long long>(1LL, std::llround(std::pow(10.0, lf) - 1.0)));
+            std::string flagStr;
+            if (lw.flags & LEX_FLAG_SLANG) flagStr += "slang ";
+            if (lw.flags & LEX_FLAG_CONTRACTION) flagStr += "contraction";
+            out << w << '\t' << approxFreq;
+            if (!flagStr.empty()) out << '\t' << flagStr;
+            out << '\n';
+        }
+        std::cout << "Extracted OPENT9D2 (" << hdr->word_count << " words) from " << argv[1] << " -> " << argv[2] << "\n";
+        return 0;
+    }
+
     LegacyDawgHeader hdr;
     in.read(reinterpret_cast<char*>(&hdr), sizeof(hdr));
     if (!in || std::memcmp(hdr.magic, "OPENT9D1", 8) != 0 || hdr.version != 1) {
-        std::cerr << "Invalid OPENT9D1 header in " << argv[1] << "\n";
+        std::cerr << "Invalid DAWG header in " << argv[1] << "\n";
         return 1;
     }
 
@@ -72,12 +116,6 @@ int main(int argc, char** argv) {
     in.read(reinterpret_cast<char*>(edges.data()), static_cast<std::streamsize>(hdr.edge_count * sizeof(LegacyDawgEdge)));
     if (!in) {
         std::cerr << "Failed to read edges from " << argv[1] << "\n";
-        return 1;
-    }
-
-    std::ofstream out(argv[2], std::ios::trunc);
-    if (!out.is_open()) {
-        std::cerr << "Failed to open output: " << argv[2] << "\n";
         return 1;
     }
 

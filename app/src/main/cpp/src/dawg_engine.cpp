@@ -13,9 +13,42 @@ constexpr float WEIGHT_CTX = 1.0f;
 constexpr float WEIGHT_SPATIAL = 0.65f;
 constexpr float EDIT_PENALTY_PER_SWITCH = 1.35f;
 constexpr float SLANG_LEXICON_BOOST = 0.35f;
+constexpr float SESSION_RECENCY_MAX_BOOST = 0.35f;
+constexpr double SESSION_RECENCY_HALF_LIFE_SEC = 21600.0; // 6 hours fast session recency
 constexpr uint8_t MAX_SPATIAL_EDITS = 1;
 constexpr size_t MAX_POOL_SIZE = MAX_BEAM_SIZE * 4;
 constexpr size_t MAX_TERMINAL_POOL = MAX_BEAM_SIZE * 4;
+constexpr size_t MAX_COMPLETION_POOL = MAX_BEAM_SIZE * 2;
+
+inline int maxExtraDeltaForStrokeLen(int strokeLen) {
+    if (strokeLen <= 1) return 2;
+    if (strokeLen == 2) return 3;
+    if (strokeLen == 3) return 4;
+    return 7;
+}
+
+inline float computeCompletionLengthPenalty(int delta, int strokeLen) {
+    if (delta <= 0) return 0.0f;
+    int safeLen = std::max(1, strokeLen);
+    float d = static_cast<float>(delta);
+    float ratio = d / static_cast<float>(safeLen);
+    float ratioWeight = (safeLen <= 2) ? 1.15f : (safeLen == 3 ? 0.85f : 0.25f);
+    float linearWeight = (safeLen <= 2) ? 0.22f : (safeLen == 3 ? 0.16f : 0.06f);
+    return (ratioWeight * ratio) + (linearWeight * d);
+}
+
+inline float computeSessionRecencyBonus(uint64_t nowSec, uint64_t lastUsedSec, uint32_t halfLifeDays) {
+    if (halfLifeDays == 0 || lastUsedSec == 0) return 0.0f;
+    if (nowSec <= lastUsedSec) return SESSION_RECENCY_MAX_BOOST;
+    double elapsed = static_cast<double>(nowSec - lastUsedSec);
+    return static_cast<float>(SESSION_RECENCY_MAX_BOOST * std::pow(0.5, elapsed / SESSION_RECENCY_HALF_LIFE_SEC));
+}
+
+inline float normalizeSpatialScore(float spatialScoreSum, int strokeLen) {
+    int safeLen = std::max(1, strokeLen);
+    // Sublinear normalization sqrt(strokeLen) keeps per-key spatial penalty scale stable across word lengths
+    return spatialScoreSum / std::sqrt(static_cast<float>(safeLen));
+}
 
 inline uint32_t approxRawFreq(uint16_t quantizedLogFreq) {
     double lf = static_cast<double>(quantizedLogFreq) / static_cast<double>(LOG_FREQ_SCALE);
@@ -267,6 +300,9 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
     TempBeamNode candidatesPool[MAX_POOL_SIZE];
     size_t poolSize = 0;
 
+    int strokeLen = currentDepth + 1;
+    int maxExtraDelta = maxExtraDeltaForStrokeLen(strokeLen);
+
     auto addTargetNode = [&](uint32_t parentNodeIdx, float prevSpatialSum, uint8_t prevEdits, int maxAllowedHyps) {
         if (parentNodeIdx >= totalNodes) return;
         uint32_t eIdx = nodes[parentNodeIdx].first_child_edge;
@@ -279,8 +315,9 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
                 if (e.target_node >= totalNodes) continue;
 
                 float nextSpatial = prevSpatialSum + hyps[h].log_likelihood;
+                float normSpatial = normalizeSpatialScore(nextSpatial, strokeLen);
                 float maxLf = static_cast<float>(e.max_log_freq) / LOG_FREQ_SCALE;
-                float bScore = (WEIGHT_CORPUS * maxLf) + (WEIGHT_SPATIAL * nextSpatial)
+                float bScore = (WEIGHT_CORPUS * maxLf) + (WEIGHT_SPATIAL * normSpatial)
                              - (EDIT_PENALTY_PER_SWITCH * static_cast<float>(nextEdits));
 
                 bool updated = false;
@@ -340,11 +377,68 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
         char word[MAX_WORD_CHARS];
         uint8_t word_len;
         uint8_t is_terminal;
+        uint8_t edit_count;
         float cand_score;
         uint32_t frequency;
     };
     TempTerminal terminalPool[MAX_TERMINAL_POOL];
     size_t terminalCount = 0;
+
+    struct TempCompletion {
+        char word[MAX_WORD_CHARS];
+        uint8_t word_len;
+        uint8_t edit_count;
+        uint8_t tier; // 0 = near exact-beam (delta <= 2 && edit_count == 0), 1 = mid/neighbor completion
+        float cand_score;
+        uint32_t frequency;
+    };
+    TempCompletion completionPool[MAX_COMPLETION_POOL];
+    size_t completionCount = 0;
+
+    auto addOrUpdateCompletion = [&](const char* wordStr, uint8_t wordLen, uint8_t editCount,
+                                     int lenDelta, float score, uint32_t freq) {
+        if (lenDelta <= 0 || lenDelta > maxExtraDelta) return;
+        uint8_t tier = (editCount == 0 && lenDelta <= 2) ? 0 : 1;
+        for (size_t i = 0; i < completionCount; ++i) {
+            if (equalsCanonical(completionPool[i].word, wordStr)) {
+                if (score > completionPool[i].cand_score) {
+                    completionPool[i].cand_score = score;
+                    completionPool[i].edit_count = std::min(completionPool[i].edit_count, editCount);
+                    completionPool[i].tier = std::min(completionPool[i].tier, tier);
+                    completionPool[i].frequency = std::max(completionPool[i].frequency, freq);
+                }
+                return;
+            }
+        }
+        if (completionCount < MAX_COMPLETION_POOL) {
+            TempCompletion& tc = completionPool[completionCount++];
+            std::memcpy(tc.word, wordStr, wordLen + 1);
+            tc.word_len = wordLen;
+            tc.edit_count = editCount;
+            tc.tier = tier;
+            tc.cand_score = score;
+            tc.frequency = freq;
+        } else {
+            size_t worstIdx = 0;
+            for (size_t i = 1; i < completionCount; ++i) {
+                if (completionPool[i].tier > completionPool[worstIdx].tier ||
+                    (completionPool[i].tier == completionPool[worstIdx].tier &&
+                     completionPool[i].cand_score < completionPool[worstIdx].cand_score)) {
+                    worstIdx = i;
+                }
+            }
+            if (tier < completionPool[worstIdx].tier ||
+                (tier == completionPool[worstIdx].tier && score > completionPool[worstIdx].cand_score)) {
+                TempCompletion& tc = completionPool[worstIdx];
+                std::memcpy(tc.word, wordStr, wordLen + 1);
+                tc.word_len = wordLen;
+                tc.edit_count = editCount;
+                tc.tier = tier;
+                tc.cand_score = score;
+                tc.frequency = freq;
+            }
+        }
+    };
 
     bool hasStaticCtx = (ngramEngine && activeContextBucket != NgramEngine::INVALID_BUCKET);
     bool hasDynamicCtx = (dynamicStore && activeContextWord[0] != '\0');
@@ -352,6 +446,7 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
     for (uint8_t b = 0; b < nextState.beam_count; ++b) {
         const BeamPath& bp = nextState.beam[b];
         const DigitNodeV2& dn = nodes[bp.node_index];
+        float normSpatial = normalizeSpatialScore(bp.spatial_score_sum, strokeLen);
         uint16_t takeCount = static_cast<uint16_t>(std::min<uint32_t>(dn.terminal_count, MAX_CANDIDATES * 2));
         for (uint16_t t = 0; t < takeCount; ++t) {
             uint32_t bIdx = dn.terminal_offset + t;
@@ -377,7 +472,7 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
             bool isSlang = (lw.flags & LEX_FLAG_SLANG) != 0;
             float score = computeScoreFromLogFreq(
                 corpusLog, 0, 1.0f, config.slang_boost_enabled != 0, isSlang,
-                ctxBoost, bp.spatial_score_sum, bp.edit_count
+                ctxBoost, normSpatial, bp.edit_count
             );
 
             bool updated = false;
@@ -386,6 +481,7 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
                     if (score > terminalPool[i].cand_score) {
                         terminalPool[i].cand_score = score;
                     }
+                    terminalPool[i].edit_count = std::min(terminalPool[i].edit_count, bp.edit_count);
                     updated = true;
                     break;
                 }
@@ -395,11 +491,15 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
                 std::memcpy(tt.word, wordStr, lw.length + 1);
                 tt.word_len = lw.length;
                 tt.is_terminal = 1;
+                tt.edit_count = bp.edit_count;
                 tt.cand_score = score;
                 tt.frequency = approxRawFreq(lw.log_freq);
             }
         }
     }
+
+    DynamicStore::DynamicMatch dynamicMatches[MAX_CANDIDATES];
+    int dynCount = 0;
 
     if (dynamicStore) {
         int strokeDigits[MAX_STROKE_DEPTH];
@@ -407,51 +507,68 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
             strokeDigits[d] = history[d].digit;
         }
         strokeDigits[currentDepth] = digit;
-        int strokeLen = currentDepth + 1;
 
-        DynamicStore::DynamicMatch dynamicMatches[MAX_CANDIDATES];
-        int dynCount = dynamicStore->findMatchingWords(
+        dynCount = dynamicStore->findMatchingWords(
             strokeDigits, strokeLen, nowSec, config.decay_half_life_days, dynamicMatches, MAX_CANDIDATES
         );
 
         float primarySpatialSum = (currentDepth > 0 && history[currentDepth - 1].beam_count > 0)
             ? (history[currentDepth - 1].beam[0].spatial_score_sum + hyps[0].log_likelihood)
             : hyps[0].log_likelihood;
+        float normPrimarySpatial = normalizeSpatialScore(primarySpatialSum, strokeLen);
 
         for (int d = 0; d < dynCount; ++d) {
             const auto& dm = dynamicMatches[d];
             if (dynamicStore->isDeleted(dm.word)) continue;
 
-            bool foundInTerminal = false;
-            for (size_t t = 0; t < terminalCount; ++t) {
-                if (equalsCanonical(terminalPool[t].word, dm.word)) {
-                    foundInTerminal = true;
-                    float slangScale = config.slang_boost_enabled ? 1.25f : 1.0f;
-                    terminalPool[t].cand_score += WEIGHT_USER * slangScale
-                        * std::log10(1.0f + static_cast<float>(dm.hit_count)) * dm.decay_factor;
-                    terminalPool[t].frequency = std::max(terminalPool[t].frequency, dm.effective_freq);
-                    break;
+            if (dm.is_terminal) {
+                float recencyBonus = computeSessionRecencyBonus(nowSec, dm.last_used_timestamp, config.decay_half_life_days);
+                bool foundInTerminal = false;
+                for (size_t t = 0; t < terminalCount; ++t) {
+                    if (equalsCanonical(terminalPool[t].word, dm.word)) {
+                        foundInTerminal = true;
+                        float slangScale = config.slang_boost_enabled ? 1.25f : 1.0f;
+                        terminalPool[t].cand_score += WEIGHT_USER * slangScale
+                            * std::log10(1.0f + static_cast<float>(dm.hit_count)) * dm.decay_factor;
+                        if (terminalPool[t].edit_count == 0) {
+                            terminalPool[t].cand_score += recencyBonus;
+                        }
+                        terminalPool[t].frequency = std::max(terminalPool[t].frequency, dm.effective_freq);
+                        break;
+                    }
                 }
-            }
-            if (!foundInTerminal && terminalCount < MAX_TERMINAL_POOL) {
-                float ctxBoost = hasDynamicCtx
-                    ? dynamicStore->getBigramBoost(activeContextWord, dm.word, nowSec, config.decay_half_life_days)
-                    : 0.0f;
+                if (!foundInTerminal && terminalCount < MAX_TERMINAL_POOL) {
+                    float ctxBoost = hasDynamicCtx
+                        ? dynamicStore->getBigramBoost(activeContextWord, dm.word, nowSec, config.decay_half_life_days)
+                        : 0.0f;
 
-                TempTerminal& tt = terminalPool[terminalCount++];
-                std::memcpy(tt.word, dm.word, dm.length + 1);
-                tt.word_len = dm.length;
-                tt.is_terminal = dm.is_terminal ? 1 : 0;
-                tt.frequency = dm.effective_freq;
-                float corpusLog = std::log10(1.0f + static_cast<float>(dm.effective_freq));
-                tt.cand_score = computeScoreFromLogFreq(
-                    corpusLog, dm.hit_count, dm.decay_factor,
-                    config.slang_boost_enabled != 0, false,
-                    ctxBoost, primarySpatialSum, 0
-                );
-                if (!dm.is_terminal) {
-                    float lenDelta = static_cast<float>(dm.length > strokeLen ? (dm.length - strokeLen) : 0);
-                    tt.cand_score -= 0.25f * lenDelta;
+                    TempTerminal& tt = terminalPool[terminalCount++];
+                    std::memcpy(tt.word, dm.word, dm.length + 1);
+                    tt.word_len = dm.length;
+                    tt.is_terminal = 1;
+                    tt.edit_count = 0;
+                    tt.frequency = dm.effective_freq;
+                    float corpusLog = std::log10(1.0f + static_cast<float>(dm.effective_freq));
+                    tt.cand_score = computeScoreFromLogFreq(
+                        corpusLog, dm.hit_count, dm.decay_factor,
+                        config.slang_boost_enabled != 0, false,
+                        ctxBoost, normPrimarySpatial, 0
+                    ) + recencyBonus;
+                }
+            } else {
+                // Non-terminal DynamicStore prefix match -> route to completionPool with Exact-Length Guard
+                int lenDelta = static_cast<int>(dm.length) > strokeLen ? (static_cast<int>(dm.length) - strokeLen) : 1;
+                if (lenDelta <= maxExtraDelta) {
+                    float ctxBoost = hasDynamicCtx
+                        ? dynamicStore->getBigramBoost(activeContextWord, dm.word, nowSec, config.decay_half_life_days)
+                        : 0.0f;
+                    float corpusLog = std::log10(1.0f + static_cast<float>(dm.effective_freq));
+                    float compScore = computeScoreFromLogFreq(
+                        corpusLog, dm.hit_count, dm.decay_factor,
+                        config.slang_boost_enabled != 0, false,
+                        ctxBoost, normPrimarySpatial, 0
+                    ) - computeCompletionLengthPenalty(lenDelta, strokeLen);
+                    addOrUpdateCompletion(dm.word, dm.length, 0, lenDelta, compScore, dm.effective_freq);
                 }
             }
         }
@@ -459,6 +576,12 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
 
     std::sort(terminalPool, terminalPool + terminalCount, [](const TempTerminal& a, const TempTerminal& b) {
         if (a.is_terminal != b.is_terminal) return a.is_terminal > b.is_terminal;
+        // Exact-Digit Priority: exact pressed digits (edit_count == 0) outrank neighbor hypotheses
+        // unless the neighbor candidate has an overwhelming score margin (> 1.40 log-units)
+        if ((a.edit_count == 0) != (b.edit_count == 0)) {
+            if (a.edit_count == 0 && (b.cand_score - a.cand_score) < 1.40f) return true;
+            if (b.edit_count == 0 && (a.cand_score - b.cand_score) < 1.40f) return false;
+        }
         if (a.cand_score != b.cand_score) return a.cand_score > b.cand_score;
         return a.frequency > b.frequency;
     });
@@ -473,18 +596,16 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
         std::memcpy(cw.word, terminalPool[i].word, terminalPool[i].word_len + 1);
     }
 
-    if (candCount < MAX_CANDIDATES && nextState.beam_count > 0) {
-        uint8_t completionStart = candCount;
-        int strokeLen = currentDepth + 1;
-
-        for (uint8_t b = 0; b < nextState.beam_count && candCount < MAX_CANDIDATES; ++b) {
+    if (candCount < MAX_CANDIDATES && (nextState.beam_count > 0 || completionCount > 0)) {
+        for (uint8_t b = 0; b < nextState.beam_count; ++b) {
             const BeamPath& bp = nextState.beam[b];
             const DigitNodeV2& dn = nodes[bp.node_index];
-            float baseOffset = (WEIGHT_SPATIAL * bp.spatial_score_sum)
+            float normSpatial = normalizeSpatialScore(bp.spatial_score_sum, strokeLen);
+            float baseOffset = (WEIGHT_SPATIAL * normSpatial)
                              - (EDIT_PENALTY_PER_SWITCH * static_cast<float>(bp.edit_count));
 
             if (dn.completion_count > 0) {
-                for (uint16_t c = 0; c < dn.completion_count && candCount < MAX_CANDIDATES; ++c) {
+                for (uint16_t c = 0; c < dn.completion_count; ++c) {
                     uint32_t bIdx = dn.completion_offset + c;
                     if (bIdx >= totalBucketWords) break;
                     uint32_t wid = bucketWords[bIdx];
@@ -492,34 +613,70 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
 
                     const LexiconWordV2& lw = words[wid];
                     if (lw.str_offset >= totalStringBytes || lw.length >= MAX_WORD_CHARS) continue;
-                    const char* wordStr = stringPool + lw.str_offset;
+                    int lenDelta = static_cast<int>(lw.length) > strokeLen ? (static_cast<int>(lw.length) - strokeLen) : 1;
+                    if (lenDelta > maxExtraDelta) continue;
 
+                    const char* wordStr = stringPool + lw.str_offset;
                     if (dynamicStore && dynamicStore->isDeleted(wordStr)) continue;
                     if (containsWord(nextState.candidates, candCount, wordStr)) continue;
 
                     float ctxBoost = hasStaticCtx ? ngramEngine->getBigramBoost(activeContextBucket, wid) : 0.0f;
+                    if (hasDynamicCtx) {
+                        ctxBoost += dynamicStore->getBigramBoost(activeContextWord, wordStr, nowSec, config.decay_half_life_days);
+                    }
+                    float userBoost = 0.0f;
+                    for (int d = 0; d < dynCount; ++d) {
+                        if (equalsCanonical(dynamicMatches[d].word, wordStr)) {
+                            float slangScale = config.slang_boost_enabled ? 1.25f : 1.0f;
+                            userBoost = WEIGHT_USER * slangScale
+                                * std::log10(1.0f + static_cast<float>(dynamicMatches[d].hit_count))
+                                * dynamicMatches[d].decay_factor;
+                            break;
+                        }
+                    }
+
                     float corpusLog = static_cast<float>(lw.log_freq) / LOG_FREQ_SCALE;
                     bool isSlang = (lw.flags & LEX_FLAG_SLANG) != 0;
                     float slangBoost = (isSlang && config.slang_boost_enabled) ? SLANG_LEXICON_BOOST : 0.0f;
-                    float lenDelta = static_cast<float>(lw.length > strokeLen ? (lw.length - strokeLen) : 0);
 
-                    CandidateWord& cw = nextState.candidates[candCount++];
-                    cw.length = lw.length;
-                    cw.score = baseOffset + corpusLog + slangBoost + (WEIGHT_CTX * ctxBoost) - (0.08f * lenDelta);
-                    cw.frequency = approxRawFreq(lw.log_freq);
-                    std::memcpy(cw.word, wordStr, lw.length + 1);
+                    float compScore = baseOffset + corpusLog + slangBoost + userBoost
+                                    + (WEIGHT_CTX * ctxBoost)
+                                    - computeCompletionLengthPenalty(lenDelta, strokeLen);
+                    addOrUpdateCompletion(wordStr, lw.length, bp.edit_count, lenDelta, compScore, approxRawFreq(lw.log_freq));
                 }
             } else {
-                collectBestCompletions(bp.node_index, baseOffset, nextState.candidates, candCount, MAX_CANDIDATES);
+                CandidateWord dynamicSubtreeCands[MAX_CANDIDATES];
+                uint8_t subCount = 0;
+                collectBestCompletions(bp.node_index, baseOffset, dynamicSubtreeCands, subCount, static_cast<uint8_t>(MAX_CANDIDATES));
+                for (uint8_t s = 0; s < subCount; ++s) {
+                    const CandidateWord& scw = dynamicSubtreeCands[s];
+                    if (containsWord(nextState.candidates, candCount, scw.word)) continue;
+                    int lenDelta = static_cast<int>(scw.length) > strokeLen ? (static_cast<int>(scw.length) - strokeLen) : 1;
+                    addOrUpdateCompletion(scw.word, scw.length, bp.edit_count, lenDelta, scw.score, scw.frequency);
+                }
             }
         }
 
-        if (candCount > completionStart) {
-            std::sort(nextState.candidates + completionStart, nextState.candidates + candCount,
-                      [](const CandidateWord& a, const CandidateWord& b) {
-                if (a.score != b.score) return a.score > b.score;
+        if (completionCount > 1) {
+            float tierMargin = (strokeLen <= 3) ? 1.10f : 0.0f;
+            std::sort(completionPool, completionPool + completionCount,
+                      [tierMargin](const TempCompletion& a, const TempCompletion& b) {
+                if (tierMargin > 0.0f && a.tier != b.tier) {
+                    if (a.tier == 0 && (b.cand_score - a.cand_score) < tierMargin) return true;
+                    if (b.tier == 0 && (a.cand_score - b.cand_score) < tierMargin) return false;
+                }
+                if (a.cand_score != b.cand_score) return a.cand_score > b.cand_score;
                 return a.frequency > b.frequency;
             });
+        }
+
+        for (size_t i = 0; i < completionCount && candCount < MAX_CANDIDATES; ++i) {
+            if (containsWord(nextState.candidates, candCount, completionPool[i].word)) continue;
+            CandidateWord& cw = nextState.candidates[candCount++];
+            cw.length = completionPool[i].word_len;
+            cw.score = completionPool[i].cand_score;
+            cw.frequency = completionPool[i].frequency;
+            std::memcpy(cw.word, completionPool[i].word, completionPool[i].word_len + 1);
         }
     }
 
@@ -654,9 +811,11 @@ void T9SingleEngine::collectBestCompletions(
     constexpr size_t MAX_QUEUE = 64;
     QueueEntry queue[MAX_QUEUE];
     size_t qSize = 0;
+    int strokeLen = currentDepth + 1;
+    uint8_t maxExtraDepth = static_cast<uint8_t>(maxExtraDeltaForStrokeLen(strokeLen));
 
     auto pushChildren = [&](uint32_t nodeIdx, uint8_t curExtraDepth) {
-        if (curExtraDepth >= 10) return;
+        if (curExtraDepth >= maxExtraDepth) return;
         uint32_t eIdx = nodes[nodeIdx].first_child_edge;
         while (eIdx > 0 && eIdx < totalEdges) {
             const DigitEdgeV2& e = edges[eIdx];
@@ -698,7 +857,7 @@ void T9SingleEngine::collectBestCompletions(
             CandidateWord& cw = outCands[candCount++];
             cw.length = lw.length;
             float corpusLog = static_cast<float>(lw.log_freq) / LOG_FREQ_SCALE;
-            cw.score = baseScoreOffset + corpusLog - (0.08f * static_cast<float>(cur.extra_depth));
+            cw.score = baseScoreOffset + corpusLog - computeCompletionLengthPenalty(cur.extra_depth, strokeLen);
             cw.frequency = approxRawFreq(lw.log_freq);
             std::memcpy(cw.word, wordStr, lw.length + 1);
         }

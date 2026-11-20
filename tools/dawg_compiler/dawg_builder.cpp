@@ -352,17 +352,35 @@ private:
         float score;
     };
 
+    static int maxExtraDeltaForDepth(int baseDepth) {
+        if (baseDepth <= 1) return 2;
+        if (baseDepth == 2) return 3;
+        if (baseDepth == 3) return 4;
+        return 7;
+    }
+
+    static float computeCompletionLengthPenalty(int delta, int baseDepth) {
+        int safeDepth = std::max(1, baseDepth);
+        float d = static_cast<float>(delta);
+        float ratio = d / static_cast<float>(safeDepth);
+        float ratioWeight = (safeDepth <= 2) ? 1.15f : (safeDepth == 3 ? 0.85f : 0.25f);
+        float linearWeight = (safeDepth <= 2) ? 0.22f : (safeDepth == 3 ? 0.16f : 0.06f);
+        return (ratioWeight * ratio) + (linearWeight * d);
+    }
+
     void collectSubtreeWords(TrieNode* node, int baseDepth, const std::vector<LexiconWordV2>& wordTable,
                              std::vector<CompletionCand>& out) {
+        int maxDelta = maxExtraDeltaForDepth(baseDepth);
         for (auto& kv : node->children) {
             TrieNode* child = kv.second;
             int delta = child->depth - baseDepth;
+            if (delta > maxDelta) continue;
             for (uint32_t wid : child->terminalWordIds) {
                 float lf = static_cast<float>(wordTable[wid].log_freq) / LOG_FREQ_SCALE;
-                float s = lf - (0.08f * static_cast<float>(delta));
+                float s = lf - computeCompletionLengthPenalty(delta, baseDepth);
                 out.push_back({wid, s});
             }
-            if (delta < 10) {
+            if (delta < maxDelta) {
                 collectSubtreeWords(child, baseDepth, wordTable, out);
             }
         }

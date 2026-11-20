@@ -314,11 +314,12 @@ bool DynamicStore::addWord(const char* word, uint32_t freq, uint64_t nowSec) {
     return true;
 }
 
-bool DynamicStore::recordUsage(const char* word, uint64_t nowSec) {
+bool DynamicStore::recordUsage(const char* word, uint64_t nowSec, uint32_t weight) {
     if (!word || word[0] == '\0') return false;
     char canonical[MAX_STORE_WORD_LEN];
     toCanonicalWord(word, canonical, MAX_STORE_WORD_LEN);
     if (canonical[0] == '\0') return false;
+    uint32_t safeWeight = std::clamp<uint32_t>(weight, 1, 10);
     {
         std::unique_lock<std::shared_mutex> lock(storeMutex);
         auto it = wordToIndex.find(canonical);
@@ -326,7 +327,7 @@ bool DynamicStore::recordUsage(const char* word, uint64_t nowSec) {
             size_t idx = it->second;
             bool wasDeleted = entries[idx].is_deleted != 0;
             entries[idx].is_deleted = 0;
-            entries[idx].hit_count++;
+            entries[idx].hit_count += safeWeight;
             entries[idx].last_used_timestamp = nowSec;
             if (wasDeleted) {
                 indexEntryLocked(idx);
@@ -335,7 +336,18 @@ bool DynamicStore::recordUsage(const char* word, uint64_t nowSec) {
             return true;
         }
     }
-    return addWord(canonical, 100, nowSec);
+    if (!addWord(canonical, 100, nowSec)) {
+        return false;
+    }
+    if (safeWeight > 1) {
+        std::unique_lock<std::shared_mutex> lock(storeMutex);
+        auto it = wordToIndex.find(canonical);
+        if (it != wordToIndex.end()) {
+            entries[it->second].hit_count += (safeWeight - 1);
+            dirty.store(true, std::memory_order_release);
+        }
+    }
+    return true;
 }
 
 bool DynamicStore::removeWord(const char* word) {

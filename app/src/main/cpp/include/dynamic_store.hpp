@@ -41,7 +41,7 @@ public:
     bool flushIfDirty();
 
     bool addWord(const char* word, uint32_t freq, uint64_t nowSec);
-    bool recordUsage(const char* word, uint64_t nowSec);
+    bool recordUsage(const char* word, uint64_t nowSec, uint32_t weight = 1);
     bool removeWord(const char* word);
     void reset();
 

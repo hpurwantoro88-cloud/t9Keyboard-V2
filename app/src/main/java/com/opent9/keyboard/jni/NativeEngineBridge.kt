@@ -53,6 +53,7 @@ object NativeEngineBridge {
     external fun nativeStartAudio()
     external fun nativeStopAudio()
     external fun nativeRecordUsage(word: String, nowSec: Long)
+    external fun nativeRecordUsageWeighted(word: String, nowSec: Long, weight: Int)
     external fun nativeGetWordUsageCount(word: String): Int
     external fun nativeRemoveWord(word: String): Boolean
     external fun nativeResetUserDictionary()
@@ -185,11 +186,16 @@ object NativeEngineBridge {
         nativePlayClick(style, volume)
     }
 
-    fun recordUsage(word: String, nowSec: Long) {
+    fun recordUsage(word: String, nowSec: Long, weight: Int = 1) {
+        val safeWeight = weight.coerceIn(1, 10)
         val lower = word.lowercase()
-        fallbackUsageCounts[lower] = (fallbackUsageCounts[lower] ?: 0) + 1
+        fallbackUsageCounts[lower] = (fallbackUsageCounts[lower] ?: 0) + safeWeight
         if (!isNativeLoaded) return
-        nativeRecordUsage(lower, nowSec)
+        if (safeWeight == 1) {
+            nativeRecordUsage(lower, nowSec)
+        } else {
+            nativeRecordUsageWeighted(lower, nowSec, safeWeight)
+        }
     }
 
     fun getWordUsageCount(word: String): Int {

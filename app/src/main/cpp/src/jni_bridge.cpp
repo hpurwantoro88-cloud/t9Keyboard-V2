@@ -252,8 +252,20 @@ Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeRecordUsage(
     JNIEnv* env, jobject thiz, jstring word, jlong nowSec) {
     if (!word) return;
     const char* str = env->GetStringUTFChars(word, nullptr);
-    bool ok = g_dynamicStore.recordUsage(str, static_cast<uint64_t>(nowSec));
+    bool ok = g_dynamicStore.recordUsage(str, static_cast<uint64_t>(nowSec), 1);
     LOGI("recordUsage: word=%s, nowSec=%llu, ok=%d", str ? str : "null", static_cast<unsigned long long>(nowSec), ok ? 1 : 0);
+    env->ReleaseStringUTFChars(word, str);
+}
+
+JNIEXPORT void JNICALL
+Java_com_opent9_keyboard_jni_NativeEngineBridge_nativeRecordUsageWeighted(
+    JNIEnv* env, jobject thiz, jstring word, jlong nowSec, jint weight) {
+    if (!word) return;
+    const char* str = env->GetStringUTFChars(word, nullptr);
+    uint32_t safeWeight = weight > 0 ? static_cast<uint32_t>(weight) : 1u;
+    bool ok = g_dynamicStore.recordUsage(str, static_cast<uint64_t>(nowSec), safeWeight);
+    LOGI("recordUsageWeighted: word=%s, nowSec=%llu, weight=%u, ok=%d",
+         str ? str : "null", static_cast<unsigned long long>(nowSec), safeWeight, ok ? 1 : 0);
     env->ReleaseStringUTFChars(word, str);
 }
 

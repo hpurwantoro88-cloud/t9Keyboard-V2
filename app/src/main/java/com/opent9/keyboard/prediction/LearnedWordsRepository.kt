@@ -21,13 +21,13 @@ class LearnedWordsRepository(context: Context) {
     /**
      * Records usage of a committed word for dynamic learning without blocking the UI thread on disk I/O.
      */
-    fun recordWordUsage(word: String, isIncognito: Boolean) {
+    fun recordWordUsage(word: String, isIncognito: Boolean, weight: Int = 1) {
         if (isIncognito || word.isEmpty() || word.all { it.isDigit() }) return
         val canonicalWord = EnglishOrthography.toCanonical(word).lowercase()
         if (canonicalWord.isEmpty()) return
 
         if (!NativeEngineBridge.isWordDeleted(canonicalWord)) {
-            NativeEngineBridge.recordUsage(canonicalWord, System.currentTimeMillis() / 1000L)
+            NativeEngineBridge.recordUsage(canonicalWord, System.currentTimeMillis() / 1000L, weight)
             scheduleDebouncedFlush()
         }
     }
