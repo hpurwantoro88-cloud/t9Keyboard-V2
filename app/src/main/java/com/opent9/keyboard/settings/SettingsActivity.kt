@@ -9,7 +9,9 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
 import com.opent9.keyboard.R
+import com.opent9.keyboard.jni.NativeEngineBridge
 import com.opent9.keyboard.prediction.LearnedWordsRepository
+import com.opent9.keyboard.ui.KeyboardFeedbackManager
 
 class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,9 +50,61 @@ class SettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences, rootKey)
 
+        val ctx = requireContext()
+        val prefs = PreferenceManager.getDefaultSharedPreferences(ctx)
+        val feedbackManager = KeyboardFeedbackManager(ctx) { null }
+
         findPreference<Preference>("app_theme")?.setOnPreferenceChangeListener { _, newValue ->
             val modeStr = newValue as? String ?: "system"
             SettingsActivity.applyNightMode(modeStr)
+            true
+        }
+
+        findPreference<Preference>("haptic_enabled")?.setOnPreferenceChangeListener { _, newValue ->
+            val enabled = newValue as? Boolean ?: true
+            if (enabled) {
+                val intensity = prefs.getInt("vibration_intensity", 25).toLong()
+                feedbackManager.playHapticPreview(intensity)
+            }
+            true
+        }
+
+        findPreference<Preference>("vibration_intensity")?.setOnPreferenceChangeListener { _, newValue ->
+            val intensity = (newValue as? Number)?.toLong() ?: 25L
+            feedbackManager.playHapticPreview(intensity)
+            true
+        }
+
+        findPreference<Preference>("audio_enabled")?.setOnPreferenceChangeListener { _, newValue ->
+            val enabled = newValue as? Boolean ?: true
+            val volume = prefs.getInt("audio_volume", 60) / 100f
+            val style = (prefs.getString("audio_style", "0") ?: "0").toIntOrNull() ?: 0
+            NativeEngineBridge.syncAudioConfig(enabled, volume, style)
+            if (enabled) {
+                NativeEngineBridge.startAudio()
+                feedbackManager.playAudioPreview(style, volume, respectRingerMode = false)
+            } else {
+                NativeEngineBridge.stopAudio()
+            }
+            true
+        }
+
+        findPreference<Preference>("audio_volume")?.setOnPreferenceChangeListener { _, newValue ->
+            val volPct = (newValue as? Number)?.toInt() ?: 60
+            val volume = (volPct / 100f).coerceIn(0f, 1f)
+            val style = (prefs.getString("audio_style", "0") ?: "0").toIntOrNull() ?: 0
+            NativeEngineBridge.syncAudioConfig(true, volume, style)
+            NativeEngineBridge.startAudio()
+            feedbackManager.playAudioPreview(style, volume, respectRingerMode = false)
+            true
+        }
+
+        findPreference<Preference>("audio_style")?.setOnPreferenceChangeListener { _, newValue ->
+            val style = (newValue as? String)?.toIntOrNull() ?: 0
+            val volume = prefs.getInt("audio_volume", 60) / 100f
+            NativeEngineBridge.syncAudioConfig(true, volume, style)
+            NativeEngineBridge.startAudio()
+            feedbackManager.playAudioPreview(style, volume, respectRingerMode = false)
             true
         }
 
@@ -74,5 +128,10 @@ class SettingsFragment : PreferenceFragmentCompat() {
             }
             true
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        NativeEngineBridge.stopAudio()
     }
 }

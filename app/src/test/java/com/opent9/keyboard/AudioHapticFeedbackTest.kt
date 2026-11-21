@@ -191,4 +191,24 @@ class AudioHapticFeedbackTest {
         val parsed = com.opent9.keyboard.jni.NativeEngineBridge.parseCandidatesFromBuffer(buf, bytesWritten)
         assertEquals(words, parsed)
     }
+
+    @Test
+    fun testAudioAndHapticLivePreviewAndRingerModeGuard() {
+        val observer = SettingsObserver(context)
+        observer.start()
+        val fm = com.opent9.keyboard.ui.KeyboardFeedbackManager(context) { observer }
+
+        // Direct preview calls must execute cleanly without throwing
+        fm.playAudioPreview(0, 0.8f, respectRingerMode = false)
+        fm.playAudioPreview(1, 0.5f, respectRingerMode = true)
+        fm.playHapticPreview(35L)
+
+        // When ringer mode is SILENT, respectRingerMode=true suppresses sound cleanly
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        am.ringerMode = android.media.AudioManager.RINGER_MODE_SILENT
+        fm.playClickFeedback()
+
+        am.ringerMode = android.media.AudioManager.RINGER_MODE_NORMAL
+        observer.stop()
+    }
 }
