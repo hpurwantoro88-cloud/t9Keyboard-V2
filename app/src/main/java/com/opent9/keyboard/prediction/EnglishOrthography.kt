@@ -102,7 +102,40 @@ object EnglishOrthography {
      * Converts a display word back to its canonical lowercase form for dictionary frequency tracking.
      */
     fun toCanonical(word: String): String {
-        return word.lowercase().replace("'", "")
+        return word.lowercase().replace("'", "").replace("’", "").replace("-", "")
+    }
+
+    /**
+     * Restores English contractions inside a bilingual candidate list without altering
+     * standalone Indonesian tokens such as "i".
+     */
+    fun restoreBilingualContractions(rawCandidates: List<String>): List<String> {
+        if (rawCandidates.isEmpty()) return rawCandidates
+        val result = ArrayList<String>(rawCandidates.size + 2)
+        val seen = HashSet<String>()
+        for (raw in rawCandidates) {
+            val lower = raw.lowercase()
+            when {
+                unambiguousContractions.containsKey(lower) -> {
+                    val restored = unambiguousContractions[lower]!!
+                    if (seen.add(restored)) result.add(restored)
+                }
+                ambiguousContractions.containsKey(lower) -> {
+                    val contraction = ambiguousContractions[lower]!!
+                    val alreadyHasContraction = rawCandidates.any { it.equals(contraction, ignoreCase = true) }
+                    if (alreadyHasContraction) {
+                        if (seen.add(raw)) result.add(raw)
+                    } else {
+                        if (seen.add(raw)) result.add(raw)
+                        if (seen.add(contraction)) result.add(contraction)
+                    }
+                }
+                else -> {
+                    if (seen.add(raw)) result.add(raw)
+                }
+            }
+        }
+        return if (result.size > 16) result.subList(0, 16) else result
     }
 
     /**

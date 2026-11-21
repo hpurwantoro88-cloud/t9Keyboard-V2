@@ -85,6 +85,32 @@ class DeleteController {
         return false
     }
 
+    fun lastGraphemeClusterLength(text: CharSequence): Int {
+        if (text.isEmpty()) return 0
+        val str = text.toString()
+        val bi = java.text.BreakIterator.getCharacterInstance()
+        bi.setText(str)
+        val end = bi.last()
+        var start = bi.previous()
+        if (start == java.text.BreakIterator.DONE) return 1
+        while (start > 0) {
+            val prevChar = str[start - 1]
+            val curChar = str[start]
+            val prevCp = Character.codePointBefore(str, start)
+            val curCp = Character.codePointAt(str, start)
+            val isRegionalPair = (prevCp in 0x1F1E6..0x1F1FF) && (curCp in 0x1F1E6..0x1F1FF)
+            val isSkinToneModifier = curCp in 0x1F3FB..0x1F3FF
+            if (prevChar == '\u200D' || curChar == '\uFE0F' || curChar == '\u20E3' || isRegionalPair || isSkinToneModifier) {
+                val prev = bi.previous()
+                if (prev == java.text.BreakIterator.DONE) break
+                start = prev
+            } else {
+                break
+            }
+        }
+        return (end - start).coerceAtLeast(1)
+    }
+
     fun deleteSingleOrSurrogate(ic: InputConnection?) {
         if (ic == null) return
         val selected = ic.getSelectedText(0)
@@ -93,13 +119,11 @@ class DeleteController {
             ic.commitText("", 1)
             return
         }
-        val before = ic.getTextBeforeCursor(2, 0)
+        val rawBefore = ic.getTextBeforeCursor(16, 0)
+        val before = if (!rawBefore.isNullOrEmpty()) rawBefore else ic.getTextBeforeCursor(2, 0)
         if (!before.isNullOrEmpty()) {
-            if (before.length >= 2 && Character.isSurrogatePair(before[0], before[1])) {
-                ic.deleteSurroundingText(2, 0)
-            } else {
-                ic.deleteSurroundingText(1, 0)
-            }
+            val deleteCount = lastGraphemeClusterLength(before)
+            ic.deleteSurroundingText(deleteCount, 0)
         } else {
             ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
             ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL))

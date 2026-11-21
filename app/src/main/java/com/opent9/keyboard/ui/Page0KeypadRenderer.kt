@@ -100,7 +100,8 @@ class Page0KeypadRenderer(
                         val barWidth = (28f * density).coerceAtMost(key.bounds.width() * 0.60f)
                         val barHeight = 3f * density
                         val barRadius = 1.5f * density
-                        val barTop = key.centerY + (13f * density * rowScale)
+                        val barTop = (key.centerY + (13f * density * rowScale))
+                            .coerceAtMost(scratchRect.bottom - barHeight - (2.5f * density))
                         glowRect.set(
                             key.centerX - (barWidth / 2f),
                             barTop,

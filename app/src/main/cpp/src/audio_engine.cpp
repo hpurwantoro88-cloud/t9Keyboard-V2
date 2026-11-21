@@ -48,7 +48,12 @@ void AudioEngine::generateWaveforms() {
 
 bool AudioEngine::start() {
     std::lock_guard<std::mutex> lock(streamMutex);
-    if (stream && stream->getState() == oboe::StreamState::Started) return true;
+    if (stream && stream->getState() == oboe::StreamState::Started) {
+        streamHealthy.store(true, std::memory_order_release);
+        startFailed.store(false, std::memory_order_release);
+        return true;
+    }
+    streamHealthy.store(false, std::memory_order_release);
     if (stream) {
         stream->close();
         stream.reset();
@@ -66,6 +71,7 @@ bool AudioEngine::start() {
     oboe::Result result = builder.openStream(stream);
     if (result != oboe::Result::OK) {
         stream.reset();
+        startFailed.store(true, std::memory_order_release);
         return false;
     }
 
@@ -73,25 +79,32 @@ bool AudioEngine::start() {
     if (result != oboe::Result::OK) {
         stream->close();
         stream.reset();
+        startFailed.store(true, std::memory_order_release);
         return false;
     }
 
+    streamHealthy.store(true, std::memory_order_release);
+    startFailed.store(false, std::memory_order_release);
     return true;
 }
 
 void AudioEngine::stop() {
+    streamHealthy.store(false, std::memory_order_release);
+    isPlaying.store(false, std::memory_order_release);
+    startFailed.store(false, std::memory_order_release);
     std::lock_guard<std::mutex> lock(streamMutex);
     if (stream) {
         stream->stop();
         stream->close();
         stream.reset();
     }
-    isPlaying = false;
 }
 
 void AudioEngine::playClick(SoundStyle style, float volume) {
-    if (!stream || stream->getState() != oboe::StreamState::Started) {
-        start();
+    if (!streamHealthy.load(std::memory_order_acquire)) {
+        if (startFailed.load(std::memory_order_acquire) || !start()) {
+            return;
+        }
     }
     currentStyle.store(style, std::memory_order_relaxed);
     currentVolume.store(std::clamp(volume, 0.0f, 1.0f), std::memory_order_relaxed);

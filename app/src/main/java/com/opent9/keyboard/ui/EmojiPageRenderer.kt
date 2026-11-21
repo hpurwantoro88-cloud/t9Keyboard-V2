@@ -5,7 +5,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 
 /**
- * Dedicated renderer for Page 3 Emoji Picker (category tabs, scrollable grid, and bottom controls).
+ * Dedicated renderer for Page 4 Emoji Picker (category tabs, scrollable 6-column grid, and bottom controls).
  * Guarantees zero heap allocations per frame by pre-allocating bounds and arrays.
  */
 class EmojiPageRenderer(
@@ -14,6 +14,10 @@ class EmojiPageRenderer(
     private val keyBackgroundPaint: Paint,
     private val subTextPaint: Paint,
     private val primaryTextPaint: Paint,
+    private val emojiGlyphPaint: Paint = primaryTextPaint,
+    private val emoticonTextPaint: Paint = primaryTextPaint,
+    private val emojiTabTextPaint: Paint = subTextPaint,
+    private val indicatorGlowPaint: Paint? = null,
     private val scratchRect: RectF = RectF()
 ) {
 
@@ -21,7 +25,7 @@ class EmojiPageRenderer(
     private val ctrlLabels = arrayOf("ABC", "🕒 Recents", "␣ Space", "⌫ DEL")
 
     /**
-     * Renders the complete Page 3 Emoji page.
+     * Renders the complete Page 4 Emoji page.
      */
     fun drawEmojiPage(
         canvas: Canvas,
@@ -32,21 +36,34 @@ class EmojiPageRenderer(
         activeControlIndex: Int?,
         density: Float
     ) {
-        // 1. Draw category tabs (Smileys, Memoji, etc.)
+        // 1. Draw category tabs (Recents, Smileys, ..., Emoticons ;-))
         val tabCount = emojiAtlas.categories.size
         for (i in 0 until tabCount) {
             val bounds = emojiAtlas.categoryTabBounds[i]
-            if (i == emojiAtlas.activeCategoryIndex) {
+            val isSelected = i == emojiAtlas.activeCategoryIndex
+            if (isSelected) {
                 canvas.drawRoundRect(bounds, 8f * density, 8f * density, pillPaint)
+                if (indicatorGlowPaint != null) {
+                    val barHalfW = minOf(14f * density, bounds.width() * 0.30f)
+                    val barH = 2.5f * density
+                    scratchRect.set(
+                        bounds.centerX() - barHalfW,
+                        bounds.bottom - barH - (1.5f * density),
+                        bounds.centerX() + barHalfW,
+                        bounds.bottom - (1.5f * density)
+                    )
+                    canvas.drawRoundRect(scratchRect, 1.5f * density, 1.5f * density, indicatorGlowPaint)
+                }
             } else if (i == activeTabIndex) {
                 canvas.drawRoundRect(bounds, 8f * density, 8f * density, keyPressedPaint)
             }
-            val textY = bounds.centerY() - ((subTextPaint.descent() + subTextPaint.ascent()) / 2f)
-            canvas.drawText(emojiAtlas.categoryTabIcons[i], bounds.centerX(), textY, subTextPaint)
+            val tabIcon = emojiAtlas.categoryTabIcons[i]
+            val tabPaint = if (isSelected && emojiAtlas.isTextEmoticon(tabIcon)) emoticonTextPaint else emojiTabTextPaint
+            val textY = bounds.centerY() - ((tabPaint.descent() + tabPaint.ascent()) / 2f)
+            canvas.drawText(tabIcon, bounds.centerX(), textY, tabPaint)
         }
 
-
-        // 2. Draw active category scrollable emoji grid
+        // 2. Draw active category scrollable emoji / emoticon grid
         val scrollY = emojiScrollOffset
         val gridTop = emojiAtlas.gridTop
         val gridBottom = emojiAtlas.gridBottom
@@ -82,8 +99,9 @@ class EmojiPageRenderer(
                         canvas.drawRoundRect(scratchRect, 8f * density, 8f * density, keyPressedPaint)
                     }
                     val emojiStr = activeEmojis[idx]
-                    val textY = top + (rowHeight / 2f) - ((primaryTextPaint.descent() + primaryTextPaint.ascent()) / 2f)
-                    canvas.drawText(emojiStr, left + (colWidth / 2f), textY, primaryTextPaint)
+                    val itemPaint = if (emojiAtlas.isTextEmoticon(emojiStr)) emoticonTextPaint else emojiGlyphPaint
+                    val textY = top + (rowHeight / 2f) - ((itemPaint.descent() + itemPaint.ascent()) / 2f)
+                    canvas.drawText(emojiStr, left + (colWidth / 2f), textY, itemPaint)
                 }
             }
         }

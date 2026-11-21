@@ -20,8 +20,8 @@ object NativeEngineBridge {
     private val candidateBuffer: ByteBuffer = ByteBuffer.allocateDirect(2048)
     private val multiTapBuffer: ByteBuffer = ByteBuffer.allocateDirect(16)
 
-    // Reusable candidate scratch buffer
-    private val scratchChars = CharArray(64)
+    // Reusable UTF-8 candidate scratch buffer
+    private val scratchBytes = ByteArray(256)
 
     external fun nativeInit(dbPath: String): Boolean
     external fun nativeSyncConfig(
@@ -232,7 +232,12 @@ object NativeEngineBridge {
         return nativeFlushDynamicStore()
     }
 
+    @Volatile
+    var isBilingualEnabled: Boolean = false
+        private set
+
     fun syncBilingualMode(enabled: Boolean) {
+        isBilingualEnabled = enabled
         if (!isNativeLoaded) return
         nativeSyncBilingualMode(enabled)
     }
@@ -263,33 +268,37 @@ object NativeEngineBridge {
                 .filterNot { isWordDeleted(it.lowercase().replace("'", "")) }
                 .take(16)
         }
-        candidateBuffer.clear()
-        val bytesWritten = nativeGetNextWordCandidates(prevWord, candidateBuffer, candidateBuffer.capacity())
-        return parseCandidatesFromBuffer(bytesWritten)
+        synchronized(candidateBuffer) {
+            candidateBuffer.clear()
+            val bytesWritten = nativeGetNextWordCandidates(prevWord, candidateBuffer, candidateBuffer.capacity())
+            return parseCandidatesFromBuffer(candidateBuffer, bytesWritten)
+        }
     }
 
     fun getCandidates(): List<String> {
         if (!isNativeLoaded) return emptyList()
-        candidateBuffer.clear()
-        val bytesWritten = nativeGetCandidates(candidateBuffer, candidateBuffer.capacity())
-        return parseCandidatesFromBuffer(bytesWritten)
+        synchronized(candidateBuffer) {
+            candidateBuffer.clear()
+            val bytesWritten = nativeGetCandidates(candidateBuffer, candidateBuffer.capacity())
+            return parseCandidatesFromBuffer(candidateBuffer, bytesWritten)
+        }
     }
 
-    private fun parseCandidatesFromBuffer(bytesWritten: Int): List<String> {
-        if (bytesWritten <= 0) return emptyList()
+    internal fun parseCandidatesFromBuffer(buffer: ByteBuffer, bytesWritten: Int): List<String> {
+        if (bytesWritten <= 0 || bytesWritten > buffer.capacity()) return emptyList()
 
-        candidateBuffer.position(0)
-        val count = candidateBuffer.get().toInt() and 0xFF
+        buffer.position(0)
+        val count = buffer.get().toInt() and 0xFF
         if (count == 0) return emptyList()
 
         val results = ArrayList<String>(count)
         for (i in 0 until count) {
-            val len = candidateBuffer.get().toInt() and 0xFF
-            var charIdx = 0
-            for (j in 0 until len) {
-                scratchChars[charIdx++] = (candidateBuffer.get().toInt() and 0xFF).toChar()
-            }
-            results.add(String(scratchChars, 0, len))
+            if (buffer.position() >= bytesWritten) break
+            val len = buffer.get().toInt() and 0xFF
+            if (buffer.position() + len > bytesWritten) break
+            val target = if (len <= scratchBytes.size) scratchBytes else ByteArray(len)
+            buffer.get(target, 0, len)
+            results.add(String(target, 0, len, Charsets.UTF_8))
         }
         return results
     }
@@ -327,13 +336,15 @@ object NativeEngineBridge {
             }
             return MultiTapResult(committedPrev, committedChar, fallbackCurrentChar)
         }
-        multiTapBuffer.clear()
-        nativeMultiTapKeyPress(digit, timestampMs, shiftState, multiTapBuffer)
-        multiTapBuffer.position(0)
-        val committedPrev = multiTapBuffer.get().toInt() == 1
-        val committedChar = multiTapBuffer.get().toInt().toChar()
-        val activeChar = multiTapBuffer.get().toInt().toChar()
-        return MultiTapResult(committedPrev, committedChar, activeChar)
+        synchronized(multiTapBuffer) {
+            multiTapBuffer.clear()
+            nativeMultiTapKeyPress(digit, timestampMs, shiftState, multiTapBuffer)
+            multiTapBuffer.position(0)
+            val committedPrev = multiTapBuffer.get().toInt() == 1
+            val committedChar = multiTapBuffer.get().toInt().toChar()
+            val activeChar = multiTapBuffer.get().toInt().toChar()
+            return MultiTapResult(committedPrev, committedChar, activeChar)
+        }
     }
 
     fun handleMultiTapTimeout(timestampMs: Long, timeoutMs: Int): Char? {
@@ -345,12 +356,14 @@ object NativeEngineBridge {
             }
             return null
         }
-        multiTapBuffer.clear()
-        val timedOut = nativeMultiTapTimeout(timestampMs, timeoutMs, multiTapBuffer)
-        if (timedOut) {
-            multiTapBuffer.position(0)
-            return multiTapBuffer.get().toInt().toChar()
+        synchronized(multiTapBuffer) {
+            multiTapBuffer.clear()
+            val timedOut = nativeMultiTapTimeout(timestampMs, timeoutMs, multiTapBuffer)
+            if (timedOut) {
+                multiTapBuffer.position(0)
+                return multiTapBuffer.get().toInt().toChar()
+            }
+            return null
         }
-        return null
     }
 }

@@ -42,18 +42,27 @@ object IndonesianOrthography {
     }
 
     private fun synthesizeSuffixCandidate(result: ArrayList<String>, digits: List<Int>) {
+        val hasExactMatch = result.isNotEmpty() && WordCorrectionHelper.wordToDigits(result[0]) == digits
+        var insertIndex = if (hasExactMatch) 1 else 0
+        var inserted = 0
+
         for (spec in productiveSuffixes) {
             val sLen = spec.digits.size
             if (digits.size > sLen) {
                 val trailing = digits.subList(digits.size - sLen, digits.size)
                 if (trailing == spec.digits) {
                     val rootLen = digits.size - sLen
-                    val matchingRoot = result.firstOrNull { it.length == rootLen }
+                    val rootDigits = digits.subList(0, rootLen)
+                    val matchingRoot = result.firstOrNull {
+                        WordCorrectionHelper.wordToDigits(it) == rootDigits
+                    }
                     if (matchingRoot != null) {
                         val compounded = matchingRoot + spec.suffix
                         if (!result.contains(compounded)) {
-                            result.add(0, compounded)
-                            break
+                            result.add(insertIndex.coerceAtMost(result.size), compounded)
+                            insertIndex++
+                            inserted++
+                            if (inserted >= 2) break
                         }
                     }
                 }

@@ -56,6 +56,7 @@ class TouchGestureTracker(
     private var activePointerId = MotionEvent.INVALID_POINTER_ID
 
     private var activeKey: KeyInfo? = null
+    private var activePanelKey: LandscapePanelKey? = null
     private var longPressTriggered = false
     private var flickTriggered = false
     val isScrubbing: Boolean
@@ -165,23 +166,42 @@ class TouchGestureTracker(
         if (keyAtlas.currentPage == KeyboardPage.PAGE_4_EMOJI) {
             symbolPagesTracker.reset()
             activeKey = null
+            activePanelKey = null
             listener.onTouchStateChanged(null)
+            listener.onLandscapePanelTouchStateChanged(null)
             emojiGestureTracker.onDown(x, y, keyAtlas.emojiAtlas, longPressTimeoutMs, now)
+            return true
+        }
+
+        val panelKey = keyAtlas.findLandscapePanelKeyAt(x, y)
+        if (panelKey != null) {
+            symbolPagesTracker.reset()
+            activeKey = null
+            activePanelKey = panelKey
+            listener.onTouchStateChanged(null)
+            listener.onLandscapePanelTouchStateChanged(panelKey.id)
+            repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
             return true
         }
 
         if (symbolPagesTracker.onDown(x, y, keyAtlas)) {
             activeKey = null
+            activePanelKey = null
             return true
         }
 
-        if (y < keyAtlas.stripHeight && keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT) {
+        if (y < keyAtlas.stripHeight && keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT &&
+            x >= keyAtlas.stripBounds.left && x <= keyAtlas.stripBounds.right
+        ) {
             activeKey = null
+            activePanelKey = null
             candidateStripTracker.onDown(x, keyAtlas, longPressTimeoutMs, candidateHitTest)
         } else {
             val foundKey = keyAtlas.findKeyAt(x, y)
             activeKey = foundKey
+            activePanelKey = null
             listener.onTouchStateChanged(foundKey?.id)
+            listener.onLandscapePanelTouchStateChanged(null)
             repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
             if (foundKey != null && FlickDisambiguator.isLongPressSupported(foundKey, keyAtlas.currentPage)) {
                 actualHandler.postDelayed(longPressRunnable, longPressTimeoutMs)
@@ -200,10 +220,19 @@ class TouchGestureTracker(
         val py = event.getY(actionIdx)
 
         if (candidateStripTracker.isCandidateStripTouch) {
-            if (py < keyAtlas.stripHeight && keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT) {
+            if (py < keyAtlas.stripHeight && keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT &&
+                px >= keyAtlas.stripBounds.left && px <= keyAtlas.stripBounds.right
+            ) {
                 return true
             }
             candidateStripTracker.cancel()
+        }
+
+        val prevPanelKey = activePanelKey
+        if (prevPanelKey != null) {
+            listener.onLandscapePanelTouchStateChanged(null)
+            listener.onLandscapePanelKeyTap(prevPanelKey)
+            activePanelKey = null
         }
 
         val prevKey = activeKey
@@ -222,23 +251,41 @@ class TouchGestureTracker(
 
         if (keyAtlas.currentPage == KeyboardPage.PAGE_4_EMOJI) {
             activeKey = null
+            activePanelKey = null
             listener.onTouchStateChanged(null)
+            listener.onLandscapePanelTouchStateChanged(null)
             emojiGestureTracker.onDown(px, py, keyAtlas.emojiAtlas, longPressTimeoutMs, now)
+            return true
+        }
+
+        val panelKey = keyAtlas.findLandscapePanelKeyAt(px, py)
+        if (panelKey != null) {
+            activeKey = null
+            activePanelKey = panelKey
+            listener.onTouchStateChanged(null)
+            listener.onLandscapePanelTouchStateChanged(panelKey.id)
+            repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
             return true
         }
 
         if (symbolPagesTracker.onDown(px, py, keyAtlas)) {
             activeKey = null
+            activePanelKey = null
             return true
         }
 
-        if (py < keyAtlas.stripHeight && keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT) {
+        if (py < keyAtlas.stripHeight && keyAtlas.currentPage == KeyboardPage.PAGE_0_TEXT &&
+            px >= keyAtlas.stripBounds.left && px <= keyAtlas.stripBounds.right
+        ) {
             activeKey = null
+            activePanelKey = null
             candidateStripTracker.onDown(px, keyAtlas, longPressTimeoutMs, candidateHitTest)
         } else {
             val foundKey = keyAtlas.findKeyAt(px, py)
             activeKey = foundKey
+            activePanelKey = null
             listener.onTouchStateChanged(foundKey?.id)
+            listener.onLandscapePanelTouchStateChanged(null)
             repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
             if (foundKey != null && FlickDisambiguator.isLongPressSupported(foundKey, keyAtlas.currentPage)) {
                 actualHandler.postDelayed(longPressRunnable, longPressTimeoutMs)
@@ -249,17 +296,26 @@ class TouchGestureTracker(
 
 
     private fun handleActionPointerUp(event: MotionEvent): Boolean {
+        if (emojiGestureTracker.isEmojiPageTouch || symbolPagesTracker.isPage1ColumnTouch || candidateStripTracker.isCandidateStripTouch) {
+            return true
+        }
         val actionIdx = event.actionIndex
         val pointerId = event.getPointerId(actionIdx)
         if (pointerId == activePointerId) {
             val px = event.getX(actionIdx)
             val py = event.getY(actionIdx)
+            val liftedPanelKey = activePanelKey
             val liftedKey = activeKey
 
-            if (liftedKey != null) {
+            if (liftedPanelKey != null) {
+                listener.onLandscapePanelTouchStateChanged(null)
+                if (keyAtlas.landscapePanelLayout.isTouchInsideKey(liftedPanelKey, px, py)) {
+                    listener.onLandscapePanelKeyTap(liftedPanelKey)
+                }
+            } else if (liftedKey != null) {
                 val dx = px - touchDownX
                 val dy = py - touchDownY
-                handleKeypadUp(liftedKey, px, py, dx, dy, dx * dx + dy * dy)
+                handleKeypadUp(liftedKey, dx, dy, dx * dx + dy * dy)
             }
             repeatDeleteHandler.cancel(longPressRunnable, repeatDeleteRunnable)
             resetTouchState()
@@ -290,6 +346,13 @@ class TouchGestureTracker(
         }
 
         if (symbolPagesTracker.onMovePage1(dy, touchSlopPx, keyAtlas)) {
+            return true
+        }
+
+        val panelKey = activePanelKey
+        if (panelKey != null) {
+            val inside = keyAtlas.landscapePanelLayout.isTouchInsideKey(panelKey, curX, curY)
+            listener.onLandscapePanelTouchStateChanged(if (inside) panelKey.id else null)
             return true
         }
 
@@ -368,11 +431,17 @@ class TouchGestureTracker(
 
         if (candidateStripTracker.isCandidateStripTouch) {
             candidateStripTracker.onUp(curX, distSq, touchSlopPx, keyAtlas, candidateHitTest)
+        } else if (activePanelKey != null) {
+            val panelKey = activePanelKey!!
+            listener.onLandscapePanelTouchStateChanged(null)
+            if (keyAtlas.landscapePanelLayout.isTouchInsideKey(panelKey, curX, curY)) {
+                listener.onLandscapePanelKeyTap(panelKey)
+            }
         } else {
             val key = activeKey
             listener.onTouchStateChanged(null)
             if (key != null) {
-                handleKeypadUp(key, curX, curY, dx, dy, distSq)
+                handleKeypadUp(key, dx, dy, distSq)
             }
         }
 
@@ -380,7 +449,7 @@ class TouchGestureTracker(
         return true
     }
 
-    private fun handleKeypadUp(key: KeyInfo, curX: Float, curY: Float, dx: Float, dy: Float, distSq: Float) {
+    private fun handleKeypadUp(key: KeyInfo, dx: Float, dy: Float, distSq: Float) {
         if (longPressTriggered || flickTriggered || isScrubbing) return
         if (key.type == KeyType.SPACE_0 && scrubStepsDispatched > 0) return
 
@@ -391,11 +460,12 @@ class TouchGestureTracker(
                 return
             }
         }
-        listener.onKeyTap(key, curX, curY)
+        listener.onKeyTap(key, touchDownX, touchDownY)
     }
 
     private fun resetTouchState() {
         activeKey = null
+        activePanelKey = null
         activePointerId = MotionEvent.INVALID_POINTER_ID
         longPressTriggered = false
         flickTriggered = false
@@ -408,7 +478,9 @@ class TouchGestureTracker(
         emojiGestureTracker.cancel()
         symbolPagesTracker.reset()
         listener.onTouchStateChanged(null)
+        listener.onLandscapePanelTouchStateChanged(null)
         activeKey = null
+        activePanelKey = null
         activePointerId = MotionEvent.INVALID_POINTER_ID
         longPressTriggered = false
         flickTriggered = false

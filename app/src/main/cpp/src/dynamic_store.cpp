@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 
 namespace {
@@ -19,6 +20,13 @@ inline void toCanonicalWord(const char* src, char* dst, size_t maxLen) {
             c = static_cast<char>(c + ('a' - 'A'));
         }
         if (c == '\'' || c == '-') {
+            continue;
+        }
+        // Skip UTF-8 curly apostrophe U+2019 (0xE2 0x80 0x99) and U+2018 (0xE2 0x80 0x98)
+        if (static_cast<unsigned char>(c) == 0xE2 &&
+            static_cast<unsigned char>(src[i + 1]) == 0x80 &&
+            (static_cast<unsigned char>(src[i + 2]) == 0x99 || static_cast<unsigned char>(src[i + 2]) == 0x98)) {
+            i += 2;
             continue;
         }
         dst[j++] = c;
@@ -222,6 +230,89 @@ void DynamicStore::indexEntryLocked(size_t entryIdx) {
     }
 }
 
+void DynamicStore::unindexEntryLocked(size_t entryIdx) {
+    const DynamicEntry& entry = entries[entryIdx];
+    uint64_t packed = 0;
+    int indexedLen = 0;
+    for (size_t i = 0; entry.word[i] != '\0' && indexedLen < MAX_INDEXED_PREFIX_LEN; ++i) {
+        uint8_t d = charToT9Digit(entry.word[i]);
+        if (d < 2 || d > 9) {
+            break;
+        }
+        packed = (packed << 4) | static_cast<uint64_t>(d);
+        indexedLen++;
+        uint64_t key = packPrefixKey(packed, indexedLen);
+        auto it = prefixIndex.find(key);
+        if (it != prefixIndex.end()) {
+            auto& bucket = it->second;
+            bucket.erase(std::remove(bucket.begin(), bucket.end(), entryIdx), bucket.end());
+            if (bucket.empty()) {
+                prefixIndex.erase(it);
+            }
+        }
+    }
+}
+
+void DynamicStore::evictOneEntryLocked() {
+    if (entries.empty()) return;
+    size_t victimIdx = 0;
+    bool foundActive = false;
+    uint64_t oldestActiveTime = UINT64_MAX;
+    uint64_t oldestAnyTime = UINT64_MAX;
+    size_t oldestAnyIdx = 0;
+
+    for (size_t i = 0; i < entries.size(); ++i) {
+        if (entries[i].last_used_timestamp < oldestAnyTime) {
+            oldestAnyTime = entries[i].last_used_timestamp;
+            oldestAnyIdx = i;
+        }
+        if (!entries[i].is_deleted && entries[i].last_used_timestamp < oldestActiveTime) {
+            oldestActiveTime = entries[i].last_used_timestamp;
+            victimIdx = i;
+            foundActive = true;
+        }
+    }
+    if (!foundActive) {
+        victimIdx = oldestAnyIdx;
+    }
+    entries.erase(entries.begin() + static_cast<std::ptrdiff_t>(victimIdx));
+    rebuildIndicesLocked();
+}
+
+bool DynamicStore::upsertWordLocked(const char* canonical, uint32_t freq, uint64_t nowSec, uint32_t hitWeight) {
+    auto it = wordToIndex.find(canonical);
+    if (it != wordToIndex.end()) {
+        size_t idx = it->second;
+        bool wasDeleted = entries[idx].is_deleted != 0;
+        entries[idx].hit_count += hitWeight;
+        entries[idx].base_freq = std::max(entries[idx].base_freq, freq);
+        entries[idx].last_used_timestamp = nowSec;
+        entries[idx].is_deleted = 0;
+        if (wasDeleted) {
+            indexEntryLocked(idx);
+        }
+        dirty.store(true, std::memory_order_release);
+        return true;
+    }
+
+    if (entries.size() >= MAX_STORE_WORDS) {
+        evictOneEntryLocked();
+    }
+
+    DynamicEntry entry{};
+    std::strncpy(entry.word, canonical, MAX_STORE_WORD_LEN - 1);
+    entry.base_freq = freq;
+    entry.hit_count = hitWeight;
+    entry.last_used_timestamp = nowSec;
+    entry.is_deleted = 0;
+
+    size_t newIdx = entries.size();
+    entries.push_back(entry);
+    indexEntryLocked(newIdx);
+    dirty.store(true, std::memory_order_release);
+    return true;
+}
+
 void DynamicStore::rebuildIndicesLocked() {
     wordToIndex.clear();
     prefixIndex.clear();
@@ -272,46 +363,7 @@ bool DynamicStore::addWord(const char* word, uint32_t freq, uint64_t nowSec) {
     if (canonical[0] == '\0') return false;
 
     std::unique_lock<std::shared_mutex> lock(storeMutex);
-    auto it = wordToIndex.find(canonical);
-    if (it != wordToIndex.end()) {
-        size_t idx = it->second;
-        bool wasDeleted = entries[idx].is_deleted != 0;
-        entries[idx].hit_count++;
-        entries[idx].base_freq = std::max(entries[idx].base_freq, freq);
-        entries[idx].last_used_timestamp = nowSec;
-        entries[idx].is_deleted = 0;
-        if (wasDeleted) {
-            indexEntryLocked(idx);
-        }
-        dirty.store(true, std::memory_order_release);
-        return true;
-    }
-
-    if (entries.size() >= MAX_STORE_WORDS) {
-        size_t oldestIdx = 0;
-        uint64_t oldestTime = UINT64_MAX;
-        for (size_t i = 0; i < entries.size(); ++i) {
-            if (entries[i].last_used_timestamp < oldestTime) {
-                oldestTime = entries[i].last_used_timestamp;
-                oldestIdx = i;
-            }
-        }
-        entries.erase(entries.begin() + static_cast<std::ptrdiff_t>(oldestIdx));
-        rebuildIndicesLocked();
-    }
-
-    DynamicEntry entry{};
-    std::strncpy(entry.word, canonical, MAX_STORE_WORD_LEN - 1);
-    entry.base_freq = freq;
-    entry.hit_count = 1;
-    entry.last_used_timestamp = nowSec;
-    entry.is_deleted = 0;
-
-    size_t newIdx = entries.size();
-    entries.push_back(entry);
-    indexEntryLocked(newIdx);
-    dirty.store(true, std::memory_order_release);
-    return true;
+    return upsertWordLocked(canonical, freq, nowSec, 1);
 }
 
 bool DynamicStore::recordUsage(const char* word, uint64_t nowSec, uint32_t weight) {
@@ -320,34 +372,9 @@ bool DynamicStore::recordUsage(const char* word, uint64_t nowSec, uint32_t weigh
     toCanonicalWord(word, canonical, MAX_STORE_WORD_LEN);
     if (canonical[0] == '\0') return false;
     uint32_t safeWeight = std::clamp<uint32_t>(weight, 1, 10);
-    {
-        std::unique_lock<std::shared_mutex> lock(storeMutex);
-        auto it = wordToIndex.find(canonical);
-        if (it != wordToIndex.end()) {
-            size_t idx = it->second;
-            bool wasDeleted = entries[idx].is_deleted != 0;
-            entries[idx].is_deleted = 0;
-            entries[idx].hit_count += safeWeight;
-            entries[idx].last_used_timestamp = nowSec;
-            if (wasDeleted) {
-                indexEntryLocked(idx);
-            }
-            dirty.store(true, std::memory_order_release);
-            return true;
-        }
-    }
-    if (!addWord(canonical, 100, nowSec)) {
-        return false;
-    }
-    if (safeWeight > 1) {
-        std::unique_lock<std::shared_mutex> lock(storeMutex);
-        auto it = wordToIndex.find(canonical);
-        if (it != wordToIndex.end()) {
-            entries[it->second].hit_count += (safeWeight - 1);
-            dirty.store(true, std::memory_order_release);
-        }
-    }
-    return true;
+
+    std::unique_lock<std::shared_mutex> lock(storeMutex);
+    return upsertWordLocked(canonical, 100, nowSec, safeWeight);
 }
 
 bool DynamicStore::removeWord(const char* word) {
@@ -356,24 +383,27 @@ bool DynamicStore::removeWord(const char* word) {
     toCanonicalWord(word, canonical, MAX_STORE_WORD_LEN);
     if (canonical[0] == '\0') return false;
 
+    uint64_t nowSec = static_cast<uint64_t>(std::time(nullptr));
     std::unique_lock<std::shared_mutex> lock(storeMutex);
     auto it = wordToIndex.find(canonical);
     if (it != wordToIndex.end()) {
-        entries[it->second].is_deleted = 1;
+        size_t idx = it->second;
+        entries[idx].is_deleted = 1;
+        entries[idx].last_used_timestamp = nowSec;
+        unindexEntryLocked(idx);
         dirty.store(true, std::memory_order_release);
         return true;
     }
 
     if (entries.size() >= MAX_STORE_WORDS) {
-        entries.erase(entries.begin());
-        rebuildIndicesLocked();
+        evictOneEntryLocked();
     }
 
     DynamicEntry entry{};
     std::strncpy(entry.word, canonical, MAX_STORE_WORD_LEN - 1);
     entry.base_freq = 0;
     entry.hit_count = 0;
-    entry.last_used_timestamp = 0;
+    entry.last_used_timestamp = nowSec;
     entry.is_deleted = 1;
 
     size_t newIdx = entries.size();

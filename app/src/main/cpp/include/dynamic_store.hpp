@@ -99,6 +99,9 @@ private:
 
     int findEntryIndexLocked(const char* word) const;
     void indexEntryLocked(size_t entryIdx);
+    void unindexEntryLocked(size_t entryIdx);
+    void evictOneEntryLocked();
+    bool upsertWordLocked(const char* canonical, uint32_t freq, uint64_t nowSec, uint32_t hitWeight);
     void rebuildIndicesLocked();
     void rebuildBigramIndexLocked();
 

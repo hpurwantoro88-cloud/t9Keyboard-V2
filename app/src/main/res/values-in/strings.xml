@@ -12,6 +12,7 @@
     <string name="dialog_cancel">Batal</string>
 
     <!-- Keyboard Rearrangement -->
+    <string name="pref_landscape_layout_mode">Tata Letak Landscape</string>
     <string name="pref_rearrange_layout">Tata Ulang Baris 4 &amp; Kolom 4</string>
     <string name="pref_rearrange_layout_summary">Geser dan sesuaikan posisi tombol pada baris 4 dan kolom 4</string>
     <string name="rearrange_title">Tata Ulang Keyboard</string>

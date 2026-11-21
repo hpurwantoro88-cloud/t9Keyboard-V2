@@ -32,6 +32,19 @@
         <item>2</item>
     </string-array>
 
+    <string-array name="pref_landscape_layout_entries">
+        <item>Compact Left + Edit Panel (Default)</item>
+        <item>Edit Panel + Compact Right</item>
+        <item>Centered + Side Gutters</item>
+        <item>Full Width</item>
+    </string-array>
+    <string-array name="pref_landscape_layout_values">
+        <item>left</item>
+        <item>right</item>
+        <item>center</item>
+        <item>full</item>
+    </string-array>
+
     <string-array name="pref_default_mode_entries">
         <item>Predictive T9</item>
         <item>Multi-Tap ABC</item>

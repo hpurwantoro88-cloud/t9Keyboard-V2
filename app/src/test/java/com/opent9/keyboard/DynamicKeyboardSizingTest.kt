@@ -237,12 +237,16 @@ class DynamicKeyboardSizingTest {
             keyboardView.layout(0, 0, screenWidth.toInt(), targetHeight.toInt())
             val primaryPaint = T9KeyboardView::class.java.getDeclaredField("primaryTextPaint").apply { isAccessible = true }.get(keyboardView) as android.graphics.Paint
             val subPaint = T9KeyboardView::class.java.getDeclaredField("subTextPaint").apply { isAccessible = true }.get(keyboardView) as android.graphics.Paint
+            val emojiGlyphPaint = T9KeyboardView::class.java.getDeclaredField("emojiGlyphPaint").apply { isAccessible = true }.get(keyboardView) as android.graphics.Paint
+            val emojiTabPaint = T9KeyboardView::class.java.getDeclaredField("emojiTabTextPaint").apply { isAccessible = true }.get(keyboardView) as android.graphics.Paint
 
             // In the enlarged typography version, primary text scales with density to 16.5dp (28.875px)
             // and sub text scales to 10dp (17.5px) on G45:
             assertEquals(28.875f, primaryPaint.textSize, 0.5f)
             assertEquals(17.5f, subPaint.textSize, 0.5f)
             assertTrue("Sub text should be smaller than primary text", subPaint.textSize < primaryPaint.textSize)
+            assertTrue("Emoji glyph paint (24dp) must be significantly larger than primary text paint (16.5dp)", emojiGlyphPaint.textSize > primaryPaint.textSize * 1.35f)
+            assertTrue("Emoji tab icon paint (15.5dp) must be larger than sub text paint (10dp)", emojiTabPaint.textSize > subPaint.textSize * 1.4f)
         } finally {
             context.resources.displayMetrics.density = oldDensity
         }

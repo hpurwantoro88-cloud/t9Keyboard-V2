@@ -37,6 +37,47 @@ object KeyboardDimensionCalculator {
         return (targetHeightDp * density).toInt()
     }
 
+    data class LandscapeLayoutSpec(
+        val offsetX: Float,
+        val contentWidth: Float,
+        val panelDock: LandscapePanelDock
+    )
+
+    /**
+     * Calculates content horizontal offset, width, and landscape panel dock mode
+     * for one-handed mode, landscape compact+panel mode, or tablet ergonomic centering.
+     */
+    fun calculateLandscapeLayoutSpec(
+        width: Int,
+        density: Float,
+        isLandscape: Boolean,
+        oneHandedMode: Int,
+        landscapeLayoutMode: String = "left"
+    ): LandscapeLayoutSpec {
+        val w = width.toFloat()
+        val widthDp = if (density > 0f) width / density else 360f
+        val maxErgonomicWidthPx = 480f * density
+
+        return when {
+            oneHandedMode == 1 -> LandscapeLayoutSpec(0f, w * 0.85f, LandscapePanelDock.NONE)
+            oneHandedMode == 2 -> LandscapeLayoutSpec(w * 0.15f, w * 0.85f, LandscapePanelDock.NONE)
+            isLandscape && landscapeLayoutMode != "full" && widthDp >= 520f -> {
+                val compactWidth = minOf(w * 0.56f, 440f * density)
+                    .coerceIn(300f * density, w * 0.62f)
+                when (landscapeLayoutMode) {
+                    "right" -> LandscapeLayoutSpec(w - compactWidth, compactWidth, LandscapePanelDock.RIGHT)
+                    "center" -> LandscapeLayoutSpec((w - compactWidth) / 2f, compactWidth, LandscapePanelDock.CENTER)
+                    else -> LandscapeLayoutSpec(0f, compactWidth, LandscapePanelDock.LEFT)
+                }
+            }
+            widthDp > 600f && !isLandscape -> {
+                val cWidth = minOf(w, maxErgonomicWidthPx)
+                LandscapeLayoutSpec((w - cWidth) / 2f, cWidth, LandscapePanelDock.NONE)
+            }
+            else -> LandscapeLayoutSpec(0f, w, LandscapePanelDock.NONE)
+        }
+    }
+
     /**
      * Calculates content horizontal offset and width for one-handed mode or tablet ergonomic centering.
      */
@@ -44,21 +85,11 @@ object KeyboardDimensionCalculator {
         width: Int,
         density: Float,
         isLandscape: Boolean,
-        oneHandedMode: Int
+        oneHandedMode: Int,
+        landscapeLayoutMode: String = "left"
     ): Pair<Float, Float> {
-        val w = width.toFloat()
-        val widthDp = if (density > 0f) width / density else 360f
-        val maxErgonomicWidthPx = 480f * density
-
-        return when {
-            oneHandedMode == 1 -> Pair(0f, w * 0.85f)
-            oneHandedMode == 2 -> Pair(w * 0.15f, w * 0.85f)
-            widthDp > 600f && !isLandscape -> {
-                val cWidth = minOf(w, maxErgonomicWidthPx)
-                Pair((w - cWidth) / 2f, cWidth)
-            }
-            else -> Pair(0f, w)
-        }
+        val spec = calculateLandscapeLayoutSpec(width, density, isLandscape, oneHandedMode, landscapeLayoutMode)
+        return Pair(spec.offsetX, spec.contentWidth)
     }
 
     /**
@@ -84,14 +115,17 @@ object KeyboardDimensionCalculator {
         page1DigitTextPaint: Paint,
         page1OpTextPaint: Paint,
         page1SymTextPaint: Paint,
-        page1SmallTextPaint: Paint
+        page1SmallTextPaint: Paint,
+        emojiGlyphPaint: Paint? = null,
+        emoticonTextPaint: Paint? = null,
+        emojiTabTextPaint: Paint? = null
     ) {
         val density = displayMetrics.density
         val fontScale = config.fontScale
         val scaledDensity = density * if (fontScale > 0f) fontScale else 1f
 
         val baseRowHeight = 55f * density
-        val rowScale = if (baseRowHeight > 0f) (rowHeight / baseRowHeight).coerceIn(0.60f, 1.40f) else 1.0f
+        val rowScale = if (baseRowHeight > 0f) (rowHeight / baseRowHeight).coerceIn(0.78f, 1.40f) else 1.0f
 
         // Dynamic typography based on row and strip sizes
         primaryTextPaint.textSize = 16.5f * density * rowScale
@@ -99,6 +133,11 @@ object KeyboardDimensionCalculator {
         keyCornerSubTextPaint.textSize = 9.5f * density * rowScale
         dualSymTextPaint.textSize = 13.5f * density * rowScale
         pillTextPaint.textSize = (stripHeight * 0.28f).coerceIn(12f * density, 20f * density)
+
+        // Enlarged Emoji Picker typography (~45% larger emoji glyphs & ~55% larger category tabs)
+        emojiGlyphPaint?.textSize = 24f * density * rowScale
+        emoticonTextPaint?.textSize = 15.5f * density * rowScale
+        emojiTabTextPaint?.textSize = 15.5f * density * rowScale
 
         val candSize = (candFontSizeSp * scaledDensity).coerceAtMost(stripHeight * 0.52f)
         candidateTextPaint.textSize = candSize
@@ -111,7 +150,7 @@ object KeyboardDimensionCalculator {
 
         // Page 1 Dedicated Paints
         val p1RowScale = if (p1ContainerHeight > 0f && baseRowHeight > 0f) {
-            ((p1ContainerHeight / 3f) / baseRowHeight).coerceIn(0.60f, 1.40f)
+            ((p1ContainerHeight / 3f) / baseRowHeight).coerceIn(0.78f, 1.40f)
         } else rowScale
         page1DigitTextPaint.textSize = 16.5f * density * p1RowScale
         page1OpTextPaint.textSize = 12.67f * density * p1RowScale

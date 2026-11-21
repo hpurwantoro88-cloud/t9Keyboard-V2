@@ -44,9 +44,15 @@ object PredictionContextHelper {
             return ContextInfo(prevWord = null, hasTrailingSpace = true, isSentenceStart = true)
         }
 
-        val tokenEndChar = textBeforeCursor[end]
-        if (tokenEndChar == '.' || tokenEndChar == '!' || tokenEndChar == '?') {
-            return ContextInfo(prevWord = null, hasTrailingSpace = true, isSentenceStart = true)
+        var punctIdx = end
+        while (punctIdx >= 0 && textBeforeCursor[punctIdx] in CLOSING_DELIMITERS) {
+            punctIdx--
+        }
+        if (punctIdx >= 0) {
+            val punctChar = textBeforeCursor[punctIdx]
+            if (punctChar == '.' || punctChar == '!' || punctChar == '?') {
+                return ContextInfo(prevWord = null, hasTrailingSpace = true, isSentenceStart = true)
+            }
         }
 
         var start = end
@@ -73,4 +79,6 @@ object PredictionContextHelper {
         if (core.any { it.isDigit() }) return ""
         return core
     }
+
+    private val CLOSING_DELIMITERS = charArrayOf('"', '\'', '”', '’', ')', ']', '}')
 }

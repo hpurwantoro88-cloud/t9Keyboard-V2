@@ -246,4 +246,31 @@ class KeyboardRearrangementTest {
         assertNotNull(abcKey)
         assertTrue(abcKey.bounds.top >= atlas.page1ScrollContainerBounds.bottom)
     }
+
+    @Test
+    fun testVerticalSpaceMarginHitTestingInColumn4() {
+        val atlas = KeyAtlas()
+        atlas.computeGeometry(1080f, 780f, 3.0f)
+
+        // Place SPACE in slots 0 & 1 (Row 0 & 1 of Col 3), LANG in slot 2 (Row 2, Col 3)
+        val customOrder = listOf(
+            RearrangeKeyId.SPACE,
+            RearrangeKeyId.LANG,
+            RearrangeKeyId.DEL,
+            RearrangeKeyId.SHIFT,
+            RearrangeKeyId.ENTER,
+            RearrangeKeyId.PAGE
+        )
+        atlas.setLayoutOrder(customOrder)
+
+        val colWidth = atlas.colWidth
+        val rowHeight = atlas.rowHeight
+        val stripHeight = atlas.stripHeight
+        val langTop = stripHeight + 2 * rowHeight
+
+        // Touch just below SPACE/LANG vertical boundary (inside LANG top 8dp margin) resolves to SPACE
+        val hitKey = atlas.findKeyAt(colWidth * 3.5f, langTop + 10f)
+        assertNotNull(hitKey)
+        assertEquals(14, hitKey?.id)
+    }
 }

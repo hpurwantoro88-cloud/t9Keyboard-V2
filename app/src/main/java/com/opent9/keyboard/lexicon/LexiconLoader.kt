@@ -8,11 +8,24 @@ import java.io.File
 
 class LexiconLoader(
     private val assetManager: AssetManager,
-    private val filesDir: File
+    private val filesDir: File,
+    private val appVersionCode: Long = -1L
 ) {
 
     companion object {
         private const val TAG = "OpenT9LexiconLoader"
+        private const val VERSION_FILE = "lexicon_cache_version.txt"
+    }
+
+    private val isCacheStale: Boolean by lazy {
+        if (appVersionCode <= 0L) return@lazy false
+        val vf = File(filesDir, VERSION_FILE)
+        val cached = try {
+            if (vf.exists()) vf.readText().trim().toLongOrNull() else null
+        } catch (_: Exception) {
+            null
+        }
+        cached != appVersionCode
     }
 
     fun loadLexicons(startupLang: String) {
@@ -20,6 +33,11 @@ class LexiconLoader(
         loadLexiconForLanguage("ID", "dictionaries/id_lexicon.dawg")
         loadNgramForLanguage("EN", "dictionaries/en_bigrams.bin")
         loadNgramForLanguage("ID", "dictionaries/id_bigrams.bin")
+        if (appVersionCode > 0L && isCacheStale) {
+            try {
+                File(filesDir, VERSION_FILE).writeText(appVersionCode.toString())
+            } catch (_: Exception) {}
+        }
         NativeEngineBridge.switchLanguage(startupLang)
     }
 
@@ -57,12 +75,17 @@ class LexiconLoader(
         if (!loaded) {
             try {
                 val outFile = File(filesDir, assetPath.substringAfterLast('/'))
-                if (!outFile.exists() || outFile.length() == 0L) {
+                if (!outFile.exists() || outFile.length() == 0L || isCacheStale) {
                     outFile.parentFile?.mkdirs()
+                    val tmpFile = File(filesDir, "${outFile.name}.tmp")
                     assetManager.open(assetPath).use { input ->
-                        outFile.outputStream().use { output ->
+                        tmpFile.outputStream().use { output ->
                             input.copyTo(output)
                         }
+                    }
+                    if (!tmpFile.renameTo(outFile)) {
+                        tmpFile.copyTo(outFile, overwrite = true)
+                        tmpFile.delete()
                     }
                 }
                 ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->

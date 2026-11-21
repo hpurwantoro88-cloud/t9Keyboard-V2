@@ -50,6 +50,16 @@ inline float normalizeSpatialScore(float spatialScoreSum, int strokeLen) {
     return spatialScoreSum / std::sqrt(static_cast<float>(safeLen));
 }
 
+inline int countT9Digits(const char* word, uint8_t len) {
+    int count = 0;
+    for (uint8_t i = 0; i < len && word[i] != '\0'; ++i) {
+        if (word[i] != '\'' && word[i] != '-') {
+            count++;
+        }
+    }
+    return count;
+}
+
 inline uint32_t approxRawFreq(uint16_t quantizedLogFreq) {
     double lf = static_cast<double>(quantizedLogFreq) / static_cast<double>(LOG_FREQ_SCALE);
     double approx = std::pow(10.0, lf) - 1.0;
@@ -120,6 +130,17 @@ int serializeCandidateArray(const CandidateWord* cands, uint8_t count, uint8_t* 
     return offset;
 }
 
+inline bool equalsCaseInsensitive(const char* a, const char* b) {
+    size_t i = 0;
+    while (true) {
+        char ca = static_cast<char>(std::tolower(static_cast<unsigned char>(a[i])));
+        char cb = static_cast<char>(std::tolower(static_cast<unsigned char>(b[i])));
+        if (ca != cb) return false;
+        if (ca == '\0') return true;
+        i++;
+    }
+}
+
 uint8_t mergeCandidateLists(
     const CandidateWord* primaryCands, uint8_t primaryCount,
     const CandidateWord* secondaryCands, uint8_t secondaryCount,
@@ -131,10 +152,12 @@ uint8_t mergeCandidateLists(
 
     auto addWithScore = [&](const CandidateWord& src, float adjustedScore) {
         for (uint8_t i = 0; i < poolCount; ++i) {
-            if (std::strcmp(pool[i].word, src.word) == 0) {
+            if (equalsCaseInsensitive(pool[i].word, src.word)) {
                 if (adjustedScore > pool[i].score) {
                     pool[i].score = adjustedScore;
                     pool[i].frequency = std::max(pool[i].frequency, src.frequency);
+                    pool[i].length = src.length;
+                    std::memcpy(pool[i].word, src.word, src.length + 1);
                 }
                 return;
             }
@@ -302,6 +325,7 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
 
     int strokeLen = currentDepth + 1;
     int maxExtraDelta = maxExtraDeltaForStrokeLen(strokeLen);
+    float tierMargin = (strokeLen <= 3) ? 1.10f : 0.0f;
 
     auto addTargetNode = [&](uint32_t parentNodeIdx, float prevSpatialSum, uint8_t prevEdits, int maxAllowedHyps) {
         if (parentNodeIdx >= totalNodes) return;
@@ -400,7 +424,7 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
         if (lenDelta <= 0 || lenDelta > maxExtraDelta) return;
         uint8_t tier = (editCount == 0 && lenDelta <= 2) ? 0 : 1;
         for (size_t i = 0; i < completionCount; ++i) {
-            if (equalsCanonical(completionPool[i].word, wordStr)) {
+            if (equalsCaseInsensitive(completionPool[i].word, wordStr)) {
                 if (score > completionPool[i].cand_score) {
                     completionPool[i].cand_score = score;
                     completionPool[i].edit_count = std::min(completionPool[i].edit_count, editCount);
@@ -419,16 +443,21 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
             tc.cand_score = score;
             tc.frequency = freq;
         } else {
+            auto completionRank = [tierMargin](const TempCompletion& item) {
+                return item.cand_score + (item.tier == 0 ? tierMargin : 0.0f);
+            };
             size_t worstIdx = 0;
+            float worstRank = completionRank(completionPool[0]);
             for (size_t i = 1; i < completionCount; ++i) {
-                if (completionPool[i].tier > completionPool[worstIdx].tier ||
-                    (completionPool[i].tier == completionPool[worstIdx].tier &&
-                     completionPool[i].cand_score < completionPool[worstIdx].cand_score)) {
+                float curRank = completionRank(completionPool[i]);
+                if (curRank < worstRank ||
+                    (curRank == worstRank && completionPool[i].cand_score < completionPool[worstIdx].cand_score)) {
                     worstIdx = i;
+                    worstRank = curRank;
                 }
             }
-            if (tier < completionPool[worstIdx].tier ||
-                (tier == completionPool[worstIdx].tier && score > completionPool[worstIdx].cand_score)) {
+            float newRank = score + (tier == 0 ? tierMargin : 0.0f);
+            if (newRank > worstRank || (newRank == worstRank && score > completionPool[worstIdx].cand_score)) {
                 TempCompletion& tc = completionPool[worstIdx];
                 std::memcpy(tc.word, wordStr, wordLen + 1);
                 tc.word_len = wordLen;
@@ -576,12 +605,10 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
 
     std::sort(terminalPool, terminalPool + terminalCount, [](const TempTerminal& a, const TempTerminal& b) {
         if (a.is_terminal != b.is_terminal) return a.is_terminal > b.is_terminal;
-        // Exact-Digit Priority: exact pressed digits (edit_count == 0) outrank neighbor hypotheses
-        // unless the neighbor candidate has an overwhelming score margin (> 1.40 log-units)
-        if ((a.edit_count == 0) != (b.edit_count == 0)) {
-            if (a.edit_count == 0 && (b.cand_score - a.cand_score) < 1.40f) return true;
-            if (b.edit_count == 0 && (a.cand_score - b.cand_score) < 1.40f) return false;
-        }
+        // Exact-Digit Priority: scalar rank offset preserves strict weak ordering
+        float rankA = a.cand_score + (a.edit_count == 0 ? 1.40f : 0.0f);
+        float rankB = b.cand_score + (b.edit_count == 0 ? 1.40f : 0.0f);
+        if (rankA != rankB) return rankA > rankB;
         if (a.cand_score != b.cand_score) return a.cand_score > b.cand_score;
         return a.frequency > b.frequency;
     });
@@ -613,10 +640,11 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
 
                     const LexiconWordV2& lw = words[wid];
                     if (lw.str_offset >= totalStringBytes || lw.length >= MAX_WORD_CHARS) continue;
-                    int lenDelta = static_cast<int>(lw.length) > strokeLen ? (static_cast<int>(lw.length) - strokeLen) : 1;
+                    const char* wordStr = stringPool + lw.str_offset;
+                    int wordDigitLen = countT9Digits(wordStr, lw.length);
+                    int lenDelta = wordDigitLen > strokeLen ? (wordDigitLen - strokeLen) : 1;
                     if (lenDelta > maxExtraDelta) continue;
 
-                    const char* wordStr = stringPool + lw.str_offset;
                     if (dynamicStore && dynamicStore->isDeleted(wordStr)) continue;
                     if (containsWord(nextState.candidates, candCount, wordStr)) continue;
 
@@ -647,24 +675,24 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
             } else {
                 CandidateWord dynamicSubtreeCands[MAX_CANDIDATES];
                 uint8_t subCount = 0;
-                collectBestCompletions(bp.node_index, baseOffset, dynamicSubtreeCands, subCount, static_cast<uint8_t>(MAX_CANDIDATES));
+                collectBestCompletions(bp.node_index, baseOffset, config, nowSec,
+                                       dynamicSubtreeCands, subCount, static_cast<uint8_t>(MAX_CANDIDATES));
                 for (uint8_t s = 0; s < subCount; ++s) {
                     const CandidateWord& scw = dynamicSubtreeCands[s];
                     if (containsWord(nextState.candidates, candCount, scw.word)) continue;
-                    int lenDelta = static_cast<int>(scw.length) > strokeLen ? (static_cast<int>(scw.length) - strokeLen) : 1;
+                    int wordDigitLen = countT9Digits(scw.word, scw.length);
+                    int lenDelta = wordDigitLen > strokeLen ? (wordDigitLen - strokeLen) : 1;
                     addOrUpdateCompletion(scw.word, scw.length, bp.edit_count, lenDelta, scw.score, scw.frequency);
                 }
             }
         }
 
         if (completionCount > 1) {
-            float tierMargin = (strokeLen <= 3) ? 1.10f : 0.0f;
             std::sort(completionPool, completionPool + completionCount,
                       [tierMargin](const TempCompletion& a, const TempCompletion& b) {
-                if (tierMargin > 0.0f && a.tier != b.tier) {
-                    if (a.tier == 0 && (b.cand_score - a.cand_score) < tierMargin) return true;
-                    if (b.tier == 0 && (a.cand_score - b.cand_score) < tierMargin) return false;
-                }
+                float rankA = a.cand_score + (a.tier == 0 ? tierMargin : 0.0f);
+                float rankB = b.cand_score + (b.tier == 0 ? tierMargin : 0.0f);
+                if (rankA != rankB) return rankA > rankB;
                 if (a.cand_score != b.cand_score) return a.cand_score > b.cand_score;
                 return a.frequency > b.frequency;
             });
@@ -798,6 +826,7 @@ int T9SingleEngine::getNextWordCandidates(const char* prevWord, const NativeConf
 
 void T9SingleEngine::collectBestCompletions(
     uint32_t startNodeIdx, float baseScoreOffset,
+    const NativeConfig& config, uint64_t nowSec,
     CandidateWord* outCands, uint8_t& candCount, uint8_t maxCands
 ) const {
     if (startNodeIdx >= totalNodes || candCount >= maxCands) return;
@@ -813,14 +842,29 @@ void T9SingleEngine::collectBestCompletions(
     size_t qSize = 0;
     int strokeLen = currentDepth + 1;
     uint8_t maxExtraDepth = static_cast<uint8_t>(maxExtraDeltaForStrokeLen(strokeLen));
+    bool hasStaticCtx = (ngramEngine && activeContextBucket != NgramEngine::INVALID_BUCKET);
+    bool hasDynamicCtx = (dynamicStore && activeContextWord[0] != '\0');
 
     auto pushChildren = [&](uint32_t nodeIdx, uint8_t curExtraDepth) {
         if (curExtraDepth >= maxExtraDepth) return;
         uint32_t eIdx = nodes[nodeIdx].first_child_edge;
         while (eIdx > 0 && eIdx < totalEdges) {
             const DigitEdgeV2& e = edges[eIdx];
-            if (e.target_node < totalNodes && qSize < MAX_QUEUE) {
-                queue[qSize++] = { e.target_node, e.max_log_freq, static_cast<uint8_t>(curExtraDepth + 1) };
+            if (e.target_node < totalNodes) {
+                uint8_t nextExtra = static_cast<uint8_t>(curExtraDepth + 1);
+                if (qSize < MAX_QUEUE) {
+                    queue[qSize++] = { e.target_node, e.max_log_freq, nextExtra };
+                } else {
+                    size_t minIdx = 0;
+                    for (size_t i = 1; i < qSize; ++i) {
+                        if (queue[i].priority_log_freq < queue[minIdx].priority_log_freq) {
+                            minIdx = i;
+                        }
+                    }
+                    if (e.max_log_freq > queue[minIdx].priority_log_freq) {
+                        queue[minIdx] = { e.target_node, e.max_log_freq, nextExtra };
+                    }
+                }
             }
             if (!e.has_next_sibling) break;
             eIdx++;
@@ -854,10 +898,18 @@ void T9SingleEngine::collectBestCompletions(
             if (dynamicStore && dynamicStore->isDeleted(wordStr)) continue;
             if (containsWord(outCands, candCount, wordStr)) continue;
 
+            float ctxBoost = hasStaticCtx ? ngramEngine->getBigramBoost(activeContextBucket, wid) : 0.0f;
+            if (hasDynamicCtx) {
+                ctxBoost += dynamicStore->getBigramBoost(activeContextWord, wordStr, nowSec, config.decay_half_life_days);
+            }
+            bool isSlang = (lw.flags & LEX_FLAG_SLANG) != 0;
+            float slangBoost = (isSlang && config.slang_boost_enabled) ? SLANG_LEXICON_BOOST : 0.0f;
+
             CandidateWord& cw = outCands[candCount++];
             cw.length = lw.length;
             float corpusLog = static_cast<float>(lw.log_freq) / LOG_FREQ_SCALE;
-            cw.score = baseScoreOffset + corpusLog - computeCompletionLengthPenalty(cur.extra_depth, strokeLen);
+            cw.score = baseScoreOffset + corpusLog + slangBoost + (WEIGHT_CTX * ctxBoost)
+                     - computeCompletionLengthPenalty(cur.extra_depth, strokeLen);
             cw.frequency = approxRawFreq(lw.log_freq);
             std::memcpy(cw.word, wordStr, lw.length + 1);
         }
@@ -938,7 +990,9 @@ void T9SingleEngine::findClosestWords(
                         cw.score = (WEIGHT_SPATIAL * spatialAdj) + (static_cast<float>(lw.log_freq) / LOG_FREQ_SCALE) - basePenalty;
                         std::memcpy(cw.word, wordStr, lw.length + 1);
                     }
-                    collectBestCompletions(e.target_node, -basePenalty, outCands, candCount, maxCands);
+                    float spatialAdj = scorer.calculateLogLikelihood(targetDigit, touchX, touchY, config.touch_variance_sigma);
+                    uint64_t nowSec = static_cast<uint64_t>(std::time(nullptr));
+                    collectBestCompletions(e.target_node, (WEIGHT_SPATIAL * spatialAdj) - basePenalty, config, nowSec, outCands, candCount, maxCands);
                 }
                 if (!e.has_next_sibling) break;
                 eIdx++;
@@ -1016,16 +1070,24 @@ bool DawgEngine::pushStroke(int digit, float touchX, float touchY, const Spatial
     bool okPrimary = primary.pushStroke(digit, touchX, touchY, scorer, config);
     bool okSecondary = false;
 
-    if (config.bilingual_enabled != 0 && secondary.isLoaded() && secondary.getDepth() == depthIdx) {
-        okSecondary = secondary.pushStroke(digit, touchX, touchY, scorer, config);
-        MergedStrokeState& ms = mergedHistory[depthIdx];
-        ms.active = true;
-        ms.count = mergeCandidateLists(
-            primary.getCandidates(), primary.getCandidateCount(),
-            secondary.getCandidates(), secondary.getCandidateCount(),
-            SECONDARY_LANG_PENALTY,
-            ms.candidates, static_cast<uint8_t>(MAX_CANDIDATES)
-        );
+    if (config.bilingual_enabled != 0 && secondary.isLoaded()) {
+        if (depthIdx == 0 && secondary.getDepth() != 0) {
+            secondary.reset();
+        }
+        if (secondary.getDepth() == depthIdx) {
+            okSecondary = secondary.pushStroke(digit, touchX, touchY, scorer, config);
+            MergedStrokeState& ms = mergedHistory[depthIdx];
+            ms.active = true;
+            ms.count = mergeCandidateLists(
+                primary.getCandidates(), primary.getCandidateCount(),
+                secondary.getCandidates(), secondary.getCandidateCount(),
+                SECONDARY_LANG_PENALTY,
+                ms.candidates, static_cast<uint8_t>(MAX_CANDIDATES)
+            );
+        } else {
+            mergedHistory[depthIdx].active = false;
+            mergedHistory[depthIdx].count = 0;
+        }
     } else {
         mergedHistory[depthIdx].active = false;
         mergedHistory[depthIdx].count = 0;

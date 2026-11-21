@@ -68,12 +68,28 @@ class EnglishOrthographyTest {
     @Test
     fun testToCanonical() {
         assertEquals("dont", EnglishOrthography.toCanonical("don't"))
+        assertEquals("dont", EnglishOrthography.toCanonical("don’t"))
         assertEquals("dont", EnglishOrthography.toCanonical("Don't"))
+        assertEquals("jalanjalan", EnglishOrthography.toCanonical("jalan-jalan"))
         assertEquals("im", EnglishOrthography.toCanonical("I'm"))
         assertEquals("cant", EnglishOrthography.toCanonical("can't"))
         assertEquals("its", EnglishOrthography.toCanonical("it's"))
         assertEquals("i", EnglishOrthography.toCanonical("I"))
         assertEquals("hello", EnglishOrthography.toCanonical("hello"))
+    }
+
+    @Test
+    fun testBilingualContractionRestorationInIndonesianMode() {
+        val processed = CandidateResolver.processCandidatesForLanguage(
+            raw = listOf("bisa", "dont", "its"),
+            currentComposingDigits = listOf(2, 4, 7, 2),
+            lang = "ID",
+            bilingual = true
+        )
+        assertTrue(processed.contains("bisa"))
+        assertTrue(processed.contains("don't"))
+        assertTrue(processed.contains("it's"))
+        assertTrue(processed.contains("its"))
     }
 
     @Test

@@ -77,6 +77,12 @@ class KeyAtlas {
 
     var lastOffsetX: Float = 0f
         private set
+    var lastContentWidth: Float = 0f
+        private set
+
+    val landscapePanelLayout = LandscapePanelLayout()
+    val isLandscapePanelActive: Boolean
+        get() = landscapePanelLayout.isActive
 
     val grid: Array<Array<KeyInfo>> = Array(4) { r ->
         Array(4) { c -> keys[r * 4 + c] }
@@ -250,7 +256,12 @@ class KeyAtlas {
 
     fun applyPage0RearrangedLayout(order: List<RearrangeKeyId> = layoutOrder, offsetX: Float = lastOffsetX) {
         if (colWidth <= 0f || rowHeight <= 0f) return
-        layoutOrder = order
+        val effectiveOrder = if (order.sumOf { it.span } == KeyboardLayoutConfig.TRACK_SLOTS.size) {
+            order
+        } else {
+            KeyboardLayoutConfig.DEFAULT_ORDER
+        }
+        layoutOrder = effectiveOrder
 
         // Reset references for affected cells in grid (col 3 and row 3)
         for (r in 0..3) {
@@ -261,7 +272,7 @@ class KeyAtlas {
         }
 
         var slotIndex = 0
-        for (keyEnum in order) {
+        for (keyEnum in effectiveOrder) {
             if (slotIndex >= KeyboardLayoutConfig.TRACK_SLOTS.size) break
             val key = keys[keyEnum.id]
             if (keyEnum.span == 1) {
@@ -309,7 +320,8 @@ class KeyAtlas {
         height: Float,
         density: Float,
         offsetX: Float = 0f,
-        contentWidth: Float = width
+        contentWidth: Float = width,
+        landscapePanelDock: LandscapePanelDock = LandscapePanelDock.NONE
     ) {
         this.density = density
         totalWidth = width
@@ -319,9 +331,12 @@ class KeyAtlas {
         rowHeight = keypadHeight / 4f
         colWidth = contentWidth / 4f
         lastOffsetX = offsetX
+        lastContentWidth = contentWidth
 
         stripBounds.set(offsetX, 0f, offsetX + contentWidth, stripHeight)
-        val pillWidth = contentWidth * 0.12f
+        val pillWidth = (contentWidth * 0.12f)
+            .coerceIn(38f * density, 56f * density)
+            .coerceAtMost(contentWidth * 0.22f)
         pillBounds.set(offsetX, 0f, offsetX + pillWidth, stripHeight)
         candidateViewportBounds.set(offsetX + pillWidth, 0f, offsetX + contentWidth, stripHeight)
 
@@ -342,9 +357,15 @@ class KeyAtlas {
         applyPage0RearrangedLayout(layoutOrder, offsetX)
 
         computePage1Geometry(contentWidth, height, density, offsetX)
-        computePage23Geometry(page2Keys, contentWidth, height, density, offsetX)
-        computePage23Geometry(page3Keys, contentWidth, height, density, offsetX)
-        emojiAtlas.computeLayout(contentWidth, height, density, offsetX)
+
+        // In Landscape Compact+Panel mode, 10-column symbol pages and 7-column emoji grid use full width
+        val fullOrContentWidth = if (landscapePanelDock != LandscapePanelDock.NONE) width else contentWidth
+        val fullOrOffsetX = if (landscapePanelDock != LandscapePanelDock.NONE) 0f else offsetX
+        computePage23Geometry(page2Keys, fullOrContentWidth, height, density, fullOrOffsetX)
+        computePage23Geometry(page3Keys, fullOrContentWidth, height, density, fullOrOffsetX)
+        emojiAtlas.computeLayout(fullOrContentWidth, height, density, fullOrOffsetX)
+
+        landscapePanelLayout.computeLayout(width, height, density, offsetX, contentWidth, landscapePanelDock)
         updatePageLayout(currentPage)
     }
 
@@ -546,6 +567,13 @@ class KeyAtlas {
         return if (idx in 0 until page1OperatorItems.size) idx else null
     }
 
+    fun findLandscapePanelKeyAt(x: Float, y: Float): LandscapePanelKey? {
+        if (currentPage != KeyboardPage.PAGE_0_TEXT && currentPage != KeyboardPage.PAGE_1_NUM_SYM) {
+            return null
+        }
+        return landscapePanelLayout.findKeyAt(x, y)
+    }
+
     fun findKeyAt(x: Float, y: Float): KeyInfo? {
         if (currentPage == KeyboardPage.PAGE_4_EMOJI) {
             return null
@@ -590,6 +618,9 @@ class KeyAtlas {
         }
 
         if (currentPage == KeyboardPage.PAGE_1_NUM_SYM) {
+            if (isLandscapePanelActive && (x < lastOffsetX || x > lastOffsetX + lastContentWidth)) {
+                return null
+            }
             // If in operator scroll container, handled directly by TouchGestureTracker
             if (page1ScrollContainerBounds.contains(x, y)) {
                 return null
@@ -632,6 +663,12 @@ class KeyAtlas {
             }
             if (c - 1 in 0..3 && grid[r][c - 1].type == KeyType.SPACE_0 && x <= candidateKey.bounds.left + spaceMargin) {
                 return grid[r][c - 1]
+            }
+            if (r + 1 in 0..3 && grid[r + 1][c].type == KeyType.SPACE_0 && y >= candidateKey.bounds.bottom - spaceMargin) {
+                return grid[r + 1][c]
+            }
+            if (r - 1 in 0..3 && grid[r - 1][c].type == KeyType.SPACE_0 && y <= candidateKey.bounds.top + spaceMargin) {
+                return grid[r - 1][c]
             }
         }
 

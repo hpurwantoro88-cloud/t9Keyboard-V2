@@ -10,13 +10,31 @@ object CandidateResolver {
 
     /**
      * Queries candidates from the native engine and applies language-specific orthography rules.
+     * When bilingual prediction is enabled, applies complementary orthography post-processing
+     * for the secondary language as well.
      */
     fun getProcessedCandidates(currentComposingDigits: List<Int>): List<String> {
         val raw = NativeEngineBridge.getCandidates()
         val lang = NativeEngineBridge.getActiveLanguage()
+        val bilingual = NativeEngineBridge.isBilingualEnabled
+        return processCandidatesForLanguage(raw, currentComposingDigits, lang, bilingual)
+    }
+
+    internal fun processCandidatesForLanguage(
+        raw: List<String>,
+        currentComposingDigits: List<Int>,
+        lang: String,
+        bilingual: Boolean
+    ): List<String> {
         return when (lang) {
-            "ID" -> IndonesianOrthography.processCandidates(raw, currentComposingDigits)
-            else -> EnglishOrthography.processCandidates(raw, lang)
+            "ID" -> {
+                val idProcessed = IndonesianOrthography.processCandidates(raw, currentComposingDigits)
+                if (bilingual) EnglishOrthography.restoreBilingualContractions(idProcessed) else idProcessed
+            }
+            else -> {
+                val enProcessed = EnglishOrthography.processCandidates(raw, lang)
+                if (bilingual) IndonesianOrthography.processCandidates(enProcessed, currentComposingDigits) else enProcessed
+            }
         }
     }
 

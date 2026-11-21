@@ -53,6 +53,14 @@ class PredictionContextHelperTest {
             PredictionContextHelper.extractFromText("Done. ")
         )
         assertEquals(
+            PredictionContextHelper.ContextInfo(null, hasTrailingSpace = true, isSentenceStart = true),
+            PredictionContextHelper.extractFromText("\"Halo.\" ")
+        )
+        assertEquals(
+            PredictionContextHelper.ContextInfo("hello", hasTrailingSpace = true, isSentenceStart = false),
+            PredictionContextHelper.extractFromText("He said \"hello\" ")
+        )
+        assertEquals(
             PredictionContextHelper.ContextInfo(null, hasTrailingSpace = false, isSentenceStart = false),
             PredictionContextHelper.extractFromText("selamat")
         )

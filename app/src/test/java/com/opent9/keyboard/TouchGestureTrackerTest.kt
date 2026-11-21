@@ -810,4 +810,41 @@ class TouchGestureTrackerTest {
 
         assertEquals(key2.id, tappedKey?.id)
     }
+
+    @Test
+    fun testDigitKeyTapReportsActionDownCoordinatesAfterDrift() {
+        val atlas = KeyAtlas()
+        atlas.computeGeometry(1080f, 780f, 3f)
+
+        var tapX = -1f
+        var tapY = -1f
+        var tappedKey: KeyInfo? = null
+        val listener = object : TouchGestureListener {
+            override fun onKeyTap(key: KeyInfo, touchX: Float, touchY: Float) {
+                tappedKey = key
+                tapX = touchX
+                tapY = touchY
+            }
+            override fun onKeyFlick(key: KeyInfo, direction: FlickDirection) {}
+            override fun onKeyLongPress(key: KeyInfo) {}
+            override fun onSpaceScrub(steps: Int) {}
+            override fun onPillTap() {}
+            override fun onCandidateTap(index: Int) {}
+            override fun onStripScroll(newScrollOffset: Float) {}
+            override fun onTouchStateChanged(activeKeyId: Int?) {}
+        }
+        val tracker = TouchGestureTracker(atlas, listener)
+
+        val key2 = atlas.keys[1]
+        val downX = key2.centerX - 10f
+        val downY = key2.centerY + 5f
+        val t0 = 1000L
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, downX, downY, 0)) { null }
+        // Drift 80px sideways on digit 2 (non-flick key) before lifting
+        tracker.onTouchEvent(MotionEvent.obtain(t0, t0 + 60, MotionEvent.ACTION_UP, downX + 80f, downY, 0)) { null }
+
+        assertEquals(key2.id, tappedKey?.id)
+        assertEquals(downX, tapX, 0.01f)
+        assertEquals(downY, tapY, 0.01f)
+    }
 }

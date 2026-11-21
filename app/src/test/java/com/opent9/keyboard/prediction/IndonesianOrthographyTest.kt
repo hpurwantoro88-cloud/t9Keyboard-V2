@@ -46,4 +46,24 @@ class IndonesianOrthographyTest {
         val processed = IndonesianOrthography.processCandidates(raw, bukunyaDigits)
         assertEquals(1, processed.count { it == "bukunya" })
     }
+
+    @Test
+    fun testSuffixSynthesisValidatesRootDigitsAndBothLahKah() {
+        // "bisa" = [2, 4, 7, 2], "kan" = [5, 2, 6]; "kuda" has length 4 but wrong digits [5, 8, 3, 2]
+        val bisaKanDigits = listOf(2, 4, 7, 2, 5, 2, 6)
+        val rawMismatch = listOf("kuda")
+        val processedMismatch = IndonesianOrthography.processCandidates(rawMismatch, bisaKanDigits)
+        assertFalse("Must not synthesize from non-matching digit root", processedMismatch.contains("kudakan"))
+
+        // "bisa" + "lah" / "kah" ([5, 2, 4])
+        val bisalahDigits = listOf(2, 4, 7, 2, 5, 2, 4)
+        val processedLahKah = IndonesianOrthography.processCandidates(listOf("bisa"), bisalahDigits)
+        assertTrue(processedLahKah.contains("bisalah"))
+        assertTrue(processedLahKah.contains("bisakah"))
+
+        // Exact dictionary match at index 0 is preserved above synthesized compound
+        val withExact = IndonesianOrthography.processCandidates(listOf("bisakah", "bisa"), bisalahDigits)
+        assertEquals("bisakah", withExact[0])
+        assertEquals("bisalah", withExact[1])
+    }
 }

@@ -83,7 +83,7 @@ class OpenT9InputMethodService : InputMethodService() {
         wordCorrectionController = WordCorrectionController(
             suggestionGuard = suggestionGuard,
             learnedWordsRepository = learnedWordsRepository,
-            getProcessedCandidates = { getProcessedCandidates() }
+            getProcessedCandidates = { digits -> CandidateResolver.getProcessedCandidates(digits) }
         )
 
         composingCoordinator = T9ComposingCoordinator(
@@ -120,7 +120,18 @@ class OpenT9InputMethodService : InputMethodService() {
         dbFile.parentFile?.mkdirs()
         NativeEngineBridge.initEngine(dbFile.absolutePath)
 
-        val lexiconLoader = LexiconLoader(assets, filesDir)
+        val appVersionCode = try {
+            val pkgInfo = packageManager.getPackageInfo(packageName, 0)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                pkgInfo.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                pkgInfo.versionCode.toLong()
+            }
+        } catch (_: Exception) {
+            -1L
+        }
+        val lexiconLoader = LexiconLoader(assets, filesDir, appVersionCode)
         lexiconLoader.loadLexicons(settingsObserver.getStartupLanguage())
         sessionTextT9Mode = settingsObserver.isDefaultT9()
     }
@@ -272,6 +283,21 @@ class OpenT9InputMethodService : InputMethodService() {
                     FlickDirection.RIGHT -> {}
                 }
             }
+        }
+
+        keyboardView.onLandscapePanelAction = { action ->
+            LandscapePanelActionHandler.handleAction(
+                action = action,
+                ic = currentInputConnection,
+                hasActiveComposing = hasActiveComposing,
+                commitActiveCandidate = { addSpace -> commitActiveCandidate(addSpace) },
+                commitMultiTapActive = { commitMultiTapActive() },
+                flushMultiTapWord = { flushMultiTapWord() },
+                updateAutoCaps = { clearManual -> updateAutoCaps(clearManual) },
+                onSwapSide = { settingsObserver.swapLandscapeDockSide() },
+                onSwitchToPage = { targetPage -> switchToPage(targetPage) },
+                onHideKeyboard = { requestHideSelf(0) }
+            )
         }
     }
 
@@ -701,7 +727,7 @@ class OpenT9InputMethodService : InputMethodService() {
 
     private fun commitWordCorrectionCandidate(index: Int) {
         val ic = currentInputConnection ?: return
-        ignoreSelectionUpdateCount += 2
+        ignoreSelectionUpdateCount += 1
         val replacement = wordCorrectionController.commitCandidate(index, ic, isIncognito)
         if (replacement != null) {
             activeCandidates = emptyList()
@@ -765,6 +791,7 @@ class OpenT9InputMethodService : InputMethodService() {
         if (::keyboardView.isInitialized) {
             keyboardView.updateThemeFromConfiguration(newConfig)
             keyboardView.requestLayout()
+            keyboardView.reloadLayoutConfiguration()
         }
     }
 

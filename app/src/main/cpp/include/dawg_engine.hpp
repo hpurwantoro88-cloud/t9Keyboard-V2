@@ -130,6 +130,7 @@ private:
     void refreshContextBucket();
 
     void collectBestCompletions(uint32_t startNodeIdx, float baseScoreOffset,
+                                const NativeConfig& config, uint64_t nowSec,
                                 CandidateWord* outCands, uint8_t& candCount,
                                 uint8_t maxCands) const;
 

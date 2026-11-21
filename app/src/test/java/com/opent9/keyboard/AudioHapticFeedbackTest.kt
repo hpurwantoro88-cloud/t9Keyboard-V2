@@ -176,4 +176,19 @@ class AudioHapticFeedbackTest {
 
         observer.stop()
     }
+
+    @Test
+    fun testNativeEngineBridgeUtf8CandidateDecoding() {
+        val words = listOf("don’t", "café", "selamat")
+        val buf = java.nio.ByteBuffer.allocateDirect(256)
+        buf.put(words.size.toByte())
+        for (w in words) {
+            val bytes = w.toByteArray(Charsets.UTF_8)
+            buf.put(bytes.size.toByte())
+            buf.put(bytes)
+        }
+        val bytesWritten = buf.position()
+        val parsed = com.opent9.keyboard.jni.NativeEngineBridge.parseCandidatesFromBuffer(buf, bytesWritten)
+        assertEquals(words, parsed)
+    }
 }

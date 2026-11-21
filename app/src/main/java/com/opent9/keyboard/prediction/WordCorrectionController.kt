@@ -10,7 +10,7 @@ import com.opent9.keyboard.jni.NativeEngineBridge
 class WordCorrectionController(
     private val suggestionGuard: SuggestionGuard,
     private val learnedWordsRepository: LearnedWordsRepository,
-    private val getProcessedCandidates: () -> List<String>
+    private val getProcessedCandidates: (List<Int>) -> List<String>
 ) {
     var activeContext: WordCorrectionContext? = null
         private set
@@ -85,7 +85,7 @@ class WordCorrectionController(
         for (d in digits) {
             NativeEngineBridge.pushStroke(d, 0f, 0f)
         }
-        val rawCandidates = getProcessedCandidates().filterNot { candidate ->
+        val rawCandidates = getProcessedCandidates(digits).filterNot { candidate ->
             NativeEngineBridge.isWordDeleted(EnglishOrthography.toCanonical(candidate))
         }
         NativeEngineBridge.resetT9()

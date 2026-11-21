@@ -17,23 +17,23 @@ class EmojiPickerPageTest {
         val emojiAtlas = EmojiAtlas()
         emojiAtlas.computeLayout(1080f, 780f, 3f)
 
-        // 1. Category tabs: 10 tabs across 1080px (each tab is 108px wide, 0..120px tall)
+        // 1. Category tabs: 8 tabs across 1080px (each tab is 135px wide, 0..120px tall)
         assertEquals(0, emojiAtlas.findCategoryTabAt(50f, 50f)) // Tab 0: Recents
         assertEquals(1, emojiAtlas.findCategoryTabAt(150f, 50f)) // Tab 1: Smileys
-        assertEquals(7, emojiAtlas.findCategoryTabAt(800f, 50f)) // Tab 7: Objects
+        assertEquals(7, emojiAtlas.findCategoryTabAt(1000f, 50f)) // Tab 7: Emoticons ;-)
         assertNull(emojiAtlas.findCategoryTabAt(50f, 150f)) // Below tabs
 
-        // 2. Emoji grid: starts at tabHeight (120px), 4 rows x 7 cols
+        // 2. Emoji grid: starts at tabHeight (120px), 4 rows x 6 cols
         // Grid height: 540px. Range: 120px .. 660px.
-        // Col width: 1080 / 7 = 154.28px. Row height: 135px.
+        // Col width: 1080 / 6 = 180px. Row height: 135px.
         assertEquals(0, emojiAtlas.findEmojiIndexAt(50f, 150f, scrollY = 0f)) // Row 0, Col 0
         assertEquals(1, emojiAtlas.findEmojiIndexAt(200f, 150f, scrollY = 0f)) // Row 0, Col 1
-        assertEquals(7, emojiAtlas.findEmojiIndexAt(50f, 300f, scrollY = 0f)) // Row 1, Col 0
+        assertEquals(6, emojiAtlas.findEmojiIndexAt(50f, 300f, scrollY = 0f)) // Row 1, Col 0
         assertNull(emojiAtlas.findEmojiIndexAt(50f, 50f, scrollY = 0f)) // Above grid
 
         // 2b. Scroll hit-testing: scroll up by 1 row (-135px)
         // Position y=150f now maps to Row 1!
-        assertEquals(7, emojiAtlas.findEmojiIndexAt(50f, 150f, scrollY = -135f))
+        assertEquals(6, emojiAtlas.findEmojiIndexAt(50f, 150f, scrollY = -135f))
 
         // 3. Control row: starts at 660px, 4 buttons (each 270px wide)
         assertEquals(0, emojiAtlas.findControlIndexAt(100f, 700f)) // ABC
@@ -314,5 +314,37 @@ class EmojiPickerPageTest {
         inputView.onEmojiControlAction?.invoke(2) // Rapid 2nd Space
 
         assertEquals("halo. ", editText.text.toString())
+    }
+
+    @Test
+    fun testSwiftKeyTextEmoticonsTabAndPrunedCategories() {
+        val emojiAtlas = EmojiAtlas()
+        emojiAtlas.computeLayout(1080f, 780f, 3f)
+
+        // Verify rare categories (Flags, Travel/Car, Activities) are pruned
+        val cats = emojiAtlas.categories.toList()
+        assertFalse("Flags should be removed", cats.contains("Flags"))
+        assertFalse("Travel should be removed", cats.contains("Travel"))
+        assertFalse("Activities should be removed", cats.contains("Activities"))
+        assertTrue("Emoticons tab must be present", cats.contains("Emoticons"))
+        assertEquals(";-)", emojiAtlas.categoryTabIcons.last())
+
+        // Switch to Emoticons tab (last tab, index 7)
+        val emoticonTabIdx = cats.indexOf("Emoticons")
+        emojiAtlas.activeCategoryIndex = emoticonTabIdx
+        val activeList = emojiAtlas.getActiveEmojiList()
+
+        // Verify the first 24 items (6x4 grid) match the SwiftKey emoticon reference
+        val expectedTop24 = listOf(
+            ":-)", ":-(", ";-)", ":-P", ":-D", ":-|",
+            ":-*", ":O", "B-)", ":-$", ":3", ":-/",
+            ":-[", ":-\\", "O:-)", ":'(", "(^_-)", "(-:",
+            ":-{", "8-)", "^O^", "^_^", "(^O^)", "<3"
+        )
+        assertEquals(expectedTop24, activeList.take(24))
+        for (item in expectedTop24) {
+            assertTrue("'$item' should be recognized as a text emoticon", emojiAtlas.isTextEmoticon(item))
+        }
+        assertFalse("Standard Unicode emoji should not be marked as ASCII text emoticon", emojiAtlas.isTextEmoticon("😀"))
     }
 }

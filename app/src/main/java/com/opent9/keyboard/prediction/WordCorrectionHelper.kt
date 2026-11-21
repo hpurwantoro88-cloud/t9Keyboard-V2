@@ -9,14 +9,14 @@ data class WordCorrectionContext(
 
 object WordCorrectionHelper {
 
-    fun isWordChar(c: Char): Boolean = c.isLetterOrDigit() || c == '\''
+    fun isWordChar(c: Char): Boolean = c.isLetterOrDigit() || c == '\'' || c == '’' || c == '-'
 
     fun extractWordPartBefore(text: String): String {
         var idx = text.length - 1
         while (idx >= 0 && isWordChar(text[idx])) {
             idx--
         }
-        return text.substring(idx + 1)
+        return text.substring(idx + 1).trimStart('-')
     }
 
     fun extractWordPartAfter(text: String): String {
@@ -24,7 +24,7 @@ object WordCorrectionHelper {
         while (idx < text.length && isWordChar(text[idx])) {
             idx++
         }
-        return text.substring(0, idx)
+        return text.substring(0, idx).trimEnd('-')
     }
 
     fun wordToDigits(word: String): List<Int> {

@@ -19,4 +19,8 @@ interface TouchGestureListener {
     fun onEmojiPageSwipe(direction: FlickDirection) {}
     fun onEmojiDelFlick(direction: FlickDirection) {}
     fun onEmojiTouchStateChanged(tabIndex: Int?, gridIndex: Int?, controlIndex: Int?) {}
+
+    // Landscape utility panel callbacks
+    fun onLandscapePanelKeyTap(key: LandscapePanelKey) {}
+    fun onLandscapePanelTouchStateChanged(activePanelKeyId: Int?) {}
 }

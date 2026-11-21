@@ -31,7 +31,10 @@ object KeyboardThemeApplier {
         page1DigitTextPaint: Paint,
         page1OpTextPaint: Paint,
         page1SymTextPaint: Paint,
-        page1SmallTextPaint: Paint
+        page1SmallTextPaint: Paint,
+        emojiGlyphPaint: Paint? = null,
+        emoticonTextPaint: Paint? = null,
+        emojiTabTextPaint: Paint? = null
     ) {
         backgroundPaint.color = colors.background
         keyBackgroundPaint.color = colors.keyBackground
@@ -55,5 +58,8 @@ object KeyboardThemeApplier {
         page1OpTextPaint.color = colors.page1OpText
         page1SymTextPaint.color = colors.page1SymText
         page1SmallTextPaint.color = colors.page1SmallText
+        emojiGlyphPaint?.color = colors.primaryText
+        emoticonTextPaint?.color = colors.pillText
+        emojiTabTextPaint?.color = colors.primaryText
     }
 }

@@ -68,6 +68,13 @@
             app:entryValues="@array/pref_one_handed_values"
             app:defaultValue="0"
             app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="landscape_layout_mode"
+            app:title="@string/pref_landscape_layout_mode"
+            app:entries="@array/pref_landscape_layout_entries"
+            app:entryValues="@array/pref_landscape_layout_values"
+            app:defaultValue="left"
+            app:useSimpleSummaryProvider="true" />
         <Preference
             app:key="rearrange_keyboard_layout"
             app:title="@string/pref_rearrange_layout"

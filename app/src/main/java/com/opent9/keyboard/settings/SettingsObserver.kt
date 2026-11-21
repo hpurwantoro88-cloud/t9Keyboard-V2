@@ -52,7 +52,8 @@ class SettingsObserver(
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         syncAll()
         if (key == KeyboardLayoutConfig.PREF_KEY ||
-            key == "keyboard_height" || key == "candidate_font_size" || key == "one_handed_mode" ||
+            key == "keyboard_height" || key == "candidate_font_size" ||
+            key == "one_handed_mode" || key == "landscape_layout_mode" ||
             key == "long_press_delay" ||
             key == "space_scrubbing" || key == "space_scrubbing_sensitivity" || key == "space_scrubbing_hold"
         ) {
@@ -90,6 +91,11 @@ class SettingsObserver(
     fun getKeyboardHeightDp(): Int = prefs.getInt("keyboard_height", 260)
     fun getCandidateFontSizeSp(): Int = prefs.getInt("candidate_font_size", 16)
     fun getOneHandedMode(): Int = (prefs.getString("one_handed_mode", "0") ?: "0").toIntOrNull() ?: 0
+    fun getLandscapeLayoutMode(): String = prefs.getString("landscape_layout_mode", "left") ?: "left"
+    fun swapLandscapeDockSide() {
+        val next = if (getLandscapeLayoutMode() == "right") "left" else "right"
+        prefs.edit().putString("landscape_layout_mode", next).apply()
+    }
     fun getLongPressDelay(): Long = prefs.getInt("long_press_delay", 350).toLong()
     fun getAppTheme(): String = prefs.getString("app_theme", "system") ?: "system"
     fun getKeyboardLayoutOrder(): List<RearrangeKeyId> {

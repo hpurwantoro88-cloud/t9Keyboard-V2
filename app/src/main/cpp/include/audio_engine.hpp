@@ -30,6 +30,8 @@ public:
 private:
     std::mutex streamMutex;
     std::shared_ptr<oboe::AudioStream> stream;
+    std::atomic<bool> streamHealthy{false};
+    std::atomic<bool> startFailed{false};
     std::atomic<bool> isPlaying{false};
     std::atomic<size_t> playbackFrameIndex{0};
     std::atomic<SoundStyle> currentStyle{SoundStyle::MECHANICAL_CLASSIC};

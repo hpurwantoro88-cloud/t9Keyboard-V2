@@ -53,6 +53,9 @@ open class T9KeyboardView @JvmOverloads constructor(
     private val page1OpTextPaint = KeyboardPaintFactory.createTextPaint(32f, Paint.Align.CENTER, color = Color.parseColor("#E0E0E6"))
     private val page1SymTextPaint = KeyboardPaintFactory.createTextPaint(34f, Paint.Align.CENTER, color = Color.parseColor("#E0E0E6"))
     private val page1SmallTextPaint = KeyboardPaintFactory.createTextPaint(28f, Paint.Align.CENTER, isBold = true, color = Color.parseColor("#E0E0E6"))
+    private val emojiGlyphPaint = KeyboardPaintFactory.createTextPaint(64f, Paint.Align.CENTER, color = Color.parseColor("#E0E0E6"))
+    private val emoticonTextPaint = KeyboardPaintFactory.createTextPaint(42f, Paint.Align.CENTER, isBold = true, color = Color.parseColor("#00E5FF"))
+    private val emojiTabTextPaint = KeyboardPaintFactory.createTextPaint(42f, Paint.Align.CENTER, color = Color.parseColor("#E0E0E6"))
 
     // Dedicated page renderers (Zero allocations in onDraw)
     private val suggestionStripRenderer = SuggestionStripRenderer(
@@ -71,7 +74,11 @@ open class T9KeyboardView @JvmOverloads constructor(
         keyPressedPaint = keyPressedPaint,
         keyBackgroundPaint = keyBackgroundPaint,
         subTextPaint = subTextPaint,
-        primaryTextPaint = primaryTextPaint
+        primaryTextPaint = primaryTextPaint,
+        emojiGlyphPaint = emojiGlyphPaint,
+        emoticonTextPaint = emoticonTextPaint,
+        emojiTabTextPaint = emojiTabTextPaint,
+        indicatorGlowPaint = indicatorGlowPaint
     )
     private val page1NumSymRenderer = Page1NumSymRenderer(
         backgroundPaint = backgroundPaint,
@@ -108,6 +115,16 @@ open class T9KeyboardView @JvmOverloads constructor(
         iconPaint = iconPaint,
         iconFillPaint = iconFillPaint
     )
+    private val landscapePanelRenderer = LandscapePanelRenderer(
+        stripBackgroundPaint = stripBackgroundPaint,
+        dividerPaint = dividerPaint,
+        actionKeyPaint = page1KeyActionPaint,
+        keyPressedPaint = keyPressedPaint,
+        keyBorderPaint = keyBorderPaint,
+        primaryTextPaint = primaryTextPaint,
+        smallTextPaint = page1SmallTextPaint,
+        iconPaint = iconPaint
+    )
 
 
     // Key coordinates pre-allocated arrays
@@ -132,6 +149,8 @@ open class T9KeyboardView @JvmOverloads constructor(
         private set
     var activeEmojiControlIndex: Int? = null
         private set
+    var activeLandscapePanelKeyId: Int? = null
+        private set
 
     // Candidate list (reusable)
     private val candidates = ArrayList<String>(16)
@@ -149,6 +168,7 @@ open class T9KeyboardView @JvmOverloads constructor(
     var onEmojiSelectedAction: ((String) -> Unit)? = null
     var onEmojiControlAction: ((Int) -> Unit)? = null
     var onEmojiDelFlickAction: ((FlickDirection) -> Unit)? = null
+    var onLandscapePanelAction: ((LandscapePanelAction) -> Unit)? = null
 
     var isDarkMode: Boolean = true
         private set
@@ -204,7 +224,10 @@ open class T9KeyboardView @JvmOverloads constructor(
             page1DigitTextPaint = page1DigitTextPaint,
             page1OpTextPaint = page1OpTextPaint,
             page1SymTextPaint = page1SymTextPaint,
-            page1SmallTextPaint = page1SmallTextPaint
+            page1SmallTextPaint = page1SmallTextPaint,
+            emojiGlyphPaint = emojiGlyphPaint,
+            emoticonTextPaint = emoticonTextPaint,
+            emojiTabTextPaint = emojiTabTextPaint
         )
 
         invalidate()
@@ -246,19 +269,28 @@ open class T9KeyboardView @JvmOverloads constructor(
         val density = displayMetrics.density
 
         val oneHandedMode = settingsObserver?.getOneHandedMode() ?: 0
+        val landscapeLayoutMode = settingsObserver?.getLandscapeLayoutMode() ?: "left"
         val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        val (offsetX, contentWidth) = KeyboardDimensionCalculator.calculateErgonomicOffsetAndWidth(
+        val layoutSpec = KeyboardDimensionCalculator.calculateLandscapeLayoutSpec(
             width = w,
             density = density,
             isLandscape = isLandscape,
-            oneHandedMode = oneHandedMode
+            oneHandedMode = oneHandedMode,
+            landscapeLayoutMode = landscapeLayoutMode
         )
         settingsObserver?.let { observer ->
             applyScrubSettings(observer)
             keyAtlas.setLayoutOrder(observer.getKeyboardLayoutOrder())
         }
 
-        keyAtlas.computeGeometry(w.toFloat(), h.toFloat(), density, offsetX, contentWidth)
+        keyAtlas.computeGeometry(
+            width = w.toFloat(),
+            height = h.toFloat(),
+            density = density,
+            offsetX = layoutSpec.offsetX,
+            contentWidth = layoutSpec.contentWidth,
+            landscapePanelDock = layoutSpec.panelDock
+        )
         settingsObserver?.getLongPressDelay()?.let {
             gestureTracker.longPressTimeoutMs = it
         }
@@ -297,7 +329,10 @@ open class T9KeyboardView @JvmOverloads constructor(
             page1DigitTextPaint = page1DigitTextPaint,
             page1OpTextPaint = page1OpTextPaint,
             page1SymTextPaint = page1SymTextPaint,
-            page1SmallTextPaint = page1SmallTextPaint
+            page1SmallTextPaint = page1SmallTextPaint,
+            emojiGlyphPaint = emojiGlyphPaint,
+            emoticonTextPaint = emoticonTextPaint,
+            emojiTabTextPaint = emojiTabTextPaint
         )
     }
 
@@ -401,6 +436,14 @@ open class T9KeyboardView @JvmOverloads constructor(
                 imeAction = imeAction,
                 density = resources.displayMetrics.density
             )
+            if (keyAtlas.isLandscapePanelActive) {
+                landscapePanelRenderer.drawPanel(
+                    canvas = canvas,
+                    layout = keyAtlas.landscapePanelLayout,
+                    activePanelKeyId = activeLandscapePanelKeyId,
+                    density = resources.displayMetrics.density
+                )
+            }
             return
         }
 
@@ -461,6 +504,16 @@ open class T9KeyboardView @JvmOverloads constructor(
             density = resources.displayMetrics.density,
             getDisplayLabel = { getDisplayLabel(it) }
         )
+
+        // 3. Draw Landscape Utility / Edit Panel (when active)
+        if (keyAtlas.isLandscapePanelActive) {
+            landscapePanelRenderer.drawPanel(
+                canvas = canvas,
+                layout = keyAtlas.landscapePanelLayout,
+                activePanelKeyId = activeLandscapePanelKeyId,
+                density = resources.displayMetrics.density
+            )
+        }
     }
 
 
@@ -569,12 +622,25 @@ open class T9KeyboardView @JvmOverloads constructor(
         invalidate()
     }
 
+    override fun onLandscapePanelKeyTap(key: LandscapePanelKey) {
+        playClickFeedback()
+        onLandscapePanelAction?.invoke(key.action)
+    }
+
+    override fun onLandscapePanelTouchStateChanged(activePanelKeyId: Int?) {
+        if (this.activeLandscapePanelKeyId != activePanelKeyId) {
+            this.activeLandscapePanelKeyId = activePanelKeyId
+            invalidate()
+        }
+    }
+
     fun cancelAllGestures() {
         gestureTracker.cancelAllGestures()
         activeKeyId = null
         activeEmojiTabIndex = null
         activeEmojiGridIndex = null
         activeEmojiControlIndex = null
+        activeLandscapePanelKeyId = null
         invalidate()
     }
 

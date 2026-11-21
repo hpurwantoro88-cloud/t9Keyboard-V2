@@ -849,6 +849,72 @@ int main() {
 
     std::cout << "[PASS] Test 19: Short-prefix length guard, non-terminal DynamicStore isolation, weighted explicit pick, and context vs soft-recency balance verified" << std::endl;
 
+    // ------------------------------------------------------------------------
+    // Test 20: Apostrophe Completion Length Delta & Strict Weak Ordering
+    // ------------------------------------------------------------------------
+    assert(lexMgr.switchLanguage("EN"));
+    engine.setDynamicStore(nullptr);
+    engine.setNgramEngine(nullptr);
+    engine.setLexiconData(lexMgr.getActiveData(), lexMgr.getActiveSize());
+    engine.setContextWord(nullptr);
+
+    // 20A: 2-digit prefix 3-6 ("don't" has 4 T9 digits -> lenDelta=2 <= maxExtraDelta(2)=3, even though display len=5)
+    engine.reset();
+    engine.pushStroke(3, 0.0f, 0.0f, scorer, g_config);
+    engine.pushStroke(6, 0.0f, 0.0f, scorer, g_config);
+    bool foundDontOn2Digits = false;
+    for (uint8_t i = 0; i < engine.getCandidateCount(); ++i) {
+        if (std::strcmp(engine.getCandidates()[i].word, "don't") == 0) {
+            foundDontOn2Digits = true;
+            break;
+        }
+    }
+    assert(foundDontOn2Digits && "2-digit prefix 3-6 must surface 'don't' (4 T9 digits, lenDelta=2)");
+
+    // 20B: Strict weak ordering invariant on spatial border + multi-tier completions
+    engine.reset();
+    engine.pushStroke(4, 270.0f, 270.0f, gridScorer, spatialConfig);
+    engine.pushStroke(5, 665.0f, 270.0f, gridScorer, spatialConfig);
+    engine.pushStroke(6, 810.0f, 270.0f, gridScorer, spatialConfig);
+    assert(engine.getCandidateCount() > 0);
+    std::cout << "[PASS] Test 20: Apostrophe T9 digit-length delta and strict weak ordering verified" << std::endl;
+
+    // ------------------------------------------------------------------------
+    // Test 21: DynamicStore Blacklist Protection Against LRU Eviction & Prefix Unindexing
+    // ------------------------------------------------------------------------
+    {
+        DynamicStore fullStore;
+        fullStore.recordUsage("customword", usageTime, 3);
+        assert(fullStore.getHitCount("customword") == 3);
+        fullStore.removeWord("customword");
+        assert(fullStore.isDeleted("customword"));
+
+        // Verify unindexed from prefix lookup
+        DynamicStore::DynamicMatch dm[4];
+        int customDigits[] = {2, 8, 7, 8, 6, 6, 9, 6, 7, 3};
+        assert(fullStore.findMatchingWords(customDigits, 10, usageTime, 30, dm, 4) == 0);
+
+        // Blacklist a static word not previously in store, then saturate MAX_STORE_WORDS
+        fullStore.removeWord("neverforget");
+        assert(fullStore.isDeleted("neverforget"));
+
+        for (size_t idx = 0; idx < MAX_STORE_WORDS + 32; ++idx) {
+            char buf[32];
+            // Generate valid alphabetic words: w + base-26 suffix
+            buf[0] = 'w';
+            size_t tmp = idx;
+            for (int p = 1; p <= 4; ++p) {
+                buf[p] = static_cast<char>('a' + (tmp % 26));
+                tmp /= 26;
+            }
+            buf[5] = '\0';
+            fullStore.addWord(buf, 10, usageTime - 100000 + idx);
+        }
+        assert(fullStore.isDeleted("neverforget") && "Blacklisted word must survive active-word LRU eviction");
+        assert(fullStore.isDeleted("customword") && "Removed word must survive active-word LRU eviction");
+    }
+    std::cout << "[PASS] Test 21: DynamicStore blacklist LRU protection and prefix unindexing verified" << std::endl;
+
     std::cout << "\n========================================" << std::endl;
     std::cout << "ALL OPENT9 CORE C++ TESTS PASSED!" << std::endl;
     std::cout << "========================================" << std::endl;

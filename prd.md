@@ -49,9 +49,10 @@ OpenT9 Core delivers an ultra-lightweight, low-latency Android T9 predictive key
 Keyboard dimensions are computed dynamically in `KeyboardDimensionCalculator`:
 - **Portrait Height:** User-configurable `220dp–320dp` (default `260dp`), clamped to `max(220dp, 45% of screenHeightDp)` when `screenHeightDp > 100`.
 - **Landscape Height:** Scaled from `prefHeightDp * (maxLandscapeHeightDp / 260f)` where `maxLandscapeHeightDp = 48% of screenHeightDp` (or `180dp` fallback), clamped to `[140dp, max(160dp, maxLandscapeHeightDp)]`.
-- **Ergonomic Width & Offset:**
+- **Ergonomic Width, Landscape Compact + Panel & Offset:**
   - `one_handed_mode == 1` (Left-Handed): `offsetX = 0`, `contentWidth = 85%` of view width.
   - `one_handed_mode == 2` (Right-Handed): `offsetX = 15%`, `contentWidth = 85%` of view width.
+  - Landscape Compact + Utility Panel (`isLandscape && one_handed_mode == 0 && widthDp >= 520` when `landscape_layout_mode != "full"`): constrains Page 0 & Page 1 keypad to `compactWidth = clamp(min(0.56 * width, 440dp), 300dp, 0.62 * width)` and renders `LandscapePanelLayout` / `LandscapePanelRenderer` (Undo/Redo, Select All, 4-way Cursor D-Pad, Home/End, Copy/Cut/Paste, Swap Dock Side `⇄`, Emoji, Hide IME — or split Left/Right gutters in `"center"` mode), while Page 2/3 Symbols and Page 4 Emoji expand to full landscape width (`landscape_layout_mode`: `"left"`, `"right"`, `"center"`, `"full"`).
   - Large-screen portrait (`widthDp > 600` and not landscape): centered with `contentWidth = min(width, 480dp)`.
   - Default: full width (`offsetX = 0`, `contentWidth = width`).
 
@@ -76,7 +77,7 @@ Row 4 & Column 4 utility keys are customizable via `RearrangeLayoutActivity` (`K
 
 #### Suggestion & Candidate Strip Layout
 - **Strip Height:** `(height * 40 / 260).coerceIn(30dp, 48dp)`.
-- **Fixed Left Pill (12% Content Width):** Displays `[ T9 ]` or `[ ABC ]`. Tapping toggles Predictive T9 vs. Literal Multi-Tap (disabled on password and numeric fields).
+- **Fixed Left Pill (`12%` Content Width, clamped `[38dp, 56dp]`):** Displays `[ T9 ]` or `[ ABC ]`. Tapping toggles Predictive T9 vs. Literal Multi-Tap (disabled on password and numeric fields).
 - **Scrollable Candidate Viewport (88% Content Width):**
   - Renders up to `16` candidates left-to-right; `#1` candidate is highlighted with `candidatePrefixPaint` **only** during active composing or word correction (`!isIdlePrediction`), while Idle NWP chips render uniformly in `candidateTextPaint`.
   - Candidate widths measured via `max(candidateTextPaint.measureText(word) + 24dp, 64dp)`.
@@ -160,25 +161,25 @@ Row 3: [ABC]  <  [12 34] [     ␣ (Language)    ]  >  [↵ ENTER]
 
 ### 3.3. Page 4: In-Canvas Native Emoji Picker (`PAGE_4_EMOJI` / alias `PAGE_3_EMOJI`)
 
-Activated via Flick Down on `[ EN / ID ]`. Direct in-canvas rendering (`EmojiPageRenderer`) avoiding `RecyclerView` overhead.
+Activated via Flick Down on `[ EN / ID ]`. Direct in-canvas rendering (`EmojiPageRenderer`) avoiding `RecyclerView` overhead, with dedicated enlarged `emojiGlyphPaint` (`24dp * rowScale`), `emoticonTextPaint` (`15.5dp * rowScale`), and `emojiTabTextPaint` (`15.5dp * rowScale`) for high legibility and wide 6-column touch targets.
 
 ```text
 +-------------------------------------------------------------------------+
-| [🕒] | [😀] | [👋] | [🐶] | [🍔] | [⚽] | [🚗] | [💡] | [🔣] | [🚩] |  <-- 10 Tabs
+| [🕒]  | [😀]  | [👋]  | [🐶]  | [🍔]  | [💡]  | [❤️]  | [;-)] |  <-- 8 Tabs
 +-------------------------------------------------------------------------+
-|  😀  |  😃  |  😄  |  😁  |  😆  |  😅  |  🤣  |  <-- 7-Col Scrollable Grid
-|  ...                                            |
+|  😀   |  😃   |  😄   |  😁   |  😆   |  😅   |               |  <-- 6-Col Scrollable Grid
+|  :-)  |  :-(  |  ;-)  |  :-P  |  :-D  |  :-|  |               |      (4 Visible Rows = 24 Items)
 +-----------+------------------+----------------+---------------+
 | [ ABC ]   | [ 🕒 Recents ]   | [ ␣ Space ]    | [ ⌫ DEL ]     |  <-- Control Row
 +-----------+------------------+----------------+---------------+
 ```
 
-- **Categories (10 Tabs, default tab `1` = Smileys):** `Recents`, `Smileys`, `People`, `Animals`, `Food`, `Activities`, `Travel`, `Objects`, `Symbols`, `Flags` (`EmojiAtlas`, 7 columns × 4 visible rows).
+- **Categories (8 Curated Tabs, default tab `1` = Smileys):** `Recents` (`🕒`), `Smileys` (`😀`), `People` (`👋`), `Animals` (`🐶`), `Food` (`🍔`), `Objects` (`💡`), `Symbols` (`❤️`), and classic SwiftKey-style text `Emoticons` (`;-)` — `:-)`, `:-(`, `;-)`, `:-P`, `:-D`, `:-|`, `:-*`, `:O`, `B-)`, `:-$`, `:3`, `:-/`, `:-[`, `:-\`, `O:-)`, `:'(`, `(^_-)`, `(-:`, `:-{`, `8-)`, `^O^`, `^_^`, `(^O^)`, `<3`, etc.); low-frequency groups (`Travel`, `Activities`, `Flags`) are omitted (`EmojiAtlas`, 6 columns × 4 visible rows).
 - **Interactions (`EmojiGestureTracker`, `EmojiInteractionCoordinator`, `EmojiActionDispatcher`):**
-  - Tapping an emoji records it in in-memory `recentEmojis` (max 28), commits any active composing candidate (without space), commits the emoji, resets `lastSpaceTapTime`, and updates auto-caps.
+  - Tapping an emoji or text emoticon records it in in-memory `recentEmojis` (max 24), commits any active composing candidate (without space), commits the emoji/emoticon string, resets `lastSpaceTapTime`, and updates auto-caps.
   - Vertical drag inside the grid scrolls rows; horizontal swipe (`LEFT` = next tab, `RIGHT` = previous tab) switches categories.
   - Bottom controls (25% width each): `[ ABC ]` returns to `PAGE_0_TEXT`; `[ 🕒 Recents ]` switches to tab `0` and resets scroll; `[ ␣ Space ]` commits composing + space or commits/flushes multi-tap + `DoubleSpacePeriodHelper` + refreshes Idle NWP; `[ ⌫ DEL ]` supports tap, `50ms` repeat delete (whole-word after `1200ms`), and `UP`/`LEFT` (abort composing or delete preceding word) and `DOWN` (clear field) flicks.
-- **Pending Gaps:** `recentEmojis` is in-memory only (not persisted), duplicate emojis exist across/within `EmojiAtlas` arrays, Fitzpatrick skin-tone long-press modifier strip is not implemented, and `Paint.hasGlyph()` / `EmojiCompat` filtering, bitmap glyph caching, and `OverScroller` fling physics are not yet implemented.
+- **Pending Gaps:** `recentEmojis` is in-memory only (not persisted), Fitzpatrick skin-tone long-press modifier strip is not implemented, and `Paint.hasGlyph()` / `EmojiCompat` filtering, bitmap glyph caching, and `OverScroller` fling physics are not yet implemented.
 
 ---
 
@@ -270,7 +271,7 @@ Evaluated in `OpenT9InputMethodService.onStartInputView(info, restarting)`:
 ### 8.1. `SettingsActivity` (`preferences.xml`)
 - **Appearance & Theme:** `app_theme` (`system`, `light`, `dark`).
 - **Audio & Haptics:** `haptic_enabled` (`true`), `vibration_intensity` (`5–100ms`, default `25ms`, `ManualInputSeekBarPreference`), `audio_enabled` (`true`), `audio_volume` (`0–100%`, default `60%`, `ManualInputSeekBarPreference`), `audio_style` (`0` = Mechanical Classic, `1` = Modern Soft, `2` = Minimalist Click).
-- **Layout & Display:** `keyboard_height` (`220–320dp`, default `260dp`, `ManualInputSeekBarPreference`), `candidate_font_size` (`14–22sp`, default `16sp`, `ManualInputSeekBarPreference`), `one_handed_mode` (`0` = Disabled, `1` = Left-Handed, `2` = Right-Handed), `rearrange_keyboard_layout` (launches `RearrangeLayoutActivity`, persisted under `custom_keyboard_layout`).
+- **Layout & Display:** `keyboard_height` (`220–320dp`, default `260dp`, `ManualInputSeekBarPreference`), `candidate_font_size` (`14–22sp`, default `16sp`, `ManualInputSeekBarPreference`), `one_handed_mode` (`0` = Disabled, `1` = Left-Handed, `2` = Right-Handed), `landscape_layout_mode` (`"left"` = Compact Left + Edit Panel, `"right"` = Edit Panel + Compact Right, `"center"` = Centered + Side Gutters, `"full"` = Full Width; default `"left"`), `rearrange_keyboard_layout` (launches `RearrangeLayoutActivity`, persisted under `custom_keyboard_layout`).
 - **Typing Behaviors:** `default_input_mode` (`0` = Predictive T9, `1` = Multi-Tap ABC), `long_press_delay` (`200–600ms`, default `350ms`, `ManualInputSeekBarPreference`), `multi_tap_timeout` (`400–1000ms`, default `600ms`, `ManualInputSeekBarPreference`), `auto_caps` (`true`), `auto_space` (`true`), `double_space_period` (`true`), `space_scrubbing` (`true`), `space_scrubbing_sensitivity` (`normal`, `low`, `high`), `space_scrubbing_hold` (`false`, `150ms` hold toggle).
 - **Dictionary & Language:** `startup_language` (`ID` / `EN`, default `ID`), `bilingual_prediction` (`false`), `slang_boost` (`true`), `decay_half_life` (`14`, `30`, `0` = Disabled, default `30`), `reset_user_dictionary` (AlertDialog confirmation → `LearnedWordsRepository.clearAll()`). *(Pending: Individual User Dictionary Editor UI).*
 
@@ -328,6 +329,7 @@ t9Keyboard-V2/
 │       │   │   ├── OpenT9InputMethodService.kt       # Slim IME lifecycle wrapper
 │       │   │   ├── T9ComposingCoordinator.kt         # Composing, commit, pop/rehydrate, NWP context
 │       │   │   ├── KeyboardActionDispatcher.kt       # Tap/flick/long-press routing
+│       │   │   ├── LandscapePanelActionHandler.kt    # Landscape edit/cursor/clipboard panel actions
 │       │   │   ├── CursorSelectionCoordinator.kt     # onUpdateSelection disambiguation
 │       │   │   ├── LanguageCycleHelper.kt
 │       │   │   ├── CandidateRemovalHelper.kt
@@ -338,9 +340,9 @@ t9Keyboard-V2/
 │       │   │   ├── lexicon/LexiconLoader.kt
 │       │   │   ├── prediction/                       # CandidateResolver, EnglishOrthography, IndonesianOrthography, LearnedWordsRepository, PredictionContextHelper, SuggestionGuard, WordCorrectionController, WordCorrectionHelper
 │       │   │   ├── settings/                         # SettingsActivity (+SettingsFragment), SettingsObserver, RearrangeLayoutActivity, RearrangeKeyboardView, KeyboardLayoutConfig, ManualInputSeekBarPreference
-│       │   │   └── ui/                               # T9KeyboardView, KeyAtlas, EmojiAtlas, TouchGestureTracker + sub-trackers, Page0/1/23/Emoji/Strip renderers, controllers, themes, icons
+│       │   │   └── ui/                               # T9KeyboardView, KeyAtlas, EmojiAtlas, LandscapePanelLayout, TouchGestureTracker + sub-trackers, Page0/1/23/Emoji/Strip/LandscapePanel renderers, controllers, themes, icons
 │       │   └── res/                                  # xml/preferences.xml, xml/method.xml, values/, values-in/, layout/, drawable/
-│       └── test/java/com/opent9/keyboard/            # 21 JVM / Robolectric unit, integration & contract test suites (16 root + 5 prediction/)
+│       └── test/java/com/opent9/keyboard/            # 22 JVM / Robolectric unit, integration & contract test suites (17 root + 5 prediction/)
 ├── native_tests/                                     # test_native_core.cpp, test_suggestion_quality.cpp, simulated_speed_typing.cpp, detailed_ram_profile.cpp
 └── tools/
     ├── check_doc_sync.sh                             # Contract & prd.md sync verification script
@@ -365,9 +367,11 @@ t9Keyboard-V2/
 - **Prediction Phase 4:** Bilingual code-switching (`bilingual_prediction` preference + `DawgEngine` `primary`/`secondary` coordinator with `SECONDARY_LANG_PENALTY = 0.55f`) and sentence-level regression + p99 latency benchmark (`test_native_core`).
 - **Prediction Phase 5 (Dynamic Length-Ratio & Soft-Recency Tuning):** Progressive length-ratio completion penalty & dynamic `maxExtraDelta` window in `dawg_builder` and `T9SingleEngine`, cross-beam tiered `completionPool`, non-terminal `DynamicStore` isolation from `terminalPool`, exact-digit priority (`edit_count == 0`), $\sqrt{\text{strokeLen}}$-normalized spatial scoring, 6-hour soft session recency bonus with exact-length guard, and weighted explicit candidate pick promotion (`weight = 3` for `index > 0`).
 - **Button & Gesture Consistency Hardening:** Incognito/password isolation in `MultiTapController`, preserved session `isT9Mode` and password/numeric guards across page switches, `FlickDisambiguator.isLongPressSupported` scoping (settings long-press restricted to Page 0 Key 12 `?123`), long-press vs flick & space-scrubbing guards in `TouchGestureTracker`, multi-tap commit unification on flick/long-press/repeat-delete, Emoji `DEL`/`SPACE` behavioural parity, Idle NWP `TITLECASE` key label fix, One-Handed Page 0 gutter hit-testing guard, and preserved Page 0 `digitValue` metadata on Page 1 reload.
+- **Landscape Compact + Utility Panel (`Opsi 2`):** Ergonomic compact Page 0/1 sizing (`<= 440dp`) paired with `LandscapePanelLayout` / `LandscapePanelRenderer` / `LandscapePanelActionHandler` (Undo/Redo, 4-way Cursor D-Pad, Home/End, Select All, Copy/Cut/Paste, Swap Dock Side, Emoji, Hide IME, plus centered split gutters), `landscape_layout_mode` preference, clamped `T9` pill width (`[38dp, 56dp]`), and readable landscape typography floor (`rowScale >= 0.78`).
+- **Engine, Bridge, Orthography & Layout Reliability Hardening:** Strict weak ordering scalar sort keys in `DawgEngine`/`T9SingleEngine`, T9 digit-length `lenDelta` for apostrophe/hyphen words, context/slang preservation in `collectBestCompletions`, canonical bilingual deduplication, `DynamicStore` blacklist LRU protection + prefix unindexing + single-lock `recordUsage`, UTF-8 `ByteBuffer` decoding with synchronized JNI buffers, lock-free `AudioEngine::playClick` stream health guard, versioned `LexiconLoader` fallback cache, bilingual `CandidateResolver` + root-digit-verified `IndonesianOrthography` synthesis, `WordCorrectionController` digit-aware orthography + batch-edit selection sync, `BreakIterator` grapheme cluster deletion in `DeleteController`, `ACTION_DOWN` spatial coordinates on `TouchGestureTracker`, vertical `SPACE_0` margin tolerance in `KeyAtlas`, and zero-allocation `EmojiAtlas` recent tab reads.
 
 ### Pending / Known Gaps
 1. **User Dictionary Editor:** C++ `DynamicStore::serializeAllWords()` / `addWord()` lack JNI bindings and Settings UI.
-2. **Emoji Picker Completeness:** Persist `recentEmojis` (frecency), implement long-press Fitzpatrick skin-tone strip, deduplicate emojis in `EmojiAtlas`, add `Paint.hasGlyph()` / `EmojiCompat` filtering, bitmap glyph caching, and `OverScroller` fling physics.
+2. **Emoji Picker Completeness:** Persist `recentEmojis` (frecency), implement long-press Fitzpatrick skin-tone strip, add `Paint.hasGlyph()` / `EmojiCompat` filtering, bitmap glyph caching, and `OverScroller` fling physics.
 3. **Settings Exposure:** Expose `Retroactive Un-Commit` (`DeleteController.handleDeleteTap(..., enableRetroactiveUncommit)`) in `preferences.xml`.
-4. **Audio, Accessibility, Bilingual Orthography & Release Config:** Check `AudioManager.ringerMode` and auto-idle Oboe stream when unused; add `ExploreByTouchHelper` for TalkBack; apply dual-language orthography post-processing when `bilingual_prediction` is enabled (`CandidateResolver.getProcessedCandidates` currently dispatches only by `activeLanguage`); complete `values-in/strings.xml` translations and add `in_ID` subtype in `method.xml`; configure proper release signing in `app/build.gradle.kts` (currently uses debug signingConfig).
+4. **Audio, Accessibility & Release Config:** Check `AudioManager.ringerMode` and auto-idle Oboe stream when unused; add `ExploreByTouchHelper` for TalkBack; complete `values-in/strings.xml` translations and add `in_ID` subtype in `method.xml`; configure proper release signing in `app/build.gradle.kts` (currently uses debug signingConfig).

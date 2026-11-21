@@ -24,6 +24,7 @@
     <string name="pref_keyboard_height">Keyboard Overall Height (dp)</string>
     <string name="pref_candidate_font_size">Candidate Font Size (sp)</string>
     <string name="pref_one_handed">One-Handed Mode</string>
+    <string name="pref_landscape_layout_mode">Landscape Layout</string>
     <string name="pref_rearrange_layout">Rearrange Row 4 &amp; Column 4</string>
     <string name="pref_rearrange_layout_summary">Slide and customize key positions in row 4 and column 4</string>
     <string name="rearrange_title">Rearrange Keyboard Layout</string>

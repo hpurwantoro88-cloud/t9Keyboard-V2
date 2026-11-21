@@ -65,7 +65,10 @@ object KeyboardLayoutConfig {
     fun deserialize(raw: String?): List<RearrangeKeyId> {
         if (raw.isNullOrBlank()) return DEFAULT_ORDER
         val parts = raw.split(",").mapNotNull { RearrangeKeyId.fromName(it.trim()) }
-        if (parts.size == DEFAULT_ORDER.size && parts.toSet().size == DEFAULT_ORDER.size) {
+        if (parts.size == DEFAULT_ORDER.size &&
+            parts.toSet().size == DEFAULT_ORDER.size &&
+            parts.sumOf { it.span } == TRACK_SLOTS.size
+        ) {
             return parts
         }
         return DEFAULT_ORDER

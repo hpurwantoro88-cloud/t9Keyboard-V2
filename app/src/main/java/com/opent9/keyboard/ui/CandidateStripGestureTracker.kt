@@ -39,7 +39,7 @@ class CandidateStripGestureTracker(
         longPressFired = false
         stripStartScrollX = stripScrollOffset
         activeCandidateIndex = null
-        if (x >= keyAtlas.pillBounds.right) {
+        if (x >= keyAtlas.pillBounds.right && x <= keyAtlas.candidateViewportBounds.right) {
             val candIdx = candidateHitTest(x)
             if (candIdx != null) {
                 activeCandidateIndex = candIdx
@@ -74,9 +74,9 @@ class CandidateStripGestureTracker(
         if (!isCandidateStripTouch) return
         handler.removeCallbacks(candidateLongPressRunnable)
         if (distSq < touchSlopPx * touchSlopPx && !longPressFired) {
-            if (curX < keyAtlas.pillBounds.right) {
+            if (curX >= keyAtlas.pillBounds.left && curX < keyAtlas.pillBounds.right) {
                 listener.onPillTap()
-            } else {
+            } else if (curX >= keyAtlas.candidateViewportBounds.left && curX <= keyAtlas.candidateViewportBounds.right) {
                 val candIdx = candidateHitTest(curX)
                 if (candIdx != null) {
                     listener.onCandidateTap(candIdx)

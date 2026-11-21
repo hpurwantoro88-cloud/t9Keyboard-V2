@@ -770,4 +770,18 @@ class SystemKeysAndMultiTapTest {
         val nextIntent = org.robolectric.shadows.ShadowApplication.getInstance().nextStartedActivity
         assertNull("Long-press on Page 2 ABC must not launch SettingsActivity", nextIntent)
     }
+
+    @Test
+    fun testDeleteSingleOrSurrogateDeletesComplexEmojiGraphemeClusters() {
+        val del = DeleteController()
+        val clusters = listOf("👩‍⚕️", "🇮🇩", "0️⃣", "🏳️‍🌈", "😀")
+        for (emoji in clusters) {
+            val ic = mockk<InputConnection>(relaxed = true)
+            val prefixText = "hi $emoji"
+            every { ic.getSelectedText(0) } returns null
+            every { ic.getTextBeforeCursor(16, 0) } returns prefixText
+            del.deleteSingleOrSurrogate(ic)
+            verify { ic.deleteSurroundingText(emoji.length, 0) }
+        }
+    }
 }
