@@ -176,10 +176,21 @@ int main(int argc, char** argv) {
         const auto& nextMap = kv.second;
         if (nextMap.empty()) continue;
 
-        double maxWeight = 1.0;
+        double totalWeight = 0.0;
         for (const auto& nk : nextMap) {
-            maxWeight = std::max(maxWeight, nk.second);
+            totalWeight += nk.second;
         }
+
+        // Add-k smoothed conditional probability P(next | prev) mapped cleanly to [0.05, 1.50] log10 units.
+        // Preserves strict monotonic ordering per prevWord while preventing aggressive over-steering.
+        constexpr double SMOOTH_K = 200.0;
+        constexpr double VIRTUAL_VOCAB = 18.0;
+        constexpr double LOG10_P_FLOOR = -2.40;
+        constexpr double BOOST_SCALE = 0.625; // Maps P=1.0 cleanly to 1.50 without top saturation
+        constexpr double MIN_BOOST = 0.05;
+        constexpr double MAX_BOOST = 1.50;
+
+        double denom = totalWeight + SMOOTH_K * (static_cast<double>(nextMap.size()) + VIRTUAL_VOCAB);
 
         struct ScoredEdge {
             uint32_t nextId;
@@ -190,10 +201,12 @@ int main(int argc, char** argv) {
         list.reserve(nextMap.size());
 
         for (const auto& nk : nextMap) {
-            double rel = (nk.second / maxWeight);
-            double boost = 0.5 + 3.2 * std::pow(rel, 1.4) + 0.1 * std::min(2.5, std::log10(1.0 + nk.second) / 2.0);
+            double pCond = (nk.second + SMOOTH_K) / denom;
+            double boost = BOOST_SCALE * (std::log10(pCond) - LOG10_P_FLOOR);
+            if (boost < MIN_BOOST) boost = MIN_BOOST;
+            if (boost > MAX_BOOST) boost = MAX_BOOST;
             int q = static_cast<int>(std::llround(boost * NGRAM_PROB_SCALE));
-            if (q < 16) q = 16;
+            if (q < 3) q = 3;
             if (q > 255) q = 255;
             list.push_back({nk.first, static_cast<uint8_t>(q), nk.second});
         }

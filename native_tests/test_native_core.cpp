@@ -915,6 +915,80 @@ int main() {
     }
     std::cout << "[PASS] Test 21: DynamicStore blacklist LRU protection and prefix unindexing verified" << std::endl;
 
+    // ------------------------------------------------------------------------
+    // Test 22: SpatialScorer T9 Neighbor Symmetry (Cardinal & Diagonal)
+    // ------------------------------------------------------------------------
+    {
+        const float xs[10] = {0, 0, 540.0f, 810.0f, 270.0f, 540.0f, 810.0f, 270.0f, 540.0f, 810.0f};
+        const float ys[10] = {0, 0,  90.0f,  90.0f, 270.0f, 270.0f, 270.0f, 450.0f, 450.0f, 450.0f};
+        const int cardinalPairs[][2] = {
+            {2, 3}, {2, 5}, {3, 6}, {4, 5}, {4, 7},
+            {5, 6}, {5, 8}, {6, 9}, {7, 8}, {8, 9}
+        };
+        const int diagonalPairs[][2] = {
+            {2, 4}, {2, 6}, {3, 5}, {4, 8}, {5, 7}, {5, 9}, {6, 8}
+        };
+
+        auto hasHypothesis = [&](int primary, int target, int maxHyps) -> bool {
+            float tx = 0.52f * xs[primary] + 0.48f * xs[target];
+            float ty = 0.52f * ys[primary] + 0.48f * ys[target];
+            DigitHypothesis hyps[8];
+            int cnt = gridScorer.collectDigitHypotheses(primary, tx, ty, spatialConfig.touch_variance_sigma, hyps, maxHyps);
+            for (int i = 1; i < cnt; ++i) {
+                if (hyps[i].digit == target) return true;
+            }
+            return false;
+        };
+
+        for (const auto& p : cardinalPairs) {
+            assert(hasHypothesis(p[0], p[1], SpatialScorer::MAX_HYPOTHESES) && "Cardinal neighbor missing a->b");
+            assert(hasHypothesis(p[1], p[0], SpatialScorer::MAX_HYPOTHESES) && "Cardinal neighbor missing b->a");
+        }
+        for (const auto& p : diagonalPairs) {
+            assert(hasHypothesis(p[0], p[1], 8) && "Diagonal neighbor missing a->b");
+            assert(hasHypothesis(p[1], p[0], 8) && "Diagonal neighbor missing b->a");
+        }
+    }
+    std::cout << "[PASS] Test 22: SpatialScorer 8-direction neighbor symmetry verified" << std::endl;
+
+    // ------------------------------------------------------------------------
+    // Test 23: Slang Boost Isolation (LEX_FLAG_SLANG only, no formal DynamicStore boost)
+    // ------------------------------------------------------------------------
+    {
+        DynamicStore slangTestStore;
+        slangTestStore.recordUsage("home", usageTime, 2);
+
+        engine.setLexiconData(enBuffer.data(), enBuffer.size());
+        engine.setDynamicStore(&slangTestStore);
+        engine.setNgramEngine(nullptr);
+        engine.setContextWord(nullptr);
+
+        auto getScoreFor = [&](const std::vector<int>& digits, const char* target, uint8_t slangOn) -> float {
+            NativeConfig cfg = g_config;
+            cfg.slang_boost_enabled = slangOn;
+            engine.reset();
+            for (int d : digits) engine.pushStroke(d, 0.0f, 0.0f, scorer, cfg);
+            for (uint8_t i = 0; i < engine.getCandidateCount(); ++i) {
+                if (std::strcmp(engine.getCandidates()[i].word, target) == 0) {
+                    return engine.getCandidates()[i].score;
+                }
+            }
+            return -999.0f;
+        };
+
+        float homeOn = getScoreFor({4, 6, 6, 3}, "home", 1);
+        float homeOff = getScoreFor({4, 6, 6, 3}, "home", 0);
+        assert(homeOn > 0.0f && std::abs(homeOn - homeOff) < 1e-4f &&
+               "slang_boost_enabled must not inflate non-slang DynamicStore words");
+
+        engine.setLexiconData(idBuffer.data(), idBuffer.size());
+        engine.setDynamicStore(nullptr);
+        float gakOn = getScoreFor({4, 2, 5}, "gak", 1);
+        float gakOff = getScoreFor({4, 2, 5}, "gak", 0);
+        assert(gakOn > gakOff + 0.30f && "slang_boost_enabled must boost LEX_FLAG_SLANG words like 'gak'");
+    }
+    std::cout << "[PASS] Test 23: slang_boost_enabled isolation verified" << std::endl;
+
     std::cout << "\n========================================" << std::endl;
     std::cout << "ALL OPENT9 CORE C++ TESTS PASSED!" << std::endl;
     std::cout << "========================================" << std::endl;

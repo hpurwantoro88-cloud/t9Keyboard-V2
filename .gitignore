@@ -3,6 +3,7 @@
 /local.properties
 /.idea/
 .DS_Store
+.env
 build/
 **/build/
 /captures
@@ -14,6 +15,7 @@ native_tests/test_native_core
 native_tests/simulated_speed_typing
 native_tests/test_suggestion_quality
 native_tests/detailed_ram_profile
+native_tests/eval_harness
 tools/dawg_compiler/dawg_builder
 tools/dawg_compiler/lexicon_extractor
 tools/dawg_compiler/ngram_builder

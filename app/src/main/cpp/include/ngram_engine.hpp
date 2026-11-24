@@ -38,7 +38,7 @@ static_assert(sizeof(WordHashKeyV1) == 16, "WordHashKeyV1 must be 16 bytes");
 static_assert(sizeof(PrevWordBucketV1) == 16, "PrevWordBucketV1 must be 16 bytes");
 static_assert(sizeof(NgramEdgeV1) == 8, "NgramEdgeV1 must be 8 bytes");
 
-constexpr float NGRAM_PROB_SCALE = 64.0f; // 255 / 64.0 = 3.984
+constexpr float NGRAM_PROB_SCALE = 160.0f; // 255 / 160.0 = 1.59375 (high-precision [0.0..1.50] log10 range)
 
 inline uint64_t fnv1aHash64Lower(const char* str) {
     if (!str) return 0;

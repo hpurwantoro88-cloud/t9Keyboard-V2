@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="subtype_en_us">English (US)</string>
+    <string name="subtype_in_id">Bahasa Indonesia</string>
+
     <!-- Manual Input for SeekBars -->
     <string name="pref_seekbar_manual_input_title">Masukkan Nilai</string>
     <string name="pref_seekbar_range_hint">Rentang nilai: %1$d – %2$d</string>

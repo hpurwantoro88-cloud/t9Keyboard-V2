@@ -1,23 +1,23 @@
 #include "spatial_scoring.hpp"
 #include <algorithm>
+#include <cmath>
+
+#ifdef OPENT9_EVAL_TUNING
+float g_evalMinNeighborLog10Posterior = -1.70f;
+#endif
 
 namespace {
 
-// Adjacent T9 digits (2..9 only) on the 3x4 keypad grid
-constexpr int T9_NEIGHBORS[10][5] = {
-    {-1},              // 0
-    {-1},              // 1
-    {3, 4, 5, -1},     // 2
-    {2, 5, 6, -1},     // 3
-    {2, 5, 7, -1},     // 4
-    {2, 4, 6, 8, -1},  // 5
-    {3, 5, 8, 9, -1},  // 6
-    {4, 5, 8, -1},     // 7
-    {5, 7, 9, -1},     // 8
-    {5, 6, 8, -1}      // 9
-};
+constexpr float ALPHA_X = 0.22f;
+constexpr float ALPHA_Y = 0.26f;
+constexpr float MIN_SIGMA_SCALE = 0.50f;
+constexpr float MAX_SIGMA_SCALE = 2.00f;
+// Minimum posterior probability P(k | x, y) >= 0.02 (~log10(0.02) = -1.699) to consider a neighbor hypothesis
+constexpr float MIN_NEIGHBOR_LOG10_POSTERIOR = -1.70f;
+constexpr float LN_10 = 2.30258509299f;
 
-constexpr float MAX_NEIGHBOR_LL_GAP = 2.6f;
+constexpr int HORIZ_PAIRS[][2] = {{2, 3}, {4, 5}, {5, 6}, {7, 8}, {8, 9}};
+constexpr int VERT_PAIRS[][2] = {{2, 5}, {3, 6}, {4, 7}, {5, 8}, {6, 9}};
 
 } // namespace
 
@@ -26,12 +26,111 @@ void SpatialScorer::updateKeyGeometry(int digit, float cx, float cy) {
         keyCoords[digit].digit = digit;
         keyCoords[digit].cx = cx;
         keyCoords[digit].cy = cy;
+        recomputeKeySpacing();
     }
 }
 
 bool SpatialScorer::hasKeyGeometry(int digit) const {
     if (digit < 0 || digit > 9) return false;
     return keyCoords[digit].cx != 0.0f || keyCoords[digit].cy != 0.0f;
+}
+
+void SpatialScorer::recomputeKeySpacing() {
+    float sumW = 0.0f;
+    int countW = 0;
+    for (const auto& p : HORIZ_PAIRS) {
+        if (hasKeyGeometry(p[0]) && hasKeyGeometry(p[1])) {
+            float dx = std::fabs(keyCoords[p[1]].cx - keyCoords[p[0]].cx);
+            if (dx > 1.0f) {
+                sumW += dx;
+                countW++;
+            }
+        }
+    }
+    keyWidth = (countW > 0) ? (sumW / static_cast<float>(countW)) : 0.0f;
+
+    float sumH = 0.0f;
+    int countH = 0;
+    for (const auto& p : VERT_PAIRS) {
+        if (hasKeyGeometry(p[0]) && hasKeyGeometry(p[1])) {
+            float dy = std::fabs(keyCoords[p[1]].cy - keyCoords[p[0]].cy);
+            if (dy > 1.0f) {
+                sumH += dy;
+                countH++;
+            }
+        }
+    }
+    keyHeight = (countH > 0) ? (sumH / static_cast<float>(countH)) : 0.0f;
+}
+
+void SpatialScorer::resolveSigmas(float sigma, float& outSigmaX, float& outSigmaY) const {
+    if (keyWidth > 1.0f && keyHeight > 1.0f) {
+        float sx = ALPHA_X * keyWidth;
+        float sy = ALPHA_Y * keyHeight;
+        if (sigma > 0.001f) {
+            float minS = sigma * MIN_SIGMA_SCALE;
+            float maxS = sigma * MAX_SIGMA_SCALE;
+            sx = std::clamp(sx, minS, maxS);
+            sy = std::clamp(sy, minS, maxS);
+        }
+        outSigmaX = sx;
+        outSigmaY = sy;
+    } else {
+        outSigmaX = sigma;
+        outSigmaY = sigma;
+    }
+}
+
+float SpatialScorer::rawLogLikelihood(int digit, float touchX, float touchY, float sigmaX, float sigmaY) const {
+    float dx = touchX - keyCoords[digit].cx;
+    float dy = touchY - keyCoords[digit].cy;
+    float nx = dx / sigmaX;
+    float ny = dy / sigmaY;
+    return -0.5f * (nx * nx + ny * ny);
+}
+
+int SpatialScorer::computePosteriors(float touchX, float touchY, float sigma,
+                                     float outPosteriors[10], bool outValid[10]) const {
+    float sigmaX = sigma;
+    float sigmaY = sigma;
+    resolveSigmas(sigma, sigmaX, sigmaY);
+
+    float lls[10]{};
+    float maxLl = -1e30f;
+    int validCount = 0;
+
+    for (int d = 2; d <= 9; ++d) {
+        outPosteriors[d] = 0.0f;
+        outValid[d] = hasKeyGeometry(d);
+        if (outValid[d]) {
+            lls[d] = rawLogLikelihood(d, touchX, touchY, sigmaX, sigmaY);
+            if (lls[d] > maxLl) maxLl = lls[d];
+            validCount++;
+        }
+    }
+
+    if (validCount <= 1) {
+        for (int d = 2; d <= 9; ++d) {
+            if (outValid[d]) {
+                outPosteriors[d] = lls[d] / LN_10;
+            }
+        }
+        return validCount;
+    }
+
+    double sumExp = 0.0;
+    for (int d = 2; d <= 9; ++d) {
+        if (outValid[d]) {
+            sumExp += std::exp(static_cast<double>(lls[d] - maxLl));
+        }
+    }
+    double logSumExp = static_cast<double>(maxLl) + std::log(sumExp);
+    for (int d = 2; d <= 9; ++d) {
+        if (outValid[d]) {
+            outPosteriors[d] = static_cast<float>((static_cast<double>(lls[d]) - logSumExp) / static_cast<double>(LN_10));
+        }
+    }
+    return validCount;
 }
 
 float SpatialScorer::calculateLogLikelihood(int digit, float touchX, float touchY, float sigma) const {
@@ -41,13 +140,17 @@ float SpatialScorer::calculateLogLikelihood(int digit, float touchX, float touch
     if ((touchX == 0.0f && touchY == 0.0f) || !hasKeyGeometry(digit)) {
         return 0.0f;
     }
+    if (digit < 2) {
+        float sigmaX = sigma;
+        float sigmaY = sigma;
+        resolveSigmas(sigma, sigmaX, sigmaY);
+        return rawLogLikelihood(digit, touchX, touchY, sigmaX, sigmaY) / LN_10;
+    }
 
-    float dx = touchX - keyCoords[digit].cx;
-    float dy = touchY - keyCoords[digit].cy;
-    float distSq = dx * dx + dy * dy;
-    float twoSigmaSq = 2.0f * sigma * sigma;
-
-    return -(distSq / twoSigmaSq);
+    float posteriors[10]{};
+    bool valid[10]{};
+    computePosteriors(touchX, touchY, sigma, posteriors, valid);
+    return valid[digit] ? posteriors[digit] : 0.0f;
 }
 
 int SpatialScorer::collectDigitHypotheses(int primaryDigit, float touchX, float touchY, float sigma,
@@ -56,23 +159,32 @@ int SpatialScorer::collectDigitHypotheses(int primaryDigit, float touchX, float 
         return 0;
     }
 
-    float primaryLl = calculateLogLikelihood(primaryDigit, touchX, touchY, sigma);
-    outHypotheses[0] = { primaryDigit, primaryLl, false };
-
-    if (maxHypotheses == 1 || (touchX == 0.0f && touchY == 0.0f) || !hasKeyGeometry(primaryDigit) || sigma <= 0.001f) {
+    if ((touchX == 0.0f && touchY == 0.0f) || !hasKeyGeometry(primaryDigit) || sigma <= 0.001f) {
+        outHypotheses[0] = { primaryDigit, 0.0f, false };
         return 1;
     }
 
-    DigitHypothesis neighbors[4];
+    float posteriors[10]{};
+    bool valid[10]{};
+    computePosteriors(touchX, touchY, sigma, posteriors, valid);
+
+    outHypotheses[0] = { primaryDigit, posteriors[primaryDigit], false };
+    if (maxHypotheses == 1) {
+        return 1;
+    }
+
+    DigitHypothesis neighbors[8];
     int neighborCount = 0;
 
-    const int* adjList = T9_NEIGHBORS[primaryDigit];
-    for (int i = 0; adjList[i] != -1 && neighborCount < 4; ++i) {
-        int adj = adjList[i];
-        if (adj < 2 || adj > 9 || !hasKeyGeometry(adj)) continue;
-        float adjLl = calculateLogLikelihood(adj, touchX, touchY, sigma);
-        if (adjLl >= primaryLl - MAX_NEIGHBOR_LL_GAP) {
-            neighbors[neighborCount++] = { adj, adjLl, true };
+#ifdef OPENT9_EVAL_TUNING
+    const float minNeighborPosterior = g_evalMinNeighborLog10Posterior;
+#else
+    const float minNeighborPosterior = MIN_NEIGHBOR_LOG10_POSTERIOR;
+#endif
+    for (int d = 2; d <= 9; ++d) {
+        if (d == primaryDigit || !valid[d]) continue;
+        if (posteriors[d] >= minNeighborPosterior) {
+            neighbors[neighborCount++] = { d, posteriors[d], true };
         }
     }
 

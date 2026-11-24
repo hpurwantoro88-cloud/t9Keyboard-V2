@@ -5,13 +5,20 @@
 #include <cstring>
 #include <ctime>
 
+#ifdef OPENT9_EVAL_TUNING
+float g_evalWeightSpatial = 1.25f;
+float g_evalEditPenalty = 0.55f;
+float g_evalExactRankOffset = 0.0f;
+int g_evalSpatialNormMode = 0; // 0 = /sqrt(n), 1 = raw sum
+#endif
+
 namespace {
 
 constexpr float WEIGHT_CORPUS = 1.0f;
 constexpr float WEIGHT_USER = 1.15f;
 constexpr float WEIGHT_CTX = 1.0f;
-constexpr float WEIGHT_SPATIAL = 0.65f;
-constexpr float EDIT_PENALTY_PER_SWITCH = 1.35f;
+constexpr float WEIGHT_SPATIAL = 1.25f;
+constexpr float EDIT_PENALTY_PER_SWITCH = 0.55f;
 constexpr float SLANG_LEXICON_BOOST = 0.35f;
 constexpr float SESSION_RECENCY_MAX_BOOST = 0.35f;
 constexpr double SESSION_RECENCY_HALF_LIFE_SEC = 21600.0; // 6 hours fast session recency
@@ -19,6 +26,22 @@ constexpr uint8_t MAX_SPATIAL_EDITS = 1;
 constexpr size_t MAX_POOL_SIZE = MAX_BEAM_SIZE * 4;
 constexpr size_t MAX_TERMINAL_POOL = MAX_BEAM_SIZE * 4;
 constexpr size_t MAX_COMPLETION_POOL = MAX_BEAM_SIZE * 2;
+
+inline float activeWeightSpatial() {
+#ifdef OPENT9_EVAL_TUNING
+    return g_evalWeightSpatial;
+#else
+    return WEIGHT_SPATIAL;
+#endif
+}
+
+inline float activeEditPenalty() {
+#ifdef OPENT9_EVAL_TUNING
+    return g_evalEditPenalty;
+#else
+    return EDIT_PENALTY_PER_SWITCH;
+#endif
+}
 
 inline int maxExtraDeltaForStrokeLen(int strokeLen) {
     if (strokeLen <= 1) return 2;
@@ -45,6 +68,11 @@ inline float computeSessionRecencyBonus(uint64_t nowSec, uint64_t lastUsedSec, u
 }
 
 inline float normalizeSpatialScore(float spatialScoreSum, int strokeLen) {
+#ifdef OPENT9_EVAL_TUNING
+    if (g_evalSpatialNormMode == 1) {
+        return spatialScoreSum;
+    }
+#endif
     int safeLen = std::max(1, strokeLen);
     // Sublinear normalization sqrt(strokeLen) keeps per-key spatial penalty scale stable across word lengths
     return spatialScoreSum / std::sqrt(static_cast<float>(safeLen));
@@ -83,12 +111,12 @@ inline float computeScoreFromLogFreq(
         score += SLANG_LEXICON_BOOST;
     }
     if (hitCount > 0) {
-        float slangScale = slangBoostEnabled ? 1.25f : 1.0f;
+        float slangScale = (isSlangWord && slangBoostEnabled) ? 1.25f : 1.0f;
         score += WEIGHT_USER * slangScale * std::log10(1.0f + static_cast<float>(hitCount)) * decayFactor;
     }
     score += WEIGHT_CTX * contextBoost;
-    score += WEIGHT_SPATIAL * spatialScoreSum;
-    score -= EDIT_PENALTY_PER_SWITCH * static_cast<float>(editCount);
+    score += activeWeightSpatial() * spatialScoreSum;
+    score -= activeEditPenalty() * static_cast<float>(editCount);
     return score;
 }
 
@@ -341,8 +369,8 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
                 float nextSpatial = prevSpatialSum + hyps[h].log_likelihood;
                 float normSpatial = normalizeSpatialScore(nextSpatial, strokeLen);
                 float maxLf = static_cast<float>(e.max_log_freq) / LOG_FREQ_SCALE;
-                float bScore = (WEIGHT_CORPUS * maxLf) + (WEIGHT_SPATIAL * normSpatial)
-                             - (EDIT_PENALTY_PER_SWITCH * static_cast<float>(nextEdits));
+                float bScore = (WEIGHT_CORPUS * maxLf) + (activeWeightSpatial() * normSpatial)
+                             - (activeEditPenalty() * static_cast<float>(nextEdits));
 
                 bool updated = false;
                 for (size_t i = 0; i < poolSize; ++i) {
@@ -402,6 +430,7 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
         uint8_t word_len;
         uint8_t is_terminal;
         uint8_t edit_count;
+        uint8_t is_slang;
         float cand_score;
         uint32_t frequency;
     };
@@ -476,7 +505,10 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
         const BeamPath& bp = nextState.beam[b];
         const DigitNodeV2& dn = nodes[bp.node_index];
         float normSpatial = normalizeSpatialScore(bp.spatial_score_sum, strokeLen);
-        uint16_t takeCount = static_cast<uint16_t>(std::min<uint32_t>(dn.terminal_count, MAX_CANDIDATES * 2));
+        uint16_t maxTake = (hasStaticCtx || hasDynamicCtx)
+            ? static_cast<uint16_t>(MAX_CANDIDATES * 4)
+            : static_cast<uint16_t>(MAX_CANDIDATES * 2);
+        uint16_t takeCount = static_cast<uint16_t>(std::min<uint32_t>(dn.terminal_count, maxTake));
         for (uint16_t t = 0; t < takeCount; ++t) {
             uint32_t bIdx = dn.terminal_offset + t;
             if (bIdx >= totalBucketWords) break;
@@ -521,6 +553,7 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
                 tt.word_len = lw.length;
                 tt.is_terminal = 1;
                 tt.edit_count = bp.edit_count;
+                tt.is_slang = isSlang ? 1 : 0;
                 tt.cand_score = score;
                 tt.frequency = approxRawFreq(lw.log_freq);
             }
@@ -556,7 +589,7 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
                 for (size_t t = 0; t < terminalCount; ++t) {
                     if (equalsCanonical(terminalPool[t].word, dm.word)) {
                         foundInTerminal = true;
-                        float slangScale = config.slang_boost_enabled ? 1.25f : 1.0f;
+                        float slangScale = (terminalPool[t].is_slang && config.slang_boost_enabled) ? 1.25f : 1.0f;
                         terminalPool[t].cand_score += WEIGHT_USER * slangScale
                             * std::log10(1.0f + static_cast<float>(dm.hit_count)) * dm.decay_factor;
                         if (terminalPool[t].edit_count == 0) {
@@ -576,6 +609,7 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
                     tt.word_len = dm.length;
                     tt.is_terminal = 1;
                     tt.edit_count = 0;
+                    tt.is_slang = 0;
                     tt.frequency = dm.effective_freq;
                     float corpusLog = std::log10(1.0f + static_cast<float>(dm.effective_freq));
                     tt.cand_score = computeScoreFromLogFreq(
@@ -605,11 +639,16 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
 
     std::sort(terminalPool, terminalPool + terminalCount, [](const TempTerminal& a, const TempTerminal& b) {
         if (a.is_terminal != b.is_terminal) return a.is_terminal > b.is_terminal;
-        // Exact-Digit Priority: scalar rank offset preserves strict weak ordering
-        float rankA = a.cand_score + (a.edit_count == 0 ? 1.40f : 0.0f);
-        float rankB = b.cand_score + (b.edit_count == 0 ? 1.40f : 0.0f);
+#ifdef OPENT9_EVAL_TUNING
+        float exactOffset = g_evalExactRankOffset;
+#else
+        float exactOffset = 0.0f;
+#endif
+        float rankA = a.cand_score + (a.edit_count == 0 ? exactOffset : 0.0f);
+        float rankB = b.cand_score + (b.edit_count == 0 ? exactOffset : 0.0f);
         if (rankA != rankB) return rankA > rankB;
         if (a.cand_score != b.cand_score) return a.cand_score > b.cand_score;
+        if (a.edit_count != b.edit_count) return a.edit_count < b.edit_count;
         return a.frequency > b.frequency;
     });
 
@@ -628,8 +667,8 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
             const BeamPath& bp = nextState.beam[b];
             const DigitNodeV2& dn = nodes[bp.node_index];
             float normSpatial = normalizeSpatialScore(bp.spatial_score_sum, strokeLen);
-            float baseOffset = (WEIGHT_SPATIAL * normSpatial)
-                             - (EDIT_PENALTY_PER_SWITCH * static_cast<float>(bp.edit_count));
+            float baseOffset = (activeWeightSpatial() * normSpatial)
+                             - (activeEditPenalty() * static_cast<float>(bp.edit_count));
 
             if (dn.completion_count > 0) {
                 for (uint16_t c = 0; c < dn.completion_count; ++c) {
@@ -652,10 +691,12 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
                     if (hasDynamicCtx) {
                         ctxBoost += dynamicStore->getBigramBoost(activeContextWord, wordStr, nowSec, config.decay_half_life_days);
                     }
+                    float corpusLog = static_cast<float>(lw.log_freq) / LOG_FREQ_SCALE;
+                    bool isSlang = (lw.flags & LEX_FLAG_SLANG) != 0;
                     float userBoost = 0.0f;
                     for (int d = 0; d < dynCount; ++d) {
                         if (equalsCanonical(dynamicMatches[d].word, wordStr)) {
-                            float slangScale = config.slang_boost_enabled ? 1.25f : 1.0f;
+                            float slangScale = (isSlang && config.slang_boost_enabled) ? 1.25f : 1.0f;
                             userBoost = WEIGHT_USER * slangScale
                                 * std::log10(1.0f + static_cast<float>(dynamicMatches[d].hit_count))
                                 * dynamicMatches[d].decay_factor;
@@ -663,8 +704,6 @@ bool T9SingleEngine::pushStroke(int digit, float touchX, float touchY, const Spa
                         }
                     }
 
-                    float corpusLog = static_cast<float>(lw.log_freq) / LOG_FREQ_SCALE;
-                    bool isSlang = (lw.flags & LEX_FLAG_SLANG) != 0;
                     float slangBoost = (isSlang && config.slang_boost_enabled) ? SLANG_LEXICON_BOOST : 0.0f;
 
                     float compScore = baseOffset + corpusLog + slangBoost + userBoost
@@ -761,11 +800,11 @@ int T9SingleEngine::getNextWordCandidates(const char* prevWord, const NativeConf
 
                 float corpusLog = static_cast<float>(lw.log_freq) / LOG_FREQ_SCALE;
                 bool isSlang = (lw.flags & LEX_FLAG_SLANG) != 0;
-                float slangBoost = (isSlang && config.slang_boost_enabled) ? 0.08f : 0.0f;
+                float slangBoost = (isSlang && config.slang_boost_enabled) ? 0.01f : 0.0f;
 
                 CandidateWord& cw = outCands[candCount++];
                 cw.length = lw.length;
-                cw.score = topBoosts[i] + (0.02f * corpusLog) + slangBoost;
+                cw.score = topBoosts[i] + (0.002f * corpusLog) + slangBoost;
                 cw.frequency = approxRawFreq(lw.log_freq);
                 std::memcpy(cw.word, wordStr, lw.length + 1);
             }
@@ -987,12 +1026,12 @@ void T9SingleEngine::findClosestWords(
                         cw.length = lw.length;
                         cw.frequency = approxRawFreq(lw.log_freq);
                         float spatialAdj = scorer.calculateLogLikelihood(targetDigit, touchX, touchY, config.touch_variance_sigma);
-                        cw.score = (WEIGHT_SPATIAL * spatialAdj) + (static_cast<float>(lw.log_freq) / LOG_FREQ_SCALE) - basePenalty;
+                        cw.score = (activeWeightSpatial() * spatialAdj) + (static_cast<float>(lw.log_freq) / LOG_FREQ_SCALE) - basePenalty;
                         std::memcpy(cw.word, wordStr, lw.length + 1);
                     }
                     float spatialAdj = scorer.calculateLogLikelihood(targetDigit, touchX, touchY, config.touch_variance_sigma);
                     uint64_t nowSec = static_cast<uint64_t>(std::time(nullptr));
-                    collectBestCompletions(e.target_node, (WEIGHT_SPATIAL * spatialAdj) - basePenalty, config, nowSec, outCands, candCount, maxCands);
+                    collectBestCompletions(e.target_node, (activeWeightSpatial() * spatialAdj) - basePenalty, config, nowSec, outCands, candCount, maxCands);
                 }
                 if (!e.has_next_sibling) break;
                 eIdx++;

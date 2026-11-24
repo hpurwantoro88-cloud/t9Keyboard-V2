@@ -1,0 +1,50 @@
+OpenT9 Prediction Evaluation Report
+===================================
+
+=== Indonesian (ID) (Words: 1513, Context pairs: 1328) ===
+  [Mode A: Clean Tap]
+    Top-1: 93.52% (1415/1513) | Top-3: 99.47% | Found@16: 100.00% | MRR: 0.9646 | KSPC: 1.0117
+    Latency (us): p50=5.74 | p95=10.39 | p99=18.42
+  [Mode B1: Realistic Anisotropic Jitter]
+    Overall Top-1: 78.06% | Top-3: 87.71% | MRR: 0.8304
+    Clean-Digit False-Correction Rate: 0.00% (0/1019)
+    Natural 1-Slip Recovery (370 words): Top-1=42.70% | Top-3=64.05%
+  [Mode B2: Targeted 12px Border Slip & Near-Border FCR]
+    Border-Slip Recovery (1513 words): Top-1=53.93% | Top-3=83.34%
+    Near-Border False-Correction Rate: 0.00% (0/1415)
+  [Mode C: Contextual NWP & Disambiguation]
+    Idle NWP: Top-1=4.82% | Top-3=7.61% | MRR=0.0627
+    T9 No-Ctx Top-1=93.30% -> Ctx Top-1=93.37% | Ctx Top-3=99.47% | MRR=0.9636
+    Context Flips: improved=1 | regressed(over-steer)=0
+
+=== English (EN) (Words: 1679, Context pairs: 1494) ===
+  [Mode A: Clean Tap]
+    Top-1: 94.28% (1583/1679) | Top-3: 99.64% | Found@16: 99.82% | MRR: 0.9693 | KSPC: 1.0093
+    Latency (us): p50=4.89 | p95=8.31 | p99=15.39
+  [Mode B1: Realistic Anisotropic Jitter]
+    Overall Top-1: 82.97% | Top-3: 91.60% | MRR: 0.8743
+    Clean-Digit False-Correction Rate: 0.00% (0/1227)
+    Natural 1-Slip Recovery (338 words): Top-1=48.52% | Top-3=68.93%
+  [Mode B2: Targeted 12px Border Slip & Near-Border FCR]
+    Border-Slip Recovery (1628 words): Top-1=54.48% | Top-3=83.11%
+    Near-Border False-Correction Rate: 0.00% (0/1532)
+  [Mode C: Contextual NWP & Disambiguation]
+    Idle NWP: Top-1=4.89% | Top-3=6.83% | MRR=0.0609
+    T9 No-Ctx Top-1=93.84% -> Ctx Top-1=94.38% | Ctx Top-3=99.60% | MRR=0.9698
+    Context Flips: improved=8 | regressed(over-steer)=0
+
+=== Bilingual (ID+EN) (Words: 423, Context pairs: 373) ===
+  [Mode A: Clean Tap]
+    Top-1: 86.76% (367/423) | Top-3: 97.16% | Found@16: 100.00% | MRR: 0.9211 | KSPC: 1.0258
+    Latency (us): p50=15.30 | p95=36.25 | p99=58.93
+  [Mode B1: Realistic Anisotropic Jitter]
+    Overall Top-1: 73.29% | Top-3: 85.34% | MRR: 0.7988
+    Clean-Digit False-Correction Rate: 0.00% (0/271)
+    Natural 1-Slip Recovery (94 words): Top-1=37.23% | Top-3=59.57%
+  [Mode B2: Targeted 12px Border Slip & Near-Border FCR]
+    Border-Slip Recovery (423 words): Top-1=55.79% | Top-3=77.54%
+    Near-Border False-Correction Rate: 0.27% (1/367)
+  [Mode C: Contextual NWP & Disambiguation]
+    Idle NWP: Top-1=4.83% | Top-3=7.77% | MRR=0.0611
+    T9 No-Ctx Top-1=85.25% -> Ctx Top-1=86.86% | Ctx Top-3=97.05% | MRR=0.9211
+    Context Flips: improved=6 | regressed(over-steer)=0

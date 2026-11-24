@@ -1,6 +1,8 @@
 <resources>
     <string name="app_name">OpenT9</string>
     <string name="ime_name">OpenT9 Keyboard</string>
+    <string name="subtype_en_us">English (US)</string>
+    <string name="subtype_in_id">Bahasa Indonesia</string>
     <string name="settings_title">OpenT9 Settings</string>
 
     <!-- Categories -->

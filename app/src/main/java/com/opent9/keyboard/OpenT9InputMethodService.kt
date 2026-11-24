@@ -10,6 +10,7 @@ import android.view.Window
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputMethodSubtype
 import com.opent9.keyboard.jni.NativeEngineBridge
 import com.opent9.keyboard.lexicon.LexiconLoader
 import com.opent9.keyboard.prediction.*
@@ -549,7 +550,13 @@ class OpenT9InputMethodService : InputMethodService() {
     }
 
     private fun cycleLanguage(ic: InputConnection?) {
-        LanguageCycleHelper.cycleLanguage(
+        val nextLang = LanguageCycleHelper.nextLanguage(NativeEngineBridge.getActiveLanguage())
+        switchLanguageTo(nextLang, ic)
+    }
+
+    private fun switchLanguageTo(targetLang: String, ic: InputConnection?) {
+        LanguageCycleHelper.switchToLanguage(
+            targetLang = targetLang,
             hasActiveComposing = hasActiveComposing,
             ic = ic,
             currentComposingStrokes = currentComposingStrokes,
@@ -567,6 +574,20 @@ class OpenT9InputMethodService : InputMethodService() {
                 updateCandidatesFromNative(inputConn)
             }
         )
+    }
+
+    override fun onCurrentInputMethodSubtypeChanged(newSubtype: InputMethodSubtype?) {
+        super.onCurrentInputMethodSubtypeChanged(newSubtype)
+        @Suppress("DEPRECATION")
+        val legacyLocale = newSubtype?.locale
+        val locale = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            newSubtype?.languageTag?.takeIf { it.isNotBlank() } ?: legacyLocale
+        } else {
+            legacyLocale
+        }
+        val targetLang = LanguageCycleHelper.resolveLanguageFromSubtypeLocale(locale) ?: return
+        if (targetLang == NativeEngineBridge.getActiveLanguage()) return
+        switchLanguageTo(targetLang, currentInputConnection)
     }
 
     private fun handleKeyFlick(key: KeyInfo, direction: FlickDirection) {
